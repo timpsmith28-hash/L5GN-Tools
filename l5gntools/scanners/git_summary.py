@@ -1,6 +1,8 @@
 """git_summary -- top-level commit summary for a project (the shallow scanner)."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 from pathlib import Path
 
 from ..common import is_git_repo, run_git
@@ -8,6 +10,7 @@ from ..common import is_git_repo, run_git
 NAME = "git_summary"
 DESCRIPTION = "Latest commit, branch, history depth and working-tree state."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 
 def scan(target: Path) -> dict:

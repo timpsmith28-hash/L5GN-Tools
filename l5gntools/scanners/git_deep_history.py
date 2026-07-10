@@ -1,6 +1,8 @@
 """git_deep_history -- full development ledger for a project (the deep scanner)."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 from collections import Counter
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from ..common import is_git_repo, run_git
 NAME = "git_deep_history"
 DESCRIPTION = "Full commit ledger plus per-author and per-day activity stats."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 _MAX_COMMITS = 1000
 

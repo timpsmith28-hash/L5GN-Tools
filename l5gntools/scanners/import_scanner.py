@@ -1,6 +1,8 @@
 """import_scanner -- import surface for a project, split stdlib / third-party / local."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 import ast
 import sys
 from collections import Counter
@@ -11,6 +13,7 @@ from ..common import is_vendored, iter_files
 NAME = "import_scanner"
 DESCRIPTION = "Import census: stdlib vs third-party vs local module usage."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 
 def _stdlib_names() -> set[str]:

@@ -16,11 +16,13 @@ AUDITORS: list[str] = [
     "auditors.auditor_cli_contract",
     "auditors.auditor_readonly",
     "auditors.auditor_stdlib",
+    "auditors.auditor_tool_contract",
 ]
 
 TESTERS: list[str] = [
     "tests.tester_common",
     "tests.tester_scanners",
+    "tests.tester_contract",
 ]
 
 

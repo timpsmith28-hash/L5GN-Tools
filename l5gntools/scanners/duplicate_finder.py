@@ -6,6 +6,8 @@ Two views:
 """
 from __future__ import annotations
 
+from ..contract import SAFE
+
 import hashlib
 from collections import defaultdict
 from pathlib import Path
@@ -15,6 +17,7 @@ from ..common import is_vendored, iter_files, rel
 NAME = "duplicate_finder"
 DESCRIPTION = "Finds identical / same-named files reused across sibling projects."
 ESTATE_LEVEL = True
+SAFETY = SAFE
 
 _SUFFIXES = (".py", ".json", ".sh")
 _SKIP_NAMES = {"__init__.py"}

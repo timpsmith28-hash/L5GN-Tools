@@ -1,6 +1,8 @@
 """doc_census -- inventory of markdown / documentation for a project."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 import re
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from ..common import iter_files, rel
 NAME = "doc_census"
 DESCRIPTION = "Markdown inventory: titles, headings, sizes, README/ADR presence."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 _H1 = re.compile(r"^#\s+(.*)", re.MULTILINE)
 _HEADING = re.compile(r"^#{1,6}\s", re.MULTILINE)

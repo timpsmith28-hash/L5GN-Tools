@@ -1,6 +1,8 @@
 """todo_adr_scanner -- sweeps TODO/FIXME markers and ADR status for a project."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 import re
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from ..common import is_vendored, iter_files, rel
 NAME = "todo_adr_scanner"
 DESCRIPTION = "Collects TODO/FIXME/HACK markers and an ADR status census."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 _MARKER = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b[:\s-]*(.{0,120})")
 _ADR_STATUS = re.compile(r"(?i)^\s*(?:\*\*)?status(?:\*\*)?\s*[:=]\s*(.+)$", re.MULTILINE)

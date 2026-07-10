@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "l5gntools"
+version = "0.1.0"
+description = "Estate-level, read-only scanners for the L5GN project family (CID-ready tool contract)."
+requires-python = ">=3.10"
+dependencies = []
+
+# Only the importable package ships; run.py / verify.py / auditors / tests stay
+# top-level dev scripts. CID depends on the `l5gntools` package alone.
+[tool.setuptools]
+packages = ["l5gntools", "l5gntools.scanners"]

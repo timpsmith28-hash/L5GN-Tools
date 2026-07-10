@@ -5,6 +5,8 @@ Merges the old workspace_scanner v1/v2/v5 into one. Excludes vendored code
 """
 from __future__ import annotations
 
+from ..contract import SAFE
+
 import ast
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from ..common import iter_files, is_vendored, rel
 NAME = "workspace_scanner"
 DESCRIPTION = "AST code inventory: per-file classes, functions and imports."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 
 def _module_imports(tree: ast.AST) -> list[str]:

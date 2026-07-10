@@ -5,6 +5,8 @@ only. It never copies secret values into the output data.
 """
 from __future__ import annotations
 
+from ..contract import SAFE
+
 import re
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from ..common import iter_files, rel
 NAME = "env_scanner"
 DESCRIPTION = "Config/env file inventory and secret-exposure flags (names only)."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 _CONFIG_SUFFIXES = (".env", ".ini", ".cfg", ".yml", ".yaml", ".toml", ".json")
 _CONFIG_NAMES = ("dockerfile", "docker-compose", "requirements", ".env",

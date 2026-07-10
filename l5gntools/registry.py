@@ -5,6 +5,7 @@ else needs to change). Order is the order tools run in a full sweep.
 """
 from __future__ import annotations
 
+from .contract import build_manifest
 from .scanners import (
     bloat_audit,
     doc_census,
@@ -32,3 +33,10 @@ SCANNERS = [
 ]
 
 BY_NAME = {m.NAME: m for m in SCANNERS}
+
+
+def manifest_all() -> list[dict]:
+    """Every scanner's CID-ready manifest -- the list a consumer (CID's BaseTool
+    adapter) enumerates to discover the toolset. Grows automatically as scanners
+    are added to SCANNERS."""
+    return [build_manifest(m) for m in SCANNERS]

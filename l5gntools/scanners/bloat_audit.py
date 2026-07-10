@@ -1,6 +1,8 @@
 """bloat_audit -- flags committed venvs / bundled deps / large tracked files."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 from pathlib import Path
 
 from ..common import is_git_repo, run_git
@@ -8,6 +10,7 @@ from ..common import is_git_repo, run_git
 NAME = "bloat_audit"
 DESCRIPTION = "Flags tracked venvs/site-packages/models, big files, missing .gitignore."
 ESTATE_LEVEL = False
+SAFETY = SAFE
 
 _BLOAT_MARKERS = ("site-packages/", "/venv/", "venv/", ".venv/", "node_modules/",
                   "/models/", "__pycache__/")

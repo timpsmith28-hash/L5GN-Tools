@@ -1,6 +1,8 @@
 """estate_status -- one git dashboard row per project across the whole estate."""
 from __future__ import annotations
 
+from ..contract import SAFE
+
 from pathlib import Path
 
 from . import git_summary
@@ -8,6 +10,7 @@ from . import git_summary
 NAME = "estate_status"
 DESCRIPTION = "Git dashboard: latest commit / branch / depth / dirty for every project."
 ESTATE_LEVEL = True
+SAFETY = SAFE
 
 
 def scan_estate(projects: list[Path]) -> dict:
