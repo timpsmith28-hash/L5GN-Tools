@@ -1,0 +1,7 @@
+# Normalise text to LF in the repo. Keeps the shell hook LF so Git-for-Windows'
+# bash can run it -- a CRLF shebang breaks a hook with "bad interpreter".
+* text=auto eol=lf
+
+*.py        text eol=lf
+*.sh        text eol=lf
+.githooks/* text eol=lf
