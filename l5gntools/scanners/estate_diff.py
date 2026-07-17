@@ -29,16 +29,12 @@ SAFETY = SAFE
 SKIP_IN_BUILD = True  # consumes build's output; run it separately, after build
 
 
-def _history_dir() -> Path:
-    return DATA_DIR / "history"
-
-
-def _recent_snapshots(limit: int = 2) -> list[Path]:
-    """The most recent snapshot files, oldest-first. Names sort chronologically."""
-    hist = _history_dir()
-    if not hist.exists():
+def _recent_snapshots(history_dir: Path, limit: int = 2) -> list[Path]:
+    """The most recent snapshot files in ``history_dir``, oldest-first.
+    Names sort chronologically."""
+    if not history_dir.exists():
         return []
-    snaps = sorted(hist.glob("estate-*.json"))
+    snaps = sorted(history_dir.glob("estate-*.json"))
     return snaps[-limit:]
 
 
@@ -103,12 +99,20 @@ def _is_wiki_shard(path: str) -> bool:
 
 
 def scan_estate(projects: list[Path]) -> dict:  # noqa: ARG001 -- reads snapshots, not live repos
-    snaps = _recent_snapshots(2)
+    return diff_history(DATA_DIR / "history")
+
+
+def diff_history(history_dir: Path) -> dict:
+    """Diff the two most recent snapshots in ``history_dir``. Works for any estate,
+    not just the local DATA_DIR/history -- the knight points this at each estate's
+    accumulated history in turn."""
+    snaps = _recent_snapshots(history_dir, 2)
     if len(snaps) < 2:
         return {
             "status": "insufficient_history",
             "snapshots_available": len(snaps),
-            "note": "Need at least two build snapshots in data/history/ to diff.",
+            "note": "Need at least two build snapshots to diff.",
+            "history_dir": str(history_dir),
         }
 
     prev_path, curr_path = snaps[-2], snaps[-1]

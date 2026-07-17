@@ -70,7 +70,10 @@ def scan_estate(projects: list) -> dict:
     return _compute(pt, ed)
 
 
-def _compute(pt: dict, ed: dict | None) -> dict:
+def _compute(pt: dict, ed: dict | None, present_names: set | None = None) -> dict:
+    # present_names: the set of project names actually present in the estate(s).
+    # On the knight there are no live repos, so presence is judged from the
+    # deposited estate.json project lists rather than project_trail's own flag.
     ed_status = ed.get("status") if ed else "absent"
 
     built: dict = {}
@@ -99,7 +102,10 @@ def _compute(pt: dict, ed: dict | None) -> dict:
         thread_count = d["thread_count"] if d else 0
         substantive = d.get("substantive_count", 0) if d else 0
         latest = d.get("latest_activity") if d else None
-        present = d.get("present_in_estate") if d else None
+        if present_names is not None:
+            present = name in present_names
+        else:
+            present = d.get("present_in_estate") if d else None
         is_discussed = thread_count > 0
         days_since = _days_between(latest, ref)
         recent = days_since is not None and days_since <= WINDOW_DAYS

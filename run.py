@@ -43,6 +43,26 @@ def _cmd_deposit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_consume() -> int:
+    from pathlib import Path
+    from l5gntools import config, consume
+    m = config.machine()
+    estates_dir = m.get("estates_dir")
+    if not estates_dir:
+        print("consume: no 'estates_dir' configured for this machine "
+              "(set it in config/machines.json for the knight).", file=sys.stderr)
+        return 2
+    res = consume.sweep(Path(estates_dir))
+    print(f"consume: swept {res['estates_dir']}  (vault: {res['vault_status']})")
+    if not res["estates"]:
+        print("  (no estate bundles found yet -- push one from a rig first)")
+    for estate, r in res["estates"].items():
+        ing = r["ingest"]
+        print(f"  [{estate}] ingest={ing['status']} verified={ing.get('manifest_verified')} "
+              f"snap={ing.get('snapshot')} | estate_diff={r['estate_diff']} | drift={r['drift']}")
+    return 0
+
+
 def _cmd_config() -> int:
     from l5gntools import config
     m = config.machine()
@@ -108,7 +128,8 @@ def _cmd_tool(name: str, args: argparse.Namespace) -> int:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
-    p.add_argument("command", help="a tool name, or 'list' / 'build' / 'config' / 'deposit'")
+    p.add_argument("command",
+                   help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / 'consume'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -127,6 +148,8 @@ def main(argv: list[str]) -> int:
         return _cmd_config()
     if args.command == "deposit":
         return _cmd_deposit(args)
+    if args.command == "consume":
+        return _cmd_consume()
     if args.command == "list":
         return _cmd_list()
     if args.command == "build":
