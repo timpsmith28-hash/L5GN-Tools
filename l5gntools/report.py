@@ -13,7 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import __version__
-from .common import DATA_DIR, ESTATE_ROOT, TOOLKIT_ROOT, now_iso, write_json
+from .common import (DATA_DIR, ESTATE_ROOT, TOOLKIT_ROOT, now_iso,
+                     toolkit_git_info, write_json)
 from .registry import SCANNERS
 
 
@@ -68,9 +69,12 @@ def build_estate(projects: list[Path], resume: bool = True,
             write_json(rel_name, data)
         estate_out[mod.NAME] = data
 
+    _git = toolkit_git_info()
     estate = {
         "generated_at": now_iso(),
         "toolkit_version": __version__,
+        "toolkit_commit": _git["commit"],
+        "toolkit_dirty": _git["dirty"],
         "estate_root": str(ESTATE_ROOT),
         "projects": projects_out,
         "estate": estate_out,
@@ -153,7 +157,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','
 function pill(t,c){return '<span class="pill '+c+'">'+esc(t)+'</span>';}
 function table(h,rows){let s='<table><thead><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>';s+=rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('');return s+'</tbody></table>';}
 document.getElementById('meta').textContent =
-  'Generated '+DATA.generated_at+'  |  toolkit v'+DATA.toolkit_version+'  |  '+DATA.projects.length+' projects  |  '+DATA.estate_root;
+  'Generated '+DATA.generated_at+'  |  toolkit v'+DATA.toolkit_version+' ('+(DATA.toolkit_commit||'nogit')+(DATA.toolkit_dirty?'-dirty':'')+')  |  '+DATA.projects.length+' projects  |  '+DATA.estate_root;
 const views={};
 function addTab(id,label,render){
   const t=document.createElement('div');t.className='tab';t.textContent=label;t.onclick=()=>select(id);

@@ -37,6 +37,17 @@ Takeout zips just merge into the same `raw_gemini_files/Takeout` tree.
   `--dry-run`).
 - Or directly: `python chronicler/pipeline/run_pipeline.py` / `intake.py`.
 
+## Markdown transcripts (manual / un-exportable sources)
+
+For chat you can't export via API (admin-gated work-account Claude), close the
+thread out with `CLOSEOUT_PROMPT.md` — the model emits a transcript in the intake
+convention. Save its output as `.md` and drop it in
+`CHRONICLER_HOME/chat_threads/raw_md_transcripts/`. The `md-transcript` pipeline
+stage (`normalize_md_transcript.py`) parses the frontmatter + `**User:**` /
+`**Assistant:**` turns into a vault thread (`account: claude-work-manual` by
+default), idempotent by thread, moving ingested files to `_ingested/`. It's a
+best-effort self-report, not a byte-exact export — most faithful on shorter threads.
+
 ## Known follow-ups (next increment of #16)
 1. Confirm every stage resolves `raw_*` / `vault_staging` off `CHRONICLER_HOME`
    (db.py now does for the DB + root; verify the normalizers do too).

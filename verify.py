@@ -33,6 +33,7 @@ TESTERS: list[str] = [
     "tests.tester_consume",
     "tests.tester_intake",
     "tests.tester_set_substantive",
+    "tests.tester_md_transcript",
 ]
 
 

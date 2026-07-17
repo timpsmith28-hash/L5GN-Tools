@@ -51,6 +51,7 @@ from db import get_connection, init_db, CHRONICLER_ROOT
 from normalize_claude import CONVERSATIONS_PATH
 from normalize_gemini_personal import DEFAULT_INPUT as TAKEOUT_INPUT
 from reconcile_gemini import DEFAULT_SCRAPED_DIR
+from normalize_md_transcript import RAW_DIR as MD_TRANSCRIPT_DIR
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 
@@ -67,11 +68,16 @@ def has_scraped():
     return DEFAULT_SCRAPED_DIR.exists() and any(DEFAULT_SCRAPED_DIR.glob("*.json"))
 
 
+def has_md_transcripts():
+    return MD_TRANSCRIPT_DIR.exists() and any(MD_TRANSCRIPT_DIR.glob("*.md"))
+
+
 # Each stage: key (for --skip-<key>), label, script filename, argv, and an
 # input_check (None => DB-only stage, always runs).
 STAGES = [
     ("claude",        "normalize_claude",          "normalize_claude.py",          [], has_claude),
     ("takeout",       "normalize_gemini_personal", "normalize_gemini_personal.py", [], has_takeout),
+    ("md-transcript", "normalize_md_transcript",   "normalize_md_transcript.py",   [], has_md_transcripts),
     ("reconcile",     "reconcile_gemini",          "reconcile_gemini.py",          [], has_scraped),
     ("group",         "group_fallback",            "group_fallback.py",            [], None),
     ("suggest-close", "suggest_close",             "suggest_close.py",             [], None),
@@ -191,6 +197,7 @@ if __name__ == "__main__":
                         help="Skip everything except the final render (use after Obsidian edits).")
     parser.add_argument("--skip-claude", action="store_true")
     parser.add_argument("--skip-takeout", action="store_true")
+    parser.add_argument("--skip-md-transcript", action="store_true")
     parser.add_argument("--skip-reconcile", action="store_true")
     parser.add_argument("--skip-group", action="store_true")
     parser.add_argument("--skip-suggest-close", action="store_true")

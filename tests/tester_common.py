@@ -28,4 +28,11 @@ def run() -> list[str]:
         v.append("write_json: allowed a path outside the data dir")
     except ValueError:
         pass
+
+    # toolkit_git_info returns the shape report.py stamps into estate.json.
+    info = common.toolkit_git_info()
+    if not isinstance(info, dict) or "commit" not in info or "dirty" not in info:
+        v.append("toolkit_git_info: expected a dict with commit + dirty")
+    elif not isinstance(info["dirty"], bool):
+        v.append("toolkit_git_info: dirty should be a bool")
     return v

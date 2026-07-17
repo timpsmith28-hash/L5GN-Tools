@@ -148,6 +148,14 @@ def run_git(path: Path, *args: str) -> str:
         return ""
 
 
+def toolkit_git_info() -> dict:
+    """The toolkit's own git state, so a report reveals which build produced it
+    (cross-machine version parity). ``commit`` is None if git is unavailable."""
+    commit = run_git(TOOLKIT_ROOT, "rev-parse", "--short", "HEAD")
+    dirty = bool(run_git(TOOLKIT_ROOT, "status", "--porcelain"))
+    return {"commit": commit or None, "dirty": dirty}
+
+
 # --- Output (the ONLY writer -- always under DATA_DIR) -----------------------
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
