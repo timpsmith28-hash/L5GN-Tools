@@ -21,11 +21,21 @@ per-machine and git-ignored. Point the pipeline at them with env vars:
 - `CHRONICLER_HOME` — data root holding `raw_*`, `vault_staging`, etc.
 - `CHRONICLER_DB_PATH` — the SQLite vault location (defaults under `CHRONICLER_HOME`).
 
+## Drop zone
+Drop Claude / Google-Takeout export **zips** into
+`CHRONICLER_HOME/chat_threads/zip_downloads/` and intake classifies each,
+extracts it into the right `raw_*` dir, and moves the zip to
+`zip_downloads/archive/<source>/`. Unrecognised zips are left in place. Multi-part
+Takeout zips just merge into the same `raw_gemini_files/Takeout` tree.
+
 ## Running it
-- `python run.py ingest [pipeline args]` — runs `run_pipeline.py` in its own
-  process, injecting `CHRONICLER_DB_PATH` from this machine's config `vault`.
-  Extra args pass straight through, e.g. `python run.py ingest --render-only`.
-- Or directly: `python chronicler/pipeline/run_pipeline.py`.
+- `python run.py ingest [pipeline args]` — the one-command path: **intake** (unpack
+  the drop zone) then the **pipeline**, in its own process, injecting
+  `CHRONICLER_DB_PATH` from this machine's config `vault`. `--skip-intake` runs the
+  pipeline only; other args pass through, e.g. `python run.py ingest --render-only`.
+- `python run.py intake [--dry-run]` — unpack the drop zone only (classify with
+  `--dry-run`).
+- Or directly: `python chronicler/pipeline/run_pipeline.py` / `intake.py`.
 
 ## Known follow-ups (next increment of #16)
 1. Confirm every stage resolves `raw_*` / `vault_staging` off `CHRONICLER_HOME`

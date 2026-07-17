@@ -43,28 +43,50 @@ def _cmd_deposit(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_ingest(rest: list[str]) -> int:
-    """Run the vendored Chronicler ingest pipeline in its own process, so the
-    stdlib-only core never imports pyyaml/embeddings. Extra args pass straight
-    through to chronicler/pipeline/run_pipeline.py."""
+def _chronicler_env() -> dict:
+    """Environment for the vendored ingest subsystem: point it at the DB where
+    `consume` reads it, and (optionally) at this machine's runtime data root."""
     import os
-    import subprocess
-    from pathlib import Path
     from l5gntools import config
-
-    script = Path(__file__).resolve().parent / "chronicler" / "pipeline" / "run_pipeline.py"
-    if not script.exists():
-        print("ingest: chronicler pipeline not found (is chronicler/ vendored?)", file=sys.stderr)
-        return 2
     m = config.machine()
     env = dict(os.environ)
     if m.get("vault"):
-        env.setdefault("CHRONICLER_DB_PATH", m["vault"])          # write the DB where consume reads it
+        env.setdefault("CHRONICLER_DB_PATH", m["vault"])
     if m.get("chronicler_home"):
-        env.setdefault("CHRONICLER_HOME", m["chronicler_home"])   # runtime data root
-    print(f"ingest: -> {script.name} {' '.join(rest)}  "
-          f"(DB={env.get('CHRONICLER_DB_PATH', '<default>')})")
-    return subprocess.run([sys.executable, str(script), *rest], env=env).returncode
+        env.setdefault("CHRONICLER_HOME", m["chronicler_home"])
+    return env
+
+
+def _run_chronicler(script: str, args: list[str], env: dict) -> int:
+    """Run a chronicler/pipeline script in its own process, so the stdlib-only
+    core never imports pyyaml/embeddings."""
+    import subprocess
+    from pathlib import Path
+    path = Path(__file__).resolve().parent / "chronicler" / "pipeline" / script
+    if not path.exists():
+        print(f"{script}: not found (is chronicler/ vendored?)", file=sys.stderr)
+        return 2
+    return subprocess.run([sys.executable, str(path), *args], env=env).returncode
+
+
+def _cmd_intake(rest: list[str]) -> int:
+    return _run_chronicler("intake.py", rest, _chronicler_env())
+
+
+def _cmd_ingest(rest: list[str]) -> int:
+    """Unpack the drop zone (intake) then run the pipeline. `--skip-intake` runs
+    the pipeline only; all other args pass through to run_pipeline.py."""
+    env = _chronicler_env()
+    do_intake = "--skip-intake" not in rest
+    rest = [a for a in rest if a != "--skip-intake"]
+    print(f"ingest: DB={env.get('CHRONICLER_DB_PATH', '<default>')}")
+    if do_intake:
+        print("ingest: [1/2] intake drop zone")
+        rc = _run_chronicler("intake.py", [], env)
+        if rc != 0:
+            return rc
+    print("ingest: [2/2] pipeline")
+    return _run_chronicler("run_pipeline.py", rest, env)
 
 
 def _cmd_consume() -> int:
@@ -154,6 +176,8 @@ def main(argv: list[str]) -> int:
     # argparse so pipeline flags (--render-only, --skip-*) don't clash with ours.
     if argv and argv[0] == "ingest":
         return _cmd_ingest(argv[1:])
+    if argv and argv[0] == "intake":
+        return _cmd_intake(argv[1:])
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
