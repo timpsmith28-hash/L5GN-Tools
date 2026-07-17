@@ -7,9 +7,13 @@ Uses the key-based ssh alias (no password). Uploads each zip atomically
 to that and runs `run.py ingest`. Processed zips are moved to a local _pushed/
 folder so they are never re-sent.
 
-    powershell -File deploy\push-exports.ps1
-    powershell -File deploy\push-exports.ps1 -Source "D:\Downloads"
+Supports -WhatIf: preview exactly which zips would be sent without sending them.
+
+    powershell -File deploy\push-exports.ps1 -WhatIf     # dry-run: show what would go
+    powershell -File deploy\push-exports.ps1             # actually send
+    powershell -File deploy\push-exports.ps1 -Source "D:\curated_exports"
 #>
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
   [string]$Source   = "$env:USERPROFILE\Downloads",
   [string]$Remote   = "l5gn-castle",
@@ -24,19 +28,25 @@ $zips = foreach ($p in $patterns) {
 }
 if (-not $zips) { Write-Host "push-exports: no export zips in $Source"; exit 0 }
 
-ssh $Remote "mkdir -p '$DropZone'"
-New-Item -ItemType Directory -Force -Path $Archive | Out-Null
+Write-Host "push-exports: $($zips.Count) zip(s) matched in ${Source}:"
+$zips | ForEach-Object { Write-Host "    $($_.Name)  ($([math]::Round($_.Length/1MB,1)) MB)" }
 
 $sent = 0
 foreach ($z in $zips) {
   $name = $z.Name
-  Write-Host "  -> $name"
-  scp $z.FullName "${Remote}:${DropZone}/${name}.part"
-  ssh $Remote "mv '$DropZone/$name.part' '$DropZone/$name'"   # atomic arrival
-  Move-Item -Force $z.FullName (Join-Path $Archive $name)
-  $sent++
+  if ($PSCmdlet.ShouldProcess("${Remote}:${DropZone}/${name}", "upload + archive")) {
+    scp $z.FullName "${Remote}:${DropZone}/${name}.part"
+    ssh $Remote "mkdir -p '$DropZone'; mv '$DropZone/$name.part' '$DropZone/$name'"   # atomic arrival
+    New-Item -ItemType Directory -Force -Path $Archive | Out-Null
+    Move-Item -Force $z.FullName (Join-Path $Archive $name)
+    $sent++
+  }
 }
 
 # Fire the trigger LAST so the knight only ingests once everything has landed.
-ssh $Remote "touch '$DropZone/.ingest-request'"
-Write-Host "push-exports: shipped $sent zip(s) to ${Remote}:${DropZone}; knight will auto-ingest."
+if ($sent -gt 0 -and $PSCmdlet.ShouldProcess("${Remote}:${DropZone}/.ingest-request", "touch trigger")) {
+  ssh $Remote "touch '$DropZone/.ingest-request'"
+  Write-Host "push-exports: shipped $sent zip(s); knight will auto-ingest."
+} elseif ($sent -eq 0) {
+  Write-Host "push-exports: -WhatIf -- nothing sent."
+}
