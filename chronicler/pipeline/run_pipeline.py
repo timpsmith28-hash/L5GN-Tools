@@ -194,6 +194,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip-reconcile", action="store_true")
     parser.add_argument("--skip-group", action="store_true")
     parser.add_argument("--skip-suggest-close", action="store_true")
+    parser.add_argument("--skip-substantive", action="store_true")
     parser.add_argument("--skip-render", action="store_true")
     args = parser.parse_args()
     # sync-back file->DB is wanted ONLY when re-rendering to absorb Obsidian edits.
