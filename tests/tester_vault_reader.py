@@ -1,5 +1,8 @@
 """vault_reader: build a tiny frozen-shaped vault in a temp dir and assert the
-rollup shape, the schema-version guard, and the account dimension."""
+rollup shape, the schema-version guard, and the account dimension.
+
+Hermetic: patches vault_reader's path resolver so it never depends on this
+machine's configured vault (a real vault on the knight would otherwise win)."""
 from __future__ import annotations
 
 import sqlite3
@@ -36,19 +39,22 @@ def _make_vault(path: Path, user_version: int = 1) -> None:
     c.close()
 
 
+def _scan(db: Path) -> dict:
+    """Run vault_reader against exactly ``db``, ignoring machine config/env."""
+    orig = vault_reader._resolve_vault_path
+    vault_reader._resolve_vault_path = lambda: db
+    try:
+        return vault_reader.scan_estate([])
+    finally:
+        vault_reader._resolve_vault_path = orig
+
+
 def run() -> list[str]:
     v: list[str] = []
     with tempfile.TemporaryDirectory() as td:
         good = Path(td) / "chronicler.db"
         _make_vault(good, user_version=1)
-
-        # Point the reader at our temp vault via the env-var resolution path.
-        import os
-        os.environ["CHRONICLER_DB_PATH"] = str(good)
-        try:
-            out = vault_reader.scan_estate([])
-        finally:
-            os.environ.pop("CHRONICLER_DB_PATH", None)
+        out = _scan(good)
 
         if out.get("status") != "ok":
             return [f"vault_reader: expected status ok, got {out.get('status')!r}"]
@@ -73,11 +79,7 @@ def run() -> list[str]:
         # Schema guard: a wrong user_version must refuse, not interpret.
         bad = Path(td) / "bad.db"
         _make_vault(bad, user_version=99)
-        os.environ["CHRONICLER_DB_PATH"] = str(bad)
-        try:
-            out2 = vault_reader.scan_estate([])
-        finally:
-            os.environ.pop("CHRONICLER_DB_PATH", None)
+        out2 = _scan(bad)
         if out2.get("status") != "schema_mismatch":
             v.append(f"vault_reader: expected schema_mismatch on user_version 99, got {out2.get('status')!r}")
     return v

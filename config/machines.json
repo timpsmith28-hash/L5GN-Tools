@@ -14,10 +14,10 @@
     "estate": "work",
     "roots": ["C:/Users/tim.smith/Github/MCF", "C:/Users/tim.smith/Github/L5GN"]
   },
-  "RENAME-ME-KNIGHT": {
+  "l5gn-castle-worker": {
     "role": "consumer",
     "estate": "both",
-    "vault": "/vault/chronicler.db",
-    "estates_dir": "/vault/estates"
+    "vault": "/home/l5gn/vault/chronicler.db",
+    "estates_dir": "/home/l5gn/vault/estates"
   }
 }

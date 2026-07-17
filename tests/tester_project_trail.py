@@ -1,12 +1,14 @@
 """project_trail: assert per-project trail shape, ordering, and confidence rank
-against a temp frozen-shaped vault (reusing tester_vault_reader's builder)."""
+against a temp frozen-shaped vault (reusing tester_vault_reader's builder).
+
+Hermetic: patches the shared vault-path resolver so it never reads this
+machine's configured vault."""
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
-from l5gntools.scanners import project_trail
+from l5gntools.scanners import project_trail, vault_reader
 from .tester_vault_reader import _make_vault
 
 
@@ -15,11 +17,13 @@ def run() -> list[str]:
     with tempfile.TemporaryDirectory() as td:
         db = Path(td) / "chronicler.db"
         _make_vault(db, user_version=1)
-        os.environ["CHRONICLER_DB_PATH"] = str(db)
+
+        orig = vault_reader._resolve_vault_path
+        vault_reader._resolve_vault_path = lambda: db
         try:
             out = project_trail.scan_estate([])
         finally:
-            os.environ.pop("CHRONICLER_DB_PATH", None)
+            vault_reader._resolve_vault_path = orig
 
         if out.get("status") != "ok":
             return [f"project_trail: expected ok, got {out.get('status')!r}"]
