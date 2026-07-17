@@ -97,6 +97,7 @@ L5GN-Tools/
 
 ## More
 
+- **Design rationale / how it fits:** `docs/ARCHITECTURE.md`
 - **Deploy / operate the mesh:** `docs/KNIGHT_PLAYBOOK.md`
 - **Ingest subsystem + drop zone:** `chronicler/README.md`
 - **Auto-delivery of exports:** `deploy/README.md`
