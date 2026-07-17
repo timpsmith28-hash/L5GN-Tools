@@ -55,10 +55,15 @@ def run() -> list[str]:
         except ValueError:
             v.append("deposit: force=True should allow an 'unknown' estate")
 
-        # Push command keeps the namespace on both ends.
-        cmd = deposit.push_command(outbox, "user@knight:/vault/estates", "personal")
-        if cmd[-1] != "user@knight:/vault/estates/personal/":
-            v.append(f"deposit: push destination not namespaced: {cmd[-1]!r}")
+        # rsync keeps the namespace on both ends.
+        cmd = deposit.push_command(outbox, "l5gn-castle:/vault/estates", "personal", "rsync")
+        if cmd[0] != "rsync" or cmd[-1] != "l5gn-castle:/vault/estates/personal/":
+            v.append(f"deposit: rsync destination not namespaced: {cmd}")
+
+        # scp copies the estate-named dir into the target (namespace via dir name).
+        scmd = deposit.push_command(outbox, "l5gn-castle:/vault/estates", "personal", "scp")
+        if scmd[0] != "scp" or scmd[-1] != "l5gn-castle:/vault/estates/" or str(outbox) not in scmd:
+            v.append(f"deposit: scp command wrong: {scmd}")
 
         # Missing estate.json is a clear error, not a silent empty bundle.
         empty = Path(td) / "empty"

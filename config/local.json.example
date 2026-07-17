@@ -1,7 +1,9 @@
 {
   "_comment": "Copy this file to config/local.json (which is gitignored) on any machine that needs overrides. Same shape as machines.json: keyed by hostname, plus an optional 'default'. Values here override machines.json for THIS machine only and never sync to GitHub. Use for diverging absolute paths, the rig -> knight push target, or anything secret.",
-  "default": {
-    "push_target": "user@knight.local:/vault/estates"
+  "_deposit_note": "push_target may be an ssh alias from ~/.ssh/config (e.g. 'l5gn-castle:/vault/estates'), which both rsync and scp resolve. push_transport is auto-picked (scp on Windows, rsync elsewhere); set it explicitly only to override.",
+  "LucasGoonPC": {
+    "push_target": "l5gn-castle:/vault/estates",
+    "push_transport": "scp"
   },
   "RENAME-ME-WORK-LAPTOP": {
     "roots": ["D:/Work/Github/MCF"]

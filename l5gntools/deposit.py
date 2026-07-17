@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -87,21 +88,34 @@ def build_bundle(estate: str | None, data_dir: Path = DATA_DIR,
             "snapshot": snapshot.name if snapshot else None, "manifest": manifest}
 
 
-def push_command(outbox: Path, push_target: str, estate: str) -> list[str]:
-    """The rsync command that mirrors this namespace to the knight.
+def default_transport() -> str:
+    """rsync everywhere except Windows, which ships OpenSSH's scp but not rsync."""
+    return "scp" if os.name == "nt" else "rsync"
 
-    Namespace appears on BOTH ends: source ``.../outbox/<estate>/`` -> destination
-    ``<push_target>/<estate>/``, so a work bundle can only ever land under work/.
+
+def push_command(outbox: Path, push_target: str, estate: str,
+                 transport: str = "rsync") -> list[str]:
+    """The command that mirrors this namespace to the knight over ssh.
+
+    ``push_target`` may be an ssh alias (e.g. ``l5gn-castle:/vault/estates``), which
+    both rsync and scp resolve via ``~/.ssh/config``. The estate namespace appears
+    on BOTH ends, so a work bundle can only ever land under work/:
+      * rsync -> ``<push_target>/<estate>/`` (with --delete, true mirror)
+      * scp   -> copies the ``<estate>``-named dir into ``<push_target>/``
     """
-    dest = push_target.rstrip("/") + "/" + estate + "/"
-    return ["rsync", "-az", "--delete", str(outbox) + "/", dest]
+    target = push_target.rstrip("/")
+    if transport == "scp":
+        return ["scp", "-r", str(outbox), target + "/"]
+    return ["rsync", "-az", "--delete", str(outbox) + "/", target + "/" + estate + "/"]
 
 
 def deposit(push: bool = False, force: bool = False) -> dict:
     m = config.machine()
     bundle = build_bundle(m.get("estate"), force=force)
     push_target = m.get("push_target")
-    cmd = push_command(bundle["outbox"], push_target, bundle["estate"]) if push_target else None
+    transport = m.get("push_transport") or default_transport()
+    cmd = (push_command(bundle["outbox"], push_target, bundle["estate"], transport)
+           if push_target else None)
 
     result = {
         "estate": bundle["estate"],
@@ -109,6 +123,7 @@ def deposit(push: bool = False, force: bool = False) -> dict:
         "outbox": str(bundle["outbox"]),
         "snapshot": bundle["snapshot"],
         "push_target": push_target,
+        "transport": transport,
         "push_command": " ".join(cmd) if cmd else None,
         "pushed": False,
     }
