@@ -20,6 +20,29 @@ from l5gntools.registry import BY_NAME, SCANNERS
 from l5gntools.report import build_all, scan_subset
 
 
+def _cmd_deposit(args: argparse.Namespace) -> int:
+    from l5gntools import deposit as dep
+    try:
+        r = dep.deposit(push=args.push, force=args.force)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"deposit: {exc}", file=sys.stderr)
+        return 2
+    print(f"deposit: estate '{r['estate']}' (role {r['role']}) -> {r['outbox']}")
+    print(f"  snapshot : {r['snapshot'] or '(none yet -- run build first for history)'}")
+    if r["pushed"]:
+        print(f"  pushed   : OK -> {r['push_target']}/{r['estate']}/")
+    elif r.get("push_error") or r.get("push_stderr"):
+        print(f"  push     : FAILED -- {r.get('push_error') or r.get('push_stderr')}")
+    elif r.get("note"):
+        print(f"  push     : {r['note']}")
+    elif r["push_command"]:
+        print(f"  push cmd : {r['push_command']}")
+        print("             (staged only; re-run with --push to send)")
+    else:
+        print("  push     : no push_target configured (set it in config/local.json)")
+    return 0
+
+
 def _cmd_config() -> int:
     from l5gntools import config
     m = config.machine()
@@ -85,7 +108,7 @@ def _cmd_tool(name: str, args: argparse.Namespace) -> int:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
-    p.add_argument("command", help="a tool name, or 'list' / 'build' / 'config'")
+    p.add_argument("command", help="a tool name, or 'list' / 'build' / 'config' / 'deposit'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -93,11 +116,17 @@ def main(argv: list[str]) -> int:
     p.add_argument("--fresh", action="store_true",
                    help="ignore cached data and re-scan everything")
     p.add_argument("--only", help="build: comma-separated project names to warm-cache")
+    p.add_argument("--push", action="store_true",
+                   help="deposit: actually push to the knight (else stage + print the command)")
+    p.add_argument("--force", action="store_true",
+                   help="deposit: allow depositing an 'unknown' estate namespace")
     args = p.parse_args(argv)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if args.command == "config":
         return _cmd_config()
+    if args.command == "deposit":
+        return _cmd_deposit(args)
     if args.command == "list":
         return _cmd_list()
     if args.command == "build":

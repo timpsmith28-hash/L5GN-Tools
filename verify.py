@@ -28,6 +28,7 @@ TESTERS: list[str] = [
     "tests.tester_project_trail",
     "tests.tester_drift",
     "tests.tester_authors",
+    "tests.tester_deposit",
 ]
 
 
