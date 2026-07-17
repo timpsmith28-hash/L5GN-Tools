@@ -43,7 +43,10 @@ def _scan_one_project(proj: Path, per_project: list, resume: bool) -> dict:
 def build_estate(projects: list[Path], resume: bool = True,
                  with_estate: bool = True) -> dict:
     per_project = [m for m in SCANNERS if not m.ESTATE_LEVEL]
-    estate_level = [m for m in SCANNERS if m.ESTATE_LEVEL]
+    # Some estate tools (e.g. estate_diff) consume the snapshots build produces,
+    # so they must not run *inside* build -- they'd diff a stale pair.
+    estate_level = [m for m in SCANNERS
+                    if m.ESTATE_LEVEL and not getattr(m, "SKIP_IN_BUILD", False)]
 
     # Per-project scanning is I/O-bound on the mount, so run projects in
     # parallel threads (writes go to distinct files -- safe).
@@ -73,7 +76,21 @@ def build_estate(projects: list[Path], resume: bool = True,
         "estate": estate_out,
     }
     write_json("estate.json", estate)
+    _archive_snapshot(estate)
     return estate
+
+
+def _archive_snapshot(estate: dict) -> None:
+    """Deposit a dated copy of this build into data/history/ so estate_diff has
+    a per-run trail to compare against. Append-only: never overwrites a prior
+    day (same day rebuilds refresh that day's snapshot, which is fine)."""
+    day = (estate.get("generated_at") or now_iso())[:10]
+    snapshot_name = f"estate-{day}.json"
+    write_json(f"history/{snapshot_name}", estate)
+    write_json("history/latest.json", {
+        "snapshot": snapshot_name,
+        "generated_at": estate.get("generated_at"),
+    })
 
 
 def render_html(estate: dict) -> Path:

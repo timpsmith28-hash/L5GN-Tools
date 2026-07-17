@@ -9,13 +9,17 @@ from .contract import build_manifest
 from .scanners import (
     bloat_audit,
     doc_census,
+    drift,
     duplicate_finder,
     env_scanner,
+    estate_diff,
     estate_status,
     git_deep_history,
     git_summary,
     import_scanner,
+    project_trail,
     todo_adr_scanner,
+    vault_reader,
     workspace_scanner,
 )
 
@@ -30,6 +34,10 @@ SCANNERS = [
     todo_adr_scanner,
     estate_status,
     duplicate_finder,
+    estate_diff,
+    vault_reader,
+    project_trail,
+    drift,
 ]
 
 BY_NAME = {m.NAME: m for m in SCANNERS}

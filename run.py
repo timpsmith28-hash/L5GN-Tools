@@ -20,6 +20,26 @@ from l5gntools.registry import BY_NAME, SCANNERS
 from l5gntools.report import build_all, scan_subset
 
 
+def _cmd_config() -> int:
+    from l5gntools import config
+    m = config.machine()
+    print(f"hostname : {m['_hostname']}"
+          f"{'' if m['_matched'] else '   (no matching entry -> using default)'}")
+    print(f"role     : {m.get('role', '(unset)')}")
+    print(f"estate   : {m.get('estate', '(unset)')}")
+    roots = config.estate_roots()
+    if roots:
+        print("roots    :")
+        for r in roots:
+            print(f"  - {r}{'' if r.exists() else '   (MISSING)'}")
+    else:
+        print("roots    : (none configured -> legacy sibling discovery)")
+    for key in ("vault", "estates_dir", "push_target"):
+        if m.get(key):
+            print(f"{key:<9}: {m[key]}")
+    return 0
+
+
 def _cmd_list() -> int:
     print("Available tools:\n")
     for m in SCANNERS:
@@ -65,7 +85,7 @@ def _cmd_tool(name: str, args: argparse.Namespace) -> int:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
-    p.add_argument("command", help="a tool name, or 'list' / 'build'")
+    p.add_argument("command", help="a tool name, or 'list' / 'build' / 'config'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -76,6 +96,8 @@ def main(argv: list[str]) -> int:
     args = p.parse_args(argv)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if args.command == "config":
+        return _cmd_config()
     if args.command == "list":
         return _cmd_list()
     if args.command == "build":

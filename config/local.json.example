@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy this file to config/local.json (which is gitignored) on any machine that needs overrides. Same shape as machines.json: keyed by hostname, plus an optional 'default'. Values here override machines.json for THIS machine only and never sync to GitHub. Use for diverging absolute paths, the rig -> knight push target, or anything secret.",
+  "default": {
+    "push_target": "user@knight.local:/vault/estates"
+  },
+  "RENAME-ME-WORK-LAPTOP": {
+    "roots": ["D:/Work/Github/MCF"]
+  }
+}

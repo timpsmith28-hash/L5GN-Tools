@@ -1,0 +1,4 @@
+{
+  "_comment": "Collapse git author aliases to one identity so per-author stats don't double-count the same person. Keyed by canonical name -> list of aliases; each alias is matched case-insensitively against git's author name (%an). Estate-wide (shared across machines), so it lives here rather than in machines.json. Edit the aliases to match your real git author strings (check with: git -C <repo> log --format='%an' | sort -u).",
+  "L5GN": ["timpsmith28-hash", "timpsmith28", "tim smith", "tim.smith"]
+}

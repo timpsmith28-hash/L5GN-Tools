@@ -42,10 +42,12 @@ def is_ignored_dir(name: str) -> bool:
 
 
 # --- Project discovery -------------------------------------------------------
-def discover_projects(include_third_party: bool = False) -> list[Path]:
-    """Return sibling project folders of the toolkit, sorted by name."""
+def _projects_under(root: Path, include_third_party: bool) -> list[Path]:
+    """Direct child project folders of ``root`` (read-only listing)."""
     out: list[Path] = []
-    for child in sorted(ESTATE_ROOT.iterdir(), key=lambda p: p.name.lower()):
+    if not root.exists():
+        return out
+    for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
         if not child.is_dir():
             continue
         if child.resolve() == TOOLKIT_ROOT.resolve():
@@ -58,14 +60,45 @@ def discover_projects(include_third_party: bool = False) -> list[Path]:
     return out
 
 
+def discover_projects(include_third_party: bool = False) -> list[Path]:
+    """Project folders to scan.
+
+    When this machine declares ``roots`` in ``config/machines.json``, the
+    projects are the child folders of every configured estate root. Otherwise
+    fall back to the legacy behaviour: sibling folders of the toolkit itself.
+    """
+    from . import config  # local import keeps common <- config one-directional
+
+    roots = config.estate_roots()
+    if roots:
+        out: list[Path] = []
+        seen: set[Path] = set()
+        for root in roots:
+            for p in _projects_under(root, include_third_party):
+                rp = p.resolve()
+                if rp not in seen:
+                    seen.add(rp)
+                    out.append(p)
+        return sorted(out, key=lambda p: p.name.lower())
+    return _projects_under(ESTATE_ROOT, include_third_party)
+
+
 def resolve_targets(target: str | None, do_all: bool,
                     include_third_party: bool = False) -> list[Path]:
     """Turn CLI flags into a concrete list of target folders."""
     if target:
         p = Path(target)
-        if not p.is_absolute():
-            sibling = ESTATE_ROOT / target
-            p = sibling if sibling.exists() else Path.cwd() / target
+        if p.is_absolute():
+            return [p.resolve()]
+        from . import config
+        # A bare name is resolved against configured roots first, then the
+        # legacy sibling location, then the current working directory.
+        for root in (config.estate_roots() or []):
+            cand = root / target
+            if cand.exists():
+                return [cand.resolve()]
+        sibling = ESTATE_ROOT / target
+        p = sibling if sibling.exists() else Path.cwd() / target
         return [p.resolve()]
     return discover_projects(include_third_party=include_third_party)
 

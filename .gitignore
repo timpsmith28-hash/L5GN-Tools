@@ -2,9 +2,13 @@
 /data/
 /report.html
 
+# Per-machine config override -- paths/secrets, must not sync to GitHub.
+/config/local.json
+
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 .venv/
 venv/
 .mypy_cache/

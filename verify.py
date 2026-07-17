@@ -23,6 +23,11 @@ TESTERS: list[str] = [
     "tests.tester_common",
     "tests.tester_scanners",
     "tests.tester_contract",
+    "tests.tester_config",
+    "tests.tester_vault_reader",
+    "tests.tester_project_trail",
+    "tests.tester_drift",
+    "tests.tester_authors",
 ]
 
 

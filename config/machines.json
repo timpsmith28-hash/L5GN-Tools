@@ -1,0 +1,23 @@
+{
+  "_comment": "Per-machine config, keyed by socket.gethostname(). Run 'python run.py config' on each machine to see its hostname, then rename an example key below to match. 'roots' lists estate roots whose CHILD folders are the projects to scan; omit 'roots' to fall back to legacy sibling discovery (the toolkit's own parent folder). Machine-specific paths, push targets, or secrets that must NOT sync to GitHub go in config/local.json (gitignored) instead.",
+  "default": {
+    "role": "producer",
+    "estate": "unknown"
+  },
+  "LucasGoonPC": {
+    "role": "producer",
+    "estate": "personal",
+    "roots": ["C:/Users/timps/Documents/GitHub"]
+  },
+  "RENAME-ME-WORK-LAPTOP": {
+    "role": "producer",
+    "estate": "work",
+    "roots": ["C:/Users/tim.smith/Github/MCF", "C:/Users/tim.smith/Github/L5GN"]
+  },
+  "RENAME-ME-KNIGHT": {
+    "role": "consumer",
+    "estate": "both",
+    "vault": "/vault/chronicler.db",
+    "estates_dir": "/vault/estates"
+  }
+}
