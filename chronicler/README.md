@@ -40,7 +40,7 @@ Takeout zips just merge into the same `raw_gemini_files/Takeout` tree.
 ## Known follow-ups (next increment of #16)
 1. Confirm every stage resolves `raw_*` / `vault_staging` off `CHRONICLER_HOME`
    (db.py now does for the DB + root; verify the normalizers do too).
-2. On the knight: set `CHRONICLER_HOME` + `vault` in config so ingest updates the
-   very DB `consume` reads — in place, no more scp of a snapshot.
-3. Fresh ingest must set `threads.substantive` on new rows (a finalize-added
-   column; see `pipeline/SCHEMA.md`) so the frozen-schema contract still holds.
+2. On the knight: set `chronicler_home` + `vault` in config so ingest updates the
+   very DB `consume` reads — in place, no more scp of a snapshot. **(live test pending)**
+3. ~~Fresh ingest must set `threads.substantive`~~ — **done**: `set_substantive.py`
+   runs as a DB-only stage before render, recomputing the flag from message counts.

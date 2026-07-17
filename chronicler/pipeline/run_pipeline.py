@@ -75,6 +75,7 @@ STAGES = [
     ("reconcile",     "reconcile_gemini",          "reconcile_gemini.py",          [], has_scraped),
     ("group",         "group_fallback",            "group_fallback.py",            [], None),
     ("suggest-close", "suggest_close",             "suggest_close.py",             [], None),
+    ("substantive",   "set_substantive",           "set_substantive.py",           [], None),
     ("render",        "render_md",                 "render_md.py",                 [], None),
 ]
 
