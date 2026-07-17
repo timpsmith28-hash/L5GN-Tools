@@ -93,7 +93,10 @@ def _read(conn: sqlite3.Connection, vault, projects: list) -> dict:
     for pid, (name, rfp) in repo.items():
         trail = trails.get(pid, [])
         trail.sort(key=lambda t: (t["updated_at"] or ""), reverse=True)
-        trail.sort(key=lambda t: 0 if t["substantive"] else 1)   # substantive first, stable
+        # true newest of ANY thread (fragments included) -- matches vault_reader,
+        # captured before the display-only substantive-first re-sort below.
+        latest = trail[0]["updated_at"] if trail else None
+        trail.sort(key=lambda t: 0 if t["substantive"] else 1)   # display-only: substantive first
         estate, _, tail = rfp.replace("\\", "/").partition("/")
         estate_project = tail or name
         sigs = ev_by_name.get(name, {})
@@ -105,7 +108,7 @@ def _read(conn: sqlite3.Connection, vault, projects: list) -> dict:
                                  if estate_names is not None else None,
             "thread_count": len(trail),
             "substantive_count": sum(1 for t in trail if t["substantive"]),
-            "latest_activity": trail[0]["updated_at"] if trail else None,
+            "latest_activity": latest,
             "dominant_signal": max(sigs, key=sigs.get) if sigs else None,
             "evidence_signals": sigs,
             "trail": trail,

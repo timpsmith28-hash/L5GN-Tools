@@ -66,4 +66,62 @@ def run() -> list[str]:
     if out2["alerts"]["built_not_discussed"]:
         v.append("drift: no build alerts expected without estate_diff")
 
+    # ---- present_names overrides project_trail's own present_in_estate flag ----
+    pt_flags = {
+        "status": "ok",
+        "projects": [
+            # flag says present, but the knight's union says it isn't -> DNP fires.
+            {"estate_project": "FlagTrue", "estate": "L5GN", "thread_count": 1,
+             "substantive_count": 1, "latest_activity": "2026-07-16", "present_in_estate": True},
+            # flag says absent, but the union DOES hold it -> DNP must NOT fire.
+            {"estate_project": "FlagFalse", "estate": "L5GN", "thread_count": 1,
+             "substantive_count": 1, "latest_activity": "2026-07-16", "present_in_estate": False},
+        ],
+    }
+    ov = drift._compute(pt_flags, None, present_names={"FlagFalse"})
+    dnp = {x["project"] for x in ov["alerts"]["discussed_not_present"]}
+    if dnp != {"FlagTrue"}:
+        v.append(f"drift: present_names should override the flag both ways, got DNP {dnp}")
+    # FlagFalse is now present + recent + unbuilt -> surfaces as talked_not_built instead.
+    if {x["project"] for x in ov["alerts"]["talked_not_built"]} != {"FlagFalse"}:
+        v.append("drift: an overridden-present project should become talked_not_built")
+
+    # ---- recency edge: exactly WINDOW_DAYS is still 'recent', one more day isn't ----
+    w = drift.WINDOW_DAYS  # 30
+    pt_edge = {
+        "status": "ok",
+        "projects": [
+            {"estate_project": "Ref", "estate": "L5GN", "thread_count": 1,
+             "substantive_count": 1, "latest_activity": "2026-07-31", "present_in_estate": True},
+            {"estate_project": "Edge30", "estate": "L5GN", "thread_count": 1,
+             "substantive_count": 1, "latest_activity": "2026-07-01", "present_in_estate": True},
+            {"estate_project": "Edge31", "estate": "L5GN", "thread_count": 1,
+             "substantive_count": 1, "latest_activity": "2026-06-30", "present_in_estate": True},
+        ],
+    }
+    oe = drift._compute(pt_edge, None)
+    if oe["reference_date"] != "2026-07-31":
+        v.append(f"drift: reference_date should be the max signal date, got {oe['reference_date']!r}")
+    if oe["window_days"] != w:
+        v.append("drift: window_days should be reported")
+    rec = {r["project"]: r for r in oe["projects"]}
+    if not rec["Edge30"]["discussed_recently"]:
+        v.append(f"drift: exactly WINDOW_DAYS ({w}) old should count as recent")
+    if rec["Edge31"]["discussed_recently"]:
+        v.append(f"drift: WINDOW_DAYS+1 old should NOT count as recent")
+    tnb2 = {x["project"] for x in oe["alerts"]["talked_not_built"]}
+    if "Edge31" in tnb2:
+        v.append("drift: a stale-discussion project should not fire talked_not_built")
+    if {"Ref", "Edge30"} - tnb2:
+        v.append("drift: recent-discussion present projects should fire talked_not_built")
+
+    # ---- estate_diff insufficient/absent degrades gracefully (no build alerts) ----
+    insuff = drift._compute(pt_edge, {"status": "insufficient_history"})
+    if insuff["inputs"]["estate_diff"] != "insufficient_history":
+        v.append(f"drift: should carry estate_diff status through, got {insuff['inputs']['estate_diff']!r}")
+    if insuff["alerts"]["built_not_discussed"]:
+        v.append("drift: insufficient estate_diff must yield no built_not_discussed alerts")
+    if insuff["reference_date"] != "2026-07-31":
+        v.append("drift: reference should fall back to discussion dates when estate_diff has no 'to' date")
+
     return v

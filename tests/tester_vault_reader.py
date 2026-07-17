@@ -71,10 +71,35 @@ def run() -> list[str]:
                 v.append(f"vault_reader: estate mapping wrong: {sg.get('estate')}/{sg.get('estate_project')}")
             if set(sg["by_account"]) != {"gemini-personal", "gemini-work"}:
                 v.append(f"vault_reader: account wall not carried per-project: {sg['by_account']}")
-        if not any(p["vault_project"] == "L5GN Crystal Spire" for p in out["vault_projects_without_repo"]):
+        concept = {p["vault_project"]: p for p in out["vault_projects_without_repo"]}
+        if "L5GN Crystal Spire" not in concept:
             v.append("vault_reader: concept project (no repo) not surfaced separately")
+        else:
+            cp = concept["L5GN Crystal Spire"]
+            # A concept row carries NO repo/estate mapping and drops the repo-only
+            # confidence + evidence fields (keeps the two project kinds distinct).
+            for absent in ("estate", "estate_project", "repo_folder_path",
+                           "present_in_estate", "by_confidence", "evidence_signals"):
+                if absent in cp:
+                    v.append(f"vault_reader: concept project should not carry {absent!r}")
+
+        # evidence_signals are joined by project name onto the REPO project.
+        sg = repo.get("smelt-gateway", {})
+        if sg.get("evidence_signals") != {"path_mention": 1}:
+            v.append(f"vault_reader: evidence_signals not joined onto repo project: {sg.get('evidence_signals')}")
+        # confidence histogram carried per repo project (t1 evidence, t2 manual).
+        if sg.get("by_confidence") != {"evidence": 1, "manual": 1}:
+            v.append(f"vault_reader: by_confidence histogram wrong: {sg.get('by_confidence')}")
+
         if out["unlinked"]["threads"] != 1:
             v.append(f"vault_reader: unlinked count wrong: {out['unlinked']}")
+        # The unlinked bucket is itself account-walled: t3 is claude-personal.
+        uba = out["unlinked"]["by_account"]
+        if set(uba) != {"claude-personal"} or uba["claude-personal"]["threads"] != 1:
+            v.append(f"vault_reader: unlinked bucket not carried per account: {uba}")
+        # Unlinked threads never leak into a project rollup's account wall.
+        if "claude-personal" in sg.get("by_account", {}):
+            v.append("vault_reader: an unlinked account must not appear in a project's by_account")
 
         # Schema guard: a wrong user_version must refuse, not interpret.
         bad = Path(td) / "bad.db"
@@ -82,4 +107,16 @@ def run() -> list[str]:
         out2 = _scan(bad)
         if out2.get("status") != "schema_mismatch":
             v.append(f"vault_reader: expected schema_mismatch on user_version 99, got {out2.get('status')!r}")
+        if out2.get("found_user_version") != 99:
+            v.append("vault_reader: schema_mismatch should report the found user_version")
+
+        # No vault anywhere -> a clean no_vault status, never a crash.
+        orig = vault_reader._resolve_vault_path
+        vault_reader._resolve_vault_path = lambda: None
+        try:
+            nov = vault_reader.scan_estate([])
+        finally:
+            vault_reader._resolve_vault_path = orig
+        if nov.get("status") != "no_vault":
+            v.append(f"vault_reader: absent vault should yield no_vault, got {nov.get('status')!r}")
     return v

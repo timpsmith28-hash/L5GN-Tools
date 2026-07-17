@@ -56,12 +56,61 @@ def run() -> list[str]:
         if len(hist) != 2:
             v.append(f"consume: expected 2 accumulated snapshots, got {len(hist)}")
 
+        # idempotency: re-ingesting the same generated-date adds no new snapshot.
+        again = consume.ingest_estate(estates_dir, "personal")
+        if again["new_snapshot"] is not False:
+            v.append("consume: re-ingesting the same day should report new_snapshot False")
+        if len(list((estates_dir / "personal" / "history").glob("estate-*.json"))) != 2:
+            v.append("consume: idempotent re-ingest should not accumulate a duplicate snapshot")
+
         # tampered manifest -> verified False
         (estates_dir / "personal" / "deposit_manifest.json").write_text(
             json.dumps({"machine": "TestRig", "files": {"estate.json": "deadbeef"}}),
             encoding="utf-8")
         if consume.ingest_estate(estates_dir, "personal")["manifest_verified"] is not False:
             v.append("consume: tampered manifest should fail verification")
+
+        # ---- manifest_verified None: no manifest, or manifest without the file hash ----
+        with tempfile.TemporaryDirectory() as td2:
+            ed2 = Path(td2)
+            # (a) landed bundle with NO manifest at all -> verified None (unknown, not False).
+            noman = ed2 / "personal"
+            noman.mkdir(parents=True)
+            (noman / "estate.json").write_text(
+                json.dumps({"generated_at": "2026-07-16T09:00:00Z", "projects": []}),
+                encoding="utf-8")
+            r = consume.ingest_estate(ed2, "personal")
+            if r["status"] != "ingested" or r["manifest_verified"] is not None:
+                v.append(f"consume: missing manifest should give verified None, got {r.get('manifest_verified')!r}")
+            if r["machine"] is not None:
+                v.append("consume: machine should be None when no manifest is present")
+
+            # (b) manifest present but carrying no estate.json hash -> verified None.
+            (noman / "deposit_manifest.json").write_text(
+                json.dumps({"machine": "Rig", "files": {}}), encoding="utf-8")
+            r2 = consume.ingest_estate(ed2, "personal")
+            if r2["manifest_verified"] is not None:
+                v.append("consume: a manifest lacking the estate.json hash should verify None")
+            if r2["machine"] != "Rig":
+                v.append("consume: machine name should be read from the manifest even when hash absent")
+
+            # no_bundle: an estate dir with no estate.json is reported, not crashed.
+            (ed2 / "work").mkdir()
+            nb = consume.ingest_estate(ed2, "work")
+            if nb["status"] != "no_bundle":
+                v.append(f"consume: empty estate dir should report no_bundle, got {nb['status']!r}")
+
+            # _present_names unions project names across every estate.
+            (ed2 / "work" / "estate.json").write_text(
+                json.dumps({"projects": [{"name": "WorkOnly"}, {"name": "Shared"}]}),
+                encoding="utf-8")
+            (noman / "estate.json").write_text(
+                json.dumps({"projects": [{"name": "PersonalOnly"}, {"name": "Shared"},
+                                         {"name": None}]}),
+                encoding="utf-8")
+            names = consume._present_names(ed2, ["personal", "work"])
+            if names != {"WorkOnly", "Shared", "PersonalOnly"}:
+                v.append(f"consume: _present_names should union non-null names across estates, got {names}")
 
         # ---- sweep: stub the vault scanners, assert per-estate reports ----
         orig_vr, orig_pt = vault_reader.scan_estate, project_trail.scan_estate

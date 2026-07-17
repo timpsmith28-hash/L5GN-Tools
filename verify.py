@@ -26,10 +26,13 @@ TESTERS: list[str] = [
     "tests.tester_config",
     "tests.tester_vault_reader",
     "tests.tester_project_trail",
+    "tests.tester_estate_diff",
     "tests.tester_drift",
     "tests.tester_authors",
     "tests.tester_deposit",
     "tests.tester_consume",
+    "tests.tester_intake",
+    "tests.tester_set_substantive",
 ]
 
 
