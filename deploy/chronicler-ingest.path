@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch the Chronicler drop zone for an ingest request
+
+[Path]
+# Fires chronicler-ingest.service whenever the trigger file appears. The service
+# deletes the trigger, which re-arms this watcher for the next drop.
+PathExists=%h/vault/chat_threads/zip_downloads/.ingest-request
+Unit=chronicler-ingest.service
+
+[Install]
+WantedBy=default.target

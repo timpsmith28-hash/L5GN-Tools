@@ -1,0 +1,10 @@
+[Unit]
+Description=Chronicler: ingest freshly-dropped chat exports
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/L5GN-Tools
+# Remove the trigger first (so the .path unit re-arms), then ingest with the
+# venv Python -- the pipeline subprocess inherits it and needs pyyaml/embeddings.
+ExecStart=/bin/sh -c 'rm -f %h/vault/chat_threads/zip_downloads/.ingest-request; %h/L5GN-Tools/.venv/bin/python %h/L5GN-Tools/run.py ingest >> %h/vault/ingest.log 2>&1'
