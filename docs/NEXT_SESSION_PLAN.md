@@ -1,58 +1,47 @@
-# L5GN-Tools — Build Plan & Status
+# L5GN-Tools — Status & Next Steps
 
-Living roadmap for the estate + chat-vault toolkit across the three-machine mesh
-(gaming rig, work laptop, headless knight). Read top-to-bottom for where we are.
+## Where we are (proven this session)
 
-## Locked decisions (unchanged)
+The three-machine mesh works **end to end**: LucasGoonPC (personal producer)
+`build` → `deposit --push` (scp over the `l5gn-castle` ssh alias) → the knight
+(`l5gn-castle-worker`, consumer) ingests (manifest-verified), accumulates
+history, and runs the walled interpret sweep against the frozen vault. After a
+fresh build+deposit, `drift` reads correctly: **4 discussed_not_present /
+3 talked_not_built**. `verify.py` GREEN (13 testers) on all three machines.
 
-- **Knight holds both estates**, walled by path (`personal/` vs `work/`), never merged.
-- **Transport = direct rig → knight push** (rsync/scp/Syncthing). No cloud in the pipe.
-  Gemini exports are pulled from Drive onto the rig first, then pushed with everything else.
-- **Diff history = append-only dated snapshots** in `data/history/` + a `latest` pointer.
-  "What changed since last sync" = diff of the two most recent snapshots.
-- **Machine config = hostname-keyed** (`config/machines.json`) + gitignored `config/local.json`.
-- **Account wall is a data dimension**, never a merged figure (claude-personal / gemini-personal / gemini-work).
-- **Chronicler DB is frozen** (`user_version 1`, `schema_version 1.0-frozen`); the toolkit only *reads* it.
-- **Read-only + stdlib contract holds for scanners**; writers (deposit, and later Chronicler ingest) live outside it.
+**Phases 1–4 complete (#1–#13):** machine config, estate_diff, the vault
+interpret layer (vault_reader / project_trail / drift), author folding, deposit
+(namespaced + manifest + scp/rsync), knight ingest + consume, and the live
+round-trip. Playbook: `docs/KNIGHT_PLAYBOOK.md`.
 
-## Done (committed d3116af and prior)
+### Two things to bear in mind
+- **Only the personal estate deposits so far.** Work-laptop producer isn't set up
+  yet (final step) — until then the knight holds `personal/` only; `work/` is empty.
+- **The knight runs a *copied* `chronicler.db` snapshot.** The Chronicler pipeline
+  still runs on a rig and the DB is scp'd over. **End goal: the vault lives and
+  updates ON the knight** — that's what #16 delivers.
 
-- **Machine-config keystone** — `l5gntools/config.py`, hostname-keyed roots with legacy fallback, `run.py config`.
-- **Estate snapshots + `estate_diff`** — `build` deposits dated `data/history/` snapshots; `estate_diff` reports moved HEADs / new commits / doc + wiki_shard deltas / added-removed projects.
-- **Chronicler DB freeze** — P1–P3 + `schema_version` applied on the work rig; frozen `chronicler.db` in place.
-- **Interpret layer (reads the frozen vault, `mode=ro`, `user_version` guard):**
-  - `vault_reader` — per-project chat rollups joined to the estate, account-walled.
-  - `project_trail` (S7) — per-project discussion trail, newest-first, confidence-ranked.
-  - `drift` (S8) — talked-not-built / built-not-discussed / discussed-not-present.
-- **Author-identity folding** — `config/authors.json` collapses git aliases in `git_deep_history`.
-- Gate: `verify.py` GREEN across 4 auditors + 11 testers; pre-commit hook enforced.
+## Next steps (reordered — Chronicler first)
 
-Confirmed on real data (LucasGoonPC): `vault_reader` ok (1171 threads, `user_version 1`);
-`present_in_estate` correctly flips True for repos on the machine and False for those elsewhere;
-`drift` split 3 talked-not-built / 4 discussed-not-present.
+1. **#16 — Assimilate Chronicler into the toolkit (NOW the priority).** Vendor the
+   ingest pipeline into the repo as its own *writer* subsystem (own deps: pyyaml,
+   sentence-transformers; deliberately outside the read-only scanner contract,
+   which already scopes to `registry.SCANNERS`, so nothing there is threatened).
+   Target end-state: the knight ingests new Claude/Gemini exports + share-scrapes,
+   updates `chronicler.db` in place, and `consume` reads it live — no more scp of
+   a snapshot. Likely split: (a) boundary/deps/entrypoint design, (b) vendor
+   `pipeline/`, (c) a `run.py ingest` command, (d) a separate gate for ingest deps.
+2. **Finish the chat-data path.** Complete the personal Gemini share-URL scrapes,
+   run the pipeline; once #16 lands this runs on the knight directly.
+3. **Work-laptop producer setup (final step).** Rename its `machines.json` entry to
+   its hostname, set `roots` + `estate: work` + `push_target`; `deposit --push` →
+   the knight gains the **work** estate; reports then cover both, walled.
+4. **#15 — toolkit git-SHA version stamp** (small; cross-machine version parity).
+5. **#14 — work-Claude export mitigation** (admin-gated; interim `.md` looping).
+6. **Optional — schedule** nightly `consume` on the knight + periodic `deposit`
+   on rigs (playbook §6).
 
-## Remaining
-
-### Phase 4 — stand up the mesh
-- **#11 rig → knight deposit/push** — writer (not a scanner): package this machine's
-  `estate.json` + latest snapshot into a namespaced outbox (`work/` vs `personal/` from
-  config), with a manifest (sha256 + meta); push to the knight via config `push_target`
-  (rsync/scp), only into the machine's own namespace. Refuse to deposit an `unknown` estate.
-- **#12 knight ingest + consumer orchestration** — land deposits under `estates/{personal,work}/history/`
-  per config `estates_dir`; point `estate_diff` + `vault_reader` at the right per-estate dir;
-  a consumer entrypoint runs the interpret sweep (estate_diff → vault_reader → project_trail → drift).
-- **#13 end-to-end mesh verify (+ optional schedule)** — dry-run the full loop; confirm the
-  walls hold at every hop; then optionally schedule the nightly knight sweep.
-
-### Supporting
-- **#14 work-Claude export mitigation** — admin-gated; interim `.md`-looping, future shared work vault.
-- **#15 toolkit version stamp** — git SHA into `estate.json` + report header, for cross-machine version parity; pair with a deploy/versioning crash course.
-- **#16 assimilate Chronicler** — vendor the ingest pipeline into the repo as its own writer
-  subsystem (own deps: pyyaml, sentence-transformers), outside the read-only scanner contract
-  (auditors already scope to `registry.SCANNERS`). One repo, one deploy, one version on the knight.
-
-## The loop (why it composes on the knight)
-- estate scanners / `estate.json` → what the code **is**
-- `estate_diff` → what the code **did** since last sync
-- `vault_reader` / `project_trail` → what was **discussed** + which threads link to which repo
-- `drift` → the reconciliation: discussed vs built vs present
+## Ground-truth locations
+- Knight: vault `/home/l5gn/vault/chronicler.db`; deposits `/home/l5gn/vault/estates/{personal,work}/`; per-estate `reports/`.
+- Deploy: push-to-deploy bare-repo hook (playbook §4b) → `git push knight main`.
+- Config: role/roots in `config/machines.json` (committed); paths/push_target in `config/local.json` (git-ignored).

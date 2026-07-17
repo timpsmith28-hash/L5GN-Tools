@@ -43,6 +43,30 @@ def _cmd_deposit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ingest(rest: list[str]) -> int:
+    """Run the vendored Chronicler ingest pipeline in its own process, so the
+    stdlib-only core never imports pyyaml/embeddings. Extra args pass straight
+    through to chronicler/pipeline/run_pipeline.py."""
+    import os
+    import subprocess
+    from pathlib import Path
+    from l5gntools import config
+
+    script = Path(__file__).resolve().parent / "chronicler" / "pipeline" / "run_pipeline.py"
+    if not script.exists():
+        print("ingest: chronicler pipeline not found (is chronicler/ vendored?)", file=sys.stderr)
+        return 2
+    m = config.machine()
+    env = dict(os.environ)
+    if m.get("vault"):
+        env.setdefault("CHRONICLER_DB_PATH", m["vault"])          # write the DB where consume reads it
+    if m.get("chronicler_home"):
+        env.setdefault("CHRONICLER_HOME", m["chronicler_home"])   # runtime data root
+    print(f"ingest: -> {script.name} {' '.join(rest)}  "
+          f"(DB={env.get('CHRONICLER_DB_PATH', '<default>')})")
+    return subprocess.run([sys.executable, str(script), *rest], env=env).returncode
+
+
 def _cmd_consume() -> int:
     from pathlib import Path
     from l5gntools import config, consume
@@ -126,10 +150,14 @@ def _cmd_tool(name: str, args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str]) -> int:
+    # 'ingest' forwards remaining args to the vendored pipeline; handle it before
+    # argparse so pipeline flags (--render-only, --skip-*) don't clash with ours.
+    if argv and argv[0] == "ingest":
+        return _cmd_ingest(argv[1:])
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
-                   help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / 'consume'")
+                   help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / 'consume' / 'ingest'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",

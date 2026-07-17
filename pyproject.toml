@@ -9,6 +9,14 @@ description = "Estate-level, read-only scanners for the L5GN project family (CID
 requires-python = ">=3.10"
 dependencies = []
 
+# The core toolkit (scanners) is stdlib-only. The Chronicler ingest subsystem
+# (chronicler/) is a separate writer with its own deps -- install on demand:
+#   pip install -e .[chronicler]     # ingest pipeline (pyyaml + embeddings)
+#   pip install -e .[scrape]         # gemini share-scraper (playwright)
+[project.optional-dependencies]
+chronicler = ["pyyaml>=6", "sentence-transformers>=2"]
+scrape = ["playwright>=1.40"]
+
 # Only the importable package ships; run.py / verify.py / auditors / tests stay
 # top-level dev scripts. CID depends on the `l5gntools` package alone.
 [tool.setuptools]

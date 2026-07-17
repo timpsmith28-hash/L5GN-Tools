@@ -5,6 +5,16 @@
 # Per-machine config override -- paths/secrets, must not sync to GitHub.
 /config/local.json
 
+# Chronicler ingest RUNTIME data (per-machine, never code). Only chronicler/ code is tracked.
+/chronicler/**/*.db
+/chronicler/**/*.db-journal
+/chronicler/**/raw_*/
+/chronicler/**/vault_staging/
+/chronicler/**/scraped_gemini/
+/chronicler/**/zip_downloads/
+/chronicler/**/_debug/
+/chronicler/**/manifest.jsonl
+
 # Python
 __pycache__/
 *.pyc
