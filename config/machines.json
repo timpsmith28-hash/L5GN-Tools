@@ -1,23 +1,26 @@
 {
-  "_comment": "Per-machine config, keyed by socket.gethostname(). Run 'python run.py config' on each machine to see its hostname, then rename an example key below to match. 'roots' lists estate roots whose CHILD folders are the projects to scan; omit 'roots' to fall back to legacy sibling discovery (the toolkit's own parent folder). Machine-specific paths, push targets, or secrets that must NOT sync to GitHub go in config/local.json (gitignored) instead.",
+  "_comment": "TEMPLATE (committed, no real machine data). The real per-machine config lives in config/local.json (gitignored) and OVERRIDES these entries. This file just documents the shape and provides a safe 'default' fallback. Keyed by socket.gethostname() -- run 'python run.py config' to see a machine's hostname. 'roots' = estate roots whose CHILD folders are the projects to scan (omit for legacy sibling discovery). Copy an example below into config/local.json, rename the key to your hostname, and fill in real paths.",
   "default": {
     "role": "producer",
     "estate": "unknown"
   },
-  "LucasGoonPC": {
+  "RENAME-ME-GAMING-RIG": {
     "role": "producer",
     "estate": "personal",
-    "roots": ["C:/Users/timps/Documents/GitHub"]
+    "roots": ["C:/Users/you/Documents/GitHub"],
+    "push_target": "knight-host:vault/estates",
+    "push_transport": "scp"
   },
   "RENAME-ME-WORK-LAPTOP": {
     "role": "producer",
     "estate": "work",
-    "roots": ["C:/Users/tim.smith/Github/MCF", "C:/Users/tim.smith/Github/L5GN"]
+    "roots": ["C:/Users/you/Github/MCF", "C:/Users/you/Github/L5GN"]
   },
-  "l5gn-castle-worker": {
+  "RENAME-ME-KNIGHT": {
     "role": "consumer",
     "estate": "both",
-    "vault": "/home/l5gn/vault/chronicler.db",
-    "estates_dir": "/home/l5gn/vault/estates"
+    "vault": "/home/you/vault/chronicler.db",
+    "estates_dir": "/home/you/vault/estates",
+    "chronicler_home": "/home/you/vault"
   }
 }

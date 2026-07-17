@@ -269,7 +269,52 @@ Three verbs, by role:
 
 ---
 
-## 8. Glossary
+## 8. Config as a shipped artifact (Docker-style)
+
+`config/machines.json` is a committed **template** only. The real per-machine
+config lives in `config/local.json` (git-ignored), keyed by hostname — one file
+holds every machine, each reads only its own section, and it overrides the
+template. Maintain it on the gaming rig and ship it like the vault:
+
+```
+scp config/local.json l5gn-castle:L5GN-Tools/config/local.json
+```
+
+`git pull` / push-to-deploy never touch it (git-ignored), so a machine's config
+survives every update. Change config in one place, scp it out — nothing machine-
+specific ever enters git. (This supersedes the manual local.json step in §4a.)
+
+## 9. Ingest on the knight (running Chronicler locally)
+
+The ingest subsystem has its own deps, so use a venv:
+
+```
+cd ~/L5GN-Tools
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[chronicler]'          # pyyaml + embeddings ([scrape] adds playwright)
+```
+
+With `chronicler_home` set in local.json (e.g. `/home/l5gn/vault`), drop export
+zips into `~/vault/chat_threads/zip_downloads/` and run:
+
+```
+cp ~/vault/chronicler.db ~/vault/chronicler.db.bak   # back up the frozen DB first
+python run.py intake --dry-run                         # preview zip classification
+python run.py ingest                                   # intake -> pipeline, updates the DB in place
+python run.py consume                                  # re-read the refreshed vault
+```
+
+**Run `ingest` with the venv Python** (activate it, or `.venv/bin/python run.py
+ingest`): the pipeline subprocess inherits `sys.executable`, so system python3
+wouldn't see pyyaml. `verify`, `deposit`, and `consume` stay stdlib-only and can
+use system python3.
+
+Caveats: project-linking (`relink.py`) is a separate step, so fresh threads land
+unlinked until you run it; and ingest touches the frozen production DB (hence the
+backup).
+
+## 10. Glossary
 
 - **Estate** — one machine's set of project repos, snapshotted as `estate.json`.
 - **Vault** — the frozen `chronicler.db`: the source-of-truth chat archive.
