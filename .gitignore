@@ -1,9 +1,14 @@
 # Generated scan outputs -- reproducible, not source.
 /data/
 /report.html
+data/urls.txt
 
 # Per-machine config override -- paths/secrets, must not sync to GitHub.
 /config/local.json
+
+# Project registry -- real project names/aliases, includes employer project
+# codenames. Authored here, shipped by scp like local.json, never committed.
+/config/project_registry.json
 
 # Chronicler ingest RUNTIME data (per-machine, never code). Only chronicler/ code is tracked.
 /chronicler/**/*.db

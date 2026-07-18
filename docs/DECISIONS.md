@@ -332,3 +332,64 @@ interrupted transfers) are the genuine reason to weigh adopting over building.
 
 **Consequences.** No work now. Captured so the idea does not leak into the Chronicler
 work with its incompatible multi-writer data model. Revisit as its own thread.
+
+---
+
+## 0010 — Project linkage is estate/account-agnostic; only the deposit wall stays hard
+
+**Date:** 2026-07-18 · **Status:** accepted · **Source:** design thread ("porous walls")
+
+**Context.** Building the project registry surfaced a real tension: the estate wall
+(path separation, the deposit contract) says personal and work never mix, structurally.
+But a *project* — a body of work — doesn't respect that boundary. L5GN OS (a work-account
+initiative) plausibly seeded Crystal Spire (a personal-account creative project); MCF's
+Solution Configurator threads appear on both the work and personal Gemini accounts.
+Treating estate/account as a hard boundary for linkage would either force false splits
+(one project artificially becomes two) or pressure toward weakening the wall itself.
+
+**Decision.** The estate wall and the concept of "project" answer different questions
+and were never meant to be the same axis. The wall guards **deposits** — physical
+code/data at rest, protecting against misconfiguration (a producer writing into the
+wrong namespace). It stays completely hard; nothing here weakens it. **Project linkage
+is a different, orthogonal axis** — a `project_link` may span any combination of
+estates and accounts. The `account` field is still recorded per-thread, unflattened,
+exactly as ARCHITECTURE §7 already specified ("estate vs account are related but not
+identical") — this decision extends that same principle to project boundaries.
+
+This is safe, not merely convenient: INTENT §4 already establishes the system is
+single-operator, not multi-tenant, not a product. There is no confidentiality boundary
+to protect between Tim's own work-account and personal-account thinking — the wall was
+always about preventing mistakes, never about hiding information from the operator.
+
+**Consequences.** `relink.py` and any future write endpoint must not gate matching on
+estate or account. `project_registry.json` entries may legitimately list multiple
+`account_scope` values (see `crystal-spire`, `mcf-solution-configurator`). Reports that
+aggregate by project should still surface the account dimension per-thread if asked,
+never silently merge it away.
+
+---
+
+## 0011 — Existing `project_link` values are reset, not trusted
+
+**Date:** 2026-07-18 · **Status:** accepted · **Source:** design thread
+
+**Context.** Live-DB queries surfaced pre-existing `project_link` values (e.g.
+`019f4273-...` spanning two `gemini-work` L5GN OS threads and the `claude-personal`
+Crystal Spire thread; `smelt-gateway` tying two Crystal Spire-era threads). These
+predate today's registry, today's estate/account-agnostic ruling (0010), and the
+Chancellor/Chronicler-GAS/Auditor sub-project hierarchy. Tim's assessment: these are
+almost certainly auto-accepts from very early pipeline testing, not deliberate rulings.
+
+**Decision.** Treat all existing `project_link` values as untrustworthy noise. They
+will be cleared and re-derived once `project_registry.json` is live and the narrow
+write endpoint (DECISIONS 0007 stage 2) exists to apply real rulings — not assumed
+correct, not cherry-picked as "probably fine." `smelt-gateway` looks structurally
+plausible on inspection but is reset along with everything else rather than special-
+cased, so the fresh pass starts from one consistent baseline.
+
+**Consequences.** Until the reset + re-link pass runs, any `project_link` seen in the
+live DB should be treated as historical noise, not signal. This is a Cowork task for a
+future round — not performed in this session, since it's a write against the live vault
+and this thread has no execution access to it. `relink.py`'s registry-gated stage
+(DECISIONS-adjacent, ARCHITECTURE §7) should re-run in full against the new registry
+once the reset lands.
