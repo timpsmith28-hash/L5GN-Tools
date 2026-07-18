@@ -6,9 +6,17 @@ Prime a fresh thread with this. It's the state of the world + how to continue.
 
 L5GN-Tools is complete and live: a small mesh that reconciles **what the code did**
 (git estate) against **what was discussed** (chat vault), assembled on a headless
-consumer. All 16 planned tasks are done, the three-machine loop runs end-to-end,
-and the gate is green (4 auditors + 18 hermetic testers, enforced by a pre-commit
-hook). Nothing is half-built; what remains is optional polish.
+consumer. The core mesh loop runs end-to-end and the gate is green (5 auditors +
+19 hermetic testers, enforced by a pre-commit hook). The infrastructure is done;
+what remains is real but scoped — see `docs/DECISIONS.md` for what's been decided and
+`docs/NEXT_SESSION_PLAN.md` is retired (archived as a completed plan). For *why* the
+system is shaped as it is, read `docs/INTENT.md` and `docs/ARCHITECTURE.md`; for
+what's changed lately, `docs/CHANGELOG.md`.
+
+> **Honest status:** the mesh that moves data is finished; the thing it exists to
+> carry — chat-to-project linkage — covers ~8% of substantive threads. That number,
+> not "complete," is the real state (INTENT §2). "Done" means the plumbing; the
+> payload is early.
 
 ## The system in one screen
 
@@ -69,20 +77,32 @@ python verify.py                                                  # the gate
 - `chronicler/README.md` — ingest subsystem + drop zone; `CLOSEOUT_PROMPT.md` for manual capture.
 - `deploy/README.md` — auto-delivery (push script + systemd auto-ingest).
 
-## Open threads (all optional, none blocking)
+## Open threads
 
-1. **Fold `relink` into ingest** — the sharpest edge: fresh chat lands *unlinked*,
-   so `drift`/`project_trail` see it before it's tied to projects. A relink stage
-   (behind the embeddings dep) after normalize would close it. Highest-value follow-up.
-2. **Work-laptop producer setup** — add its hostname to `local.json` (role work,
-   roots, push_target) and do its first `deposit --push`; then reports cover both estates.
-3. **Nightly `consume` timer** on the knight (cron/systemd) — optional automation.
-4. **Low-risk hardening** the audit flagged: `estate_diff` where `curr` has no
+Status of these lives in `docs/DECISIONS.md`; this is a pointer list, not the source
+of truth. Build round 1 (2026-07-18) landed the Datasette read surface, off-box
+backup, the doc-claims auditor, the scrape stage, and **folded `relink` into the
+pipeline** — so the old "relink is the sharpest edge" item is done. Remaining:
+
+1. **Knight-side confirmation for round 1** — install chromium on the knight
+   (`playwright install chromium && playwright install-deps`; confirmed *absent*
+   2026-07-18), confirm `project_registry.json` resolves where `relink` expects, and
+   run the first scrape+ingest so the backup pre-flight and relink stage exercise live.
+2. **The DB write endpoint** (DECISIONS 0007 stage 2) — the narrow Tailscale-bound
+   review surface for the ~19 pending rulings. Its existence is the precondition for
+   removing sync-back (DECISIONS 0008).
+3. **Work-laptop producer setup** — add its hostname to `local.json` (role work,
+   roots, push_target) and do its first `deposit --push`; then reports cover both
+   estates and the wall gets exercised for the first time.
+4. **Nightly `consume` timer** on the knight (cron/systemd) — optional automation.
+5. **Low-risk hardening** the audit flagged: `estate_diff` where `curr` has no
    `git_summary`; intake same-second archive collision; deposit/consume subprocess
    paths untested end-to-end.
-5. **Manual chat capture is a backup only** — the close-out prompt is token-expensive
+6. **Manual chat capture is a backup only** — the close-out prompt is token-expensive
    and lossy on long threads (see `CLOSEOUT_PROMPT.md`); admin-gated work-Claude
    stays a real gap.
+7. **Deferred, separate toolset:** a self-hosted git-backed notes vault (DECISIONS
+   0009) — not part of Chronicler, revisit as its own thread.
 
 ## Next design topic (seed): shard planning to a chat thread
 

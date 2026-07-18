@@ -227,8 +227,13 @@ Three verbs, by role:
 | `python run.py deposit` | rig | stage the namespaced bundle; print the push command |
 | `python run.py deposit --push` | rig | actually push to the knight |
 | `python run.py consume` | knight | ingest deposits + write per-estate reports |
+| `python run.py serve` | knight | Datasette read surface over the vault (`--immutable`, read-only) |
+| `python run.py backup` | knight | off-box `VACUUM INTO` snapshot, keep-last-N, auto-push |
+| `python run.py scrape [urls.txt]` | knight | Gemini share-scrape → `scraped_gemini/` intake |
 | `python run.py <tool> --target NAME` | any | run one scanner on one project |
 | `python verify.py` | any | run the gate (auditors + testers) |
+
+See §10 for the read surface, off-box backup, and scrape flow in detail.
 
 ### Reading the results
 
@@ -299,22 +304,144 @@ With `chronicler_home` set in local.json (e.g. `/home/l5gn/vault`), drop export
 zips into `~/vault/chat_threads/zip_downloads/` and run:
 
 ```
-cp ~/vault/chronicler.db ~/vault/chronicler.db.bak   # back up the frozen DB first
 python run.py intake --dry-run                         # preview zip classification
-python run.py ingest                                   # intake -> pipeline, updates the DB in place
+python run.py ingest                                   # backup -> intake -> pipeline, updates the DB in place
 python run.py consume                                  # re-read the refreshed vault
 ```
+
+`ingest` now runs three phases: **[1/3] a pre-flight off-box backup** (§10.2 —
+an automatic `VACUUM INTO` snapshot before anything mutates the DB; skip it with
+`--skip-backup`), **[2/3] intake**, **[3/3] the pipeline**. The pipeline now
+includes **relink** as a standing stage, so freshly-ingested threads are linked to
+projects in the same pass (no separate manual `relink.py` run needed; it is gated
+on the project registry and skips cleanly if that is absent).
 
 **Run `ingest` with the venv Python** (activate it, or `.venv/bin/python run.py
 ingest`): the pipeline subprocess inherits `sys.executable`, so system python3
 wouldn't see pyyaml. `verify`, `deposit`, and `consume` stay stdlib-only and can
 use system python3.
 
-Caveats: project-linking (`relink.py`) is a separate step, so fresh threads land
-unlinked until you run it; and ingest touches the frozen production DB (hence the
-backup).
+## 10. Read surface, off-box backup, and Gemini scrape (build round 1)
 
-## 10. Glossary
+All three are Chronicler-runtime commands that live on the knight and resolve
+their paths from `CHRONICLER_HOME` (never hardcoded). Set `chronicler_home` in the
+knight's `config/local.json` (e.g. `/home/l5gn/vault`).
+
+### 10.1 Read surface — Datasette (DECISIONS 0007 stage 1)
+
+The first way to actually *see into* the vault. Read-only by construction:
+Datasette is launched `--immutable`, which cannot write the DB, so it cannot
+violate single-writer. Datasette is an optional extra:
+
+```bash
+source .venv/bin/activate
+pip install -e '.[viewer]'         # datasette
+python run.py serve                # datasette serve --immutable <vault> -h 0.0.0.0 -p 8001
+```
+
+Binding `0.0.0.0` means the headless knight answers on **both** its Tailscale
+`100.x` address and its `192.168.x` LAN address (per 0007). Reach it from a phone:
+
+- on the tailnet (phone on cellular / personal desktop): `http://<knight-100.x>:8001/`
+- on the LAN (the work rig, not on the tailnet): `http://<knight-192.168.x>:8001/`
+
+**Falsification test (INTENT §2), one example query.** Open the `chronicler`
+database → the `threads` table (or the SQL box) and run e.g.:
+
+```sql
+-- threads linked to a given project, newest first
+SELECT thread_id, title, created_at, project_confidence
+FROM threads
+WHERE project_link = 'L5GN_Armory_v4'
+ORDER BY created_at DESC;
+```
+
+Swap the project name for the one you're checking. This is the first time that
+question can be answered at all. (The *write* endpoint — 0007 stage 2, for
+applying the ~19 pending rulings — is deliberately NOT built this round.)
+
+### 10.2 Off-box backup — `VACUUM INTO` (DECISIONS 0005/0006)
+
+The knight holds the only live vault; its one off-box copy had drifted since the
+knight became primary, so everything ingested since had no off-box copy. Fix:
+
+```bash
+python run.py backup                 # snapshot -> CHRONICLER_HOME/backups/, keep-last-N, auto-push off-box
+python run.py backup --keep 14       # retain more generations (default 7)
+python run.py backup --no-push       # take + prune locally, just print the push command
+```
+
+`VACUUM INTO` is an atomic, consistent snapshot — safe to run while the DB is live,
+unlike a raw file copy. Snapshots are dated (`chronicler-YYYYMMDDTHHMMSSZ.db`) and
+pruned keep-last-N so a bad snapshot never overwrites the only good one. The source
+is opened `mode=ro`, so a backup can never mutate the vault.
+
+**Off-box destination** is config-driven — set it in the knight's `local.json`:
+
+```json
+{
+  "KNIGHT-HOSTNAME": {
+    "role": "consumer",
+    "chronicler_home": "/home/l5gn/vault",
+    "backup_target": "l5gn-castle:vault/Chronicler_Backup",
+    "backup_transport": "scp"
+  }
+}
+```
+
+This refreshes the stale `L5GN-Castle\…\Chronicler_Backup` copy over the existing
+transport. The backup also runs **automatically as ingest's [1/3] pre-flight**
+(§9), so every ingest is preceded by a fresh off-box snapshot; a push failure warns
+loudly but keeps the local snapshot and does not block ingest.
+
+> **Never** put a live SQLite file in a file-sync service — snapshot-then-move
+> only, which is exactly what this does.
+
+### 10.3 Gemini scrape — the URL list travels to the knight
+
+Decision from the design thread: **the URL list travels to the knight; the knight
+scrapes.** `scrape_gemini_share.py` drives a *headless* browser against the
+*public* share URL and rejects the session-cookie route — so no logged-in session
+is required and this headless box can scrape directly. That keeps vault input
+originating only on the writer (single-writer doctrine) and moves a tiny text file
+instead of megabytes of JSON.
+
+**Dependency (load-bearing — verify on the knight):**
+
+```bash
+source .venv/bin/activate
+pip install -e '.[scrape]'           # playwright
+playwright install chromium          # the headless browser itself
+playwright install-deps              # Ubuntu: system libs headless chromium needs
+python -c "import playwright; print('playwright OK')"   # confirm it imported
+```
+
+If chromium is not installed, `run.py scrape` reports it and skips loudly rather
+than silently doing nothing (the Layer-C dormant-dep trap). **Confirm chromium is
+present on the knight before relying on this stage.**
+
+**Tim's loop (the manual steps stay Tim's, out of scope for automation):**
+
+1. On the gaming rig, copy Gemini share links into a `urls.txt` (one URL per line;
+   `#` comments allowed). *Copying links out of the Gemini menu, and un-sharing
+   them afterwards, are manual steps.*
+2. Ship `urls.txt` to the knight's `CHRONICLER_HOME`:
+   `scp urls.txt l5gn-castle:vault/urls.txt`
+3. On the knight, scrape → ingest → (relink links the new threads automatically):
+   ```bash
+   python run.py scrape                 # reads $CHRONICLER_HOME/urls.txt -> $CHRONICLER_HOME/scraped_gemini/
+   python run.py scrape --force         # re-scrape share-ids already done (idempotent by default)
+   python run.py ingest                 # reconcile stage consumes scraped_gemini/, then relink links them
+   ```
+
+`urls.txt` lives at `CHRONICLER_HOME/urls.txt` on the knight (override with a
+`urls_file` key in `local.json`, or pass a path: `run.py scrape /path/urls.txt`).
+The scraper is idempotent (skips already-scraped share-ids; `--force` to redo) and
+batch-native — feed it a bigger/updated file for the next batch.
+
+---
+
+## 11. Glossary
 
 - **Estate** — one machine's set of project repos, snapshotted as `estate.json`.
 - **Vault** — the frozen `chronicler.db`: the source-of-truth chat archive.

@@ -9,6 +9,12 @@ Usage:
     python run.py build                      # run everything -> data/ + report.html
     python run.py <tool> [--target NAME]     # one tool on one project
     python run.py <tool> --all               # one tool across the whole estate
+
+Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
+    python run.py serve  [--port N] [--host H]   # Datasette read surface (--immutable)
+    python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
+    python run.py scrape [urls.txt] [--force]    # Gemini share-scrape -> intake
+    python run.py ingest [--skip-backup] [--skip-intake]   # backup -> intake -> pipeline
 """
 from __future__ import annotations
 
@@ -73,20 +79,114 @@ def _cmd_intake(rest: list[str]) -> int:
     return _run_chronicler("intake.py", rest, _chronicler_env())
 
 
+def _preflight_backup() -> bool:
+    """Snapshot the vault off-box BEFORE ingest mutates it (DECISIONS 0005/0006).
+
+    Returns True to proceed with ingest. A missing DB (first ever ingest) is a
+    clean skip -- there is nothing to back up yet. A real snapshot failure ABORTS
+    ingest: if we cannot capture the pre-ingest state off-box, we do not mutate
+    it (loud-failure principle). A *push* failure only warns -- the local snapshot
+    was still taken, and an off-box network hiccup must not block ingest work."""
+    from l5gntools import backup, config
+    m = config.machine()
+    try:
+        src = backup.resolve_db_path(m)
+    except FileNotFoundError:
+        print("ingest: [1/3] backup skipped (vault path unresolved)")
+        return True
+    if not src.exists():
+        print("ingest: [1/3] backup skipped (no vault yet -- first ingest)")
+        return True
+    print("ingest: [1/3] pre-flight off-box backup")
+    try:
+        r = backup.make_backup(machine=m)
+    except Exception as exc:  # noqa: BLE001 -- any snapshot failure must abort
+        print(f"ingest: pre-flight backup FAILED -- {exc}. Aborting before ingest.",
+              file=sys.stderr)
+        return False
+    print(f"  snapshot -> {r['snapshot']}  (kept {len(r['kept'])})")
+    if r["backup_target"] and r["pushed"]:
+        print(f"  off-box  -> {r['backup_target']}: OK")
+    elif r["backup_target"]:
+        print(f"  WARNING: off-box push FAILED -- {r['push_error']} "
+              "(local snapshot kept; continuing).", file=sys.stderr)
+    else:
+        print("  off-box  : no 'backup_target' configured -- snapshot is LOCAL ONLY.")
+    return True
+
+
 def _cmd_ingest(rest: list[str]) -> int:
-    """Unpack the drop zone (intake) then run the pipeline. `--skip-intake` runs
-    the pipeline only; all other args pass through to run_pipeline.py."""
+    """Pre-flight backup, unpack the drop zone (intake), then run the pipeline.
+    `--skip-intake` runs the pipeline only; `--skip-backup` skips the pre-flight
+    snapshot; all other args pass through to run_pipeline.py."""
     env = _chronicler_env()
+    do_backup = "--skip-backup" not in rest
     do_intake = "--skip-intake" not in rest
-    rest = [a for a in rest if a != "--skip-intake"]
+    rest = [a for a in rest if a not in ("--skip-intake", "--skip-backup")]
     print(f"ingest: DB={env.get('CHRONICLER_DB_PATH', '<default>')}")
+    if do_backup and not _preflight_backup():
+        return 3
     if do_intake:
-        print("ingest: [1/2] intake drop zone")
+        print("ingest: [2/3] intake drop zone")
         rc = _run_chronicler("intake.py", [], env)
         if rc != 0:
             return rc
-    print("ingest: [2/2] pipeline")
+    print("ingest: [3/3] pipeline")
     return _run_chronicler("run_pipeline.py", rest, env)
+
+
+def _cmd_scrape(rest: list[str]) -> int:
+    """Scrape a batch of Gemini share URLs into the pipeline intake dir (Task E).
+
+    `python run.py scrape [urls_file] [--force] [--timeout MS]`. Resolves the URL
+    list and the scraped_gemini/ output from CHRONICLER_HOME. Gated on playwright:
+    if it (or chromium) is absent the stage is un-runnable, so this reports that
+    explicitly and skips loudly rather than silently doing nothing."""
+    import subprocess
+    from pathlib import Path
+    from l5gntools import scrape, config
+    m = config.machine()
+    if not scrape.playwright_available():
+        print("scrape: playwright is NOT installed -- this stage is un-runnable here.\n"
+              "        It is an optional extra; the knight is where it must be present:\n"
+              "          pip install -e .[scrape]\n"
+              "          playwright install chromium\n"
+              "          playwright install-deps      # Ubuntu: system libs for headless chromium\n"
+              "        Whether chromium is installed on the knight is load-bearing -- "
+              "see KNIGHT_PLAYBOOK.", file=sys.stderr)
+        return 2
+
+    force = "--force" in rest
+    rest = [a for a in rest if a != "--force"]
+    timeout = None
+    urls_arg = None
+    it = iter(rest)
+    for a in it:
+        if a == "--timeout":
+            timeout = next(it, None)
+        elif not a.startswith("-"):
+            urls_arg = a
+
+    try:
+        urls_file = Path(urls_arg) if urls_arg else scrape.resolve_urls_file(m)
+        out_dir = scrape.resolve_scraped_dir(m)
+    except FileNotFoundError as exc:
+        print(f"scrape: {exc}", file=sys.stderr)
+        return 2
+    if not urls_file.exists():
+        print(f"scrape: no URL list at {urls_file}. Put one Gemini share URL per "
+              "line there -- copying share links out of Gemini into urls.txt is Tim's "
+              "manual step (see KNIGHT_PLAYBOOK).", file=sys.stderr)
+        return 2
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    argv = scrape.scrape_argv(urls_file, out_dir, force=force,
+                              timeout=(int(timeout) if timeout else None),
+                              python=sys.executable)
+    print(f"scrape: {' '.join(argv)}")
+    print(f"scrape: output -> {out_dir}  (the pipeline's reconcile stage consumes this;"
+          " run `run.py ingest` next)")
+    return subprocess.run(argv).returncode
 
 
 def _cmd_consume() -> int:
@@ -107,6 +207,68 @@ def _cmd_consume() -> int:
         print(f"  [{estate}] ingest={ing['status']} verified={ing.get('manifest_verified')} "
               f"snap={ing.get('snapshot')} | estate_diff={r['estate_diff']} | drift={r['drift']}")
     return 0
+
+
+def _cmd_backup(args: argparse.Namespace) -> int:
+    """Standalone off-box vault snapshot: `python run.py backup`. Same engine the
+    ingest pre-flight uses. Auto-pushes off-box unless --no-push is given."""
+    from l5gntools import backup, config
+    m = config.machine()
+    try:
+        r = backup.make_backup(keep=args.keep, push=not args.no_push, machine=m)
+    except (FileNotFoundError, FileExistsError, OSError) as exc:
+        print(f"backup: FAILED -- {exc}", file=sys.stderr)
+        return 2
+    print(f"backup: snapshot -> {r['snapshot']}")
+    print(f"  kept ({len(r['kept'])}): {', '.join(r['kept'])}")
+    if r["pruned"]:
+        print(f"  pruned : {', '.join(r['pruned'])}")
+    if not r["backup_target"]:
+        print("  off-box: no 'backup_target' configured (set it in config/local.json) "
+              "-- snapshot is LOCAL ONLY.")
+        return 0
+    if r["pushed"]:
+        print(f"  off-box: OK -> {r['backup_target']}")
+        return 0
+    if args.no_push:
+        print(f"  off-box: staged only (--no-push); would run: {r['push_command']}")
+        return 0
+    print(f"  off-box: FAILED -- {r['push_error']}", file=sys.stderr)
+    return 1
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    """Launch Datasette read-only against the live vault (DECISIONS 0007 stage 1).
+
+    Read surface only: `--immutable` cannot write, so single-writer is preserved
+    structurally. Datasette is an optional extra; if it is absent this skips
+    cleanly and loudly with the install hint (never silent-fails)."""
+    import subprocess
+    from l5gntools import viewer, config
+    m = config.machine()
+    try:
+        db = viewer.resolve_db_path(m)
+    except FileNotFoundError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    if not db.exists():
+        print(f"serve: vault DB not found at {db} -- nothing to serve "
+              "(is CHRONICLER_HOME / 'vault' set for this machine?).", file=sys.stderr)
+        return 2
+    if not viewer.datasette_available():
+        print("serve: Datasette is not installed. It is an OPTIONAL extra, kept out "
+              "of the stdlib-only core and the default install:\n"
+              "         pip install -e .[viewer]", file=sys.stderr)
+        return 2
+    argv = viewer.datasette_argv(db, host=args.host, port=args.port)
+    print(f"serve: {' '.join(argv)}")
+    print(f"serve: read-only (--immutable). From a phone on the tailnet: "
+          f"http://<knight-100.x>:{args.port}/  |  on the LAN: "
+          f"http://<knight-192.168.x>:{args.port}/")
+    try:
+        return subprocess.run(argv).returncode
+    except KeyboardInterrupt:
+        return 0
 
 
 def _cmd_config() -> int:
@@ -178,10 +340,13 @@ def main(argv: list[str]) -> int:
         return _cmd_ingest(argv[1:])
     if argv and argv[0] == "intake":
         return _cmd_intake(argv[1:])
+    if argv and argv[0] == "scrape":
+        return _cmd_scrape(argv[1:])
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
-                   help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / 'consume' / 'ingest'")
+                   help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / "
+                        "'consume' / 'ingest' / 'serve' / 'backup' / 'scrape'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -193,6 +358,15 @@ def main(argv: list[str]) -> int:
                    help="deposit: actually push to the knight (else stage + print the command)")
     p.add_argument("--force", action="store_true",
                    help="deposit: allow depositing an 'unknown' estate namespace")
+    p.add_argument("--keep", type=int, default=7,
+                   help="backup: snapshot generations to retain (keep-last-N)")
+    p.add_argument("--no-push", action="store_true",
+                   help="backup: take + prune the snapshot but stage the off-box "
+                        "push instead of running it")
+    p.add_argument("--port", type=int, default=8001,
+                   help="serve: Datasette port (default 8001)")
+    p.add_argument("--host", default="0.0.0.0",
+                   help="serve: bind address (default 0.0.0.0 for Tailscale + LAN)")
     args = p.parse_args(argv)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -202,6 +376,10 @@ def main(argv: list[str]) -> int:
         return _cmd_deposit(args)
     if args.command == "consume":
         return _cmd_consume()
+    if args.command == "backup":
+        return _cmd_backup(args)
+    if args.command == "serve":
+        return _cmd_serve(args)
     if args.command == "list":
         return _cmd_list()
     if args.command == "build":

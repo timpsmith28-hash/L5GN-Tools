@@ -14,6 +14,7 @@ import sys
 
 AUDITORS: list[str] = [
     "auditors.auditor_cli_contract",
+    "auditors.auditor_doc_claims",
     "auditors.auditor_readonly",
     "auditors.auditor_stdlib",
     "auditors.auditor_tool_contract",
@@ -34,6 +35,11 @@ TESTERS: list[str] = [
     "tests.tester_intake",
     "tests.tester_set_substantive",
     "tests.tester_md_transcript",
+    "tests.tester_doc_claims",
+    "tests.tester_backup",
+    "tests.tester_serve",
+    "tests.tester_relink_stage",
+    "tests.tester_scrape_stage",
 ]
 
 

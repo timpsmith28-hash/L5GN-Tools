@@ -7,8 +7,13 @@ and treating "no new input for this source" as a skip rather than an error.
 Each underlying script is already idempotent; this adds nothing clever.
 
 Stage order (design 4 / 9.2):
-    normalize_claude -> normalize_gemini_personal -> reconcile_gemini
-    -> group_fallback -> suggest_close -> render_md
+    normalize_claude -> normalize_gemini_personal -> normalize_md_transcript
+    -> reconcile_gemini -> group_fallback -> suggest_close -> set_substantive
+    -> relink -> render_md
+
+relink (S6) is folded in just before render so fresh threads are linked to
+projects in the same pass that ingests them (ARCHITECTURE §7 standing fix); it is
+gated on the project registry existing and skips cleanly + loudly if absent.
 
 normalize_gemini_work is deliberately NOT in the chain: the work account is a
 closed, historical corpus (design 9.2), ingested once and never revisited.
@@ -52,6 +57,9 @@ from normalize_claude import CONVERSATIONS_PATH
 from normalize_gemini_personal import DEFAULT_INPUT as TAKEOUT_INPUT
 from reconcile_gemini import DEFAULT_SCRAPED_DIR
 from normalize_md_transcript import RAW_DIR as MD_TRANSCRIPT_DIR
+# relink (S6) is stdlib-only; imported as a module so its REGISTRY_PATH is looked
+# up live (the stage's input-gate), not frozen at import time.
+import relink as _relink
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 
@@ -72,6 +80,14 @@ def has_md_transcripts():
     return MD_TRANSCRIPT_DIR.exists() and any(MD_TRANSCRIPT_DIR.glob("*.md"))
 
 
+def has_registry():
+    """relink's input is the project registry (built by build_registry.py). Absent
+    -> the stage skips cleanly and loudly rather than crashing on a missing file
+    (relink itself SystemExits if the registry is gone). Same gate-when-absent
+    contract as the input-driven stages above."""
+    return _relink.REGISTRY_PATH.is_file()
+
+
 # Each stage: key (for --skip-<key>), label, script filename, argv, and an
 # input_check (None => DB-only stage, always runs).
 STAGES = [
@@ -82,6 +98,13 @@ STAGES = [
     ("group",         "group_fallback",            "group_fallback.py",            [], None),
     ("suggest-close", "suggest_close",             "suggest_close.py",             [], None),
     ("substantive",   "set_substantive",           "set_substantive.py",           [], None),
+    # relink (S6): links freshly-ingested threads to projects. Runs AFTER the
+    # normalizers/reconcile have landed threads and set_substantive has flagged
+    # them, and BEFORE render so the rendered .md reflects the new links. Runs
+    # with --apply (dry-run is relink's own default). Idempotent and safe every
+    # pass: winners become 'evidence' (locked, skipped next run) and human-ruled
+    # threads are never re-touched. Gated on the registry file existing.
+    ("relink",        "relink",                    "relink.py",                    ["--apply"], has_registry),
     ("render",        "render_md",                 "render_md.py",                 [], None),
 ]
 
@@ -202,6 +225,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip-group", action="store_true")
     parser.add_argument("--skip-suggest-close", action="store_true")
     parser.add_argument("--skip-substantive", action="store_true")
+    parser.add_argument("--skip-relink", action="store_true")
     parser.add_argument("--skip-render", action="store_true")
     args = parser.parse_args()
     # sync-back file->DB is wanted ONLY when re-rendering to absorb Obsidian edits.
