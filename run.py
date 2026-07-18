@@ -12,6 +12,7 @@ Usage:
 
 Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py serve  [--port N] [--host H]   # Datasette read surface (--immutable)
+    python run.py review [--port N] [--host H]   # narrow write endpoint (0007 stage 2)
     python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
     python run.py scrape [urls.txt] [--force]    # Gemini share-scrape -> intake
     python run.py ingest [--skip-backup] [--skip-intake]   # backup -> intake -> pipeline
@@ -271,6 +272,58 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         return 0
 
 
+REVIEW_DEFAULT_PORT = 8002  # distinct from serve's 8001 so both can run at once
+
+
+def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
+    """Launch the narrow project-link write endpoint (DECISIONS 0007 stage 2).
+
+    Writes ONLY threads.project_link + project_confidence='manual' -- the pipeline
+    owns every other column, so the two writers touch disjoint column sets and
+    cannot collide (single-writer by column-scope, not by lock). Config-driven
+    paths, bound 0.0.0.0 for tailnet + LAN. FastAPI/uvicorn are an OPTIONAL extra;
+    if absent this skips cleanly and loudly with the install hint."""
+    from l5gntools import config
+    from chronicler.review import app, core
+    m = config.machine()
+    try:
+        db = core.resolve_db_path(m)
+    except FileNotFoundError as exc:
+        print(f"review: {exc}", file=sys.stderr)
+        return 2
+    if not db.exists():
+        print(f"review: vault DB not found at {db} -- nothing to review "
+              "(is CHRONICLER_HOME / 'vault' set for this machine?).", file=sys.stderr)
+        return 2
+    try:
+        reg_path = core.resolve_registry_path(m)
+        registry = core.load_registry(reg_path)
+    except (FileNotFoundError, ValueError, KeyError) as exc:
+        print(f"review: registry unreadable -- {exc}", file=sys.stderr)
+        return 2
+    if not registry:
+        print("review: registry has no link-target ids -- refusing to serve a "
+              "write surface that can only reject (check project_registry.json).",
+              file=sys.stderr)
+        return 2
+    if not app.available():
+        print("review: FastAPI/uvicorn are not installed. They are an OPTIONAL "
+              "extra, kept out of the stdlib-only core:\n"
+              "         pip install -e .[review]", file=sys.stderr)
+        return 2
+    port = args.port if "--port" in argv else REVIEW_DEFAULT_PORT
+    print(f"review: DB={db}")
+    print(f"review: registry={reg_path} ({len(registry)} link-target ids)")
+    print(f"review: binding {args.host}:{port} -- writes ONLY project_link + "
+          "project_confidence='manual'")
+    print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
+          f"on the LAN: http://<knight-192.168.x>:{port}/")
+    try:
+        return app.run(db, registry, host=args.host, port=port)
+    except KeyboardInterrupt:
+        return 0
+
+
 def _cmd_config() -> int:
     from l5gntools import config
     m = config.machine()
@@ -346,7 +399,7 @@ def main(argv: list[str]) -> int:
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / "
-                        "'consume' / 'ingest' / 'serve' / 'backup' / 'scrape'")
+                        "'consume' / 'ingest' / 'serve' / 'review' / 'backup' / 'scrape'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -380,6 +433,8 @@ def main(argv: list[str]) -> int:
         return _cmd_backup(args)
     if args.command == "serve":
         return _cmd_serve(args)
+    if args.command == "review":
+        return _cmd_review(args, argv)
     if args.command == "list":
         return _cmd_list()
     if args.command == "build":

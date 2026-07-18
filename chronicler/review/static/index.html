@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chronicler — project-link review</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.2rem;
+         max-width: 60rem; margin-inline: auto; }
+  h1 { font-size: 1.25rem; margin: 0 0 .2rem; }
+  .sub { opacity: .7; margin: 0 0 1rem; font-size: .85rem; }
+  .item { border: 1px solid #8884; border-radius: 8px; padding: .8rem 1rem;
+          margin-bottom: .9rem; }
+  .row1 { display: flex; gap: .6rem; flex-wrap: wrap; align-items: baseline; }
+  .type { font-weight: 600; }
+  .badge { font-size: .72rem; padding: .1rem .45rem; border-radius: 999px;
+           border: 1px solid #8886; opacity: .85; }
+  .title { font-weight: 600; }
+  .meta { font-size: .78rem; opacity: .7; }
+  .note { font-size: .82rem; opacity: .85; margin: .4rem 0; white-space: pre-wrap; }
+  .snippet { font-size: .82rem; opacity: .7; font-style: italic;
+             border-left: 3px solid #8884; padding-left: .6rem; margin: .4rem 0; }
+  .rulebar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+             margin-top: .5rem; }
+  select, button { font: inherit; padding: .35rem .5rem; border-radius: 6px;
+                   border: 1px solid #8886; }
+  button { cursor: pointer; }
+  .ok { color: #1a7f37; } .err { color: #c0392b; }
+  #status { margin-bottom: .8rem; font-size: .85rem; min-height: 1.2em; }
+  .empty { opacity: .7; padding: 2rem 0; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>Chronicler — project-link review</h1>
+  <p class="sub">Manual rulings only. A ruling writes <code>project_link</code> +
+     <code>project_confidence=manual</code> and nothing else. Estate/account shown
+     for context; assignment is account-agnostic (DECISIONS 0010).</p>
+  <div id="status"></div>
+  <div id="list"><div class="empty">Loading…</div></div>
+
+<script>
+let REGISTRY = [];
+
+function esc(s){ return (s??"").replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function optionsHtml(){
+  return REGISTRY.map(r =>
+    `<option value="${esc(r.id)}">${esc(r.canonical_name)}${r.is_sub?' (sub)':''} — ${esc(r.id)}</option>`
+  ).join("");
+}
+
+function itemHtml(it){
+  const created = it.thread_created_at ? esc(it.thread_created_at) : "undated";
+  return `<div class="item" data-thread="${esc(it.thread_id)}">
+    <div class="row1">
+      <span class="type">${esc(it.type)}</span>
+      <span class="badge">${esc(it.account||"account?")}</span>
+      <span class="badge">${esc(it.source||"")}</span>
+      <span class="badge">conf ${it.confidence==null?"—":Number(it.confidence).toFixed(2)}</span>
+      <span class="meta">${created}</span>
+    </div>
+    <div class="title">${esc(it.title||"(untitled)")}</div>
+    <div class="meta">thread ${esc(it.thread_id)}${it.current_link?` · current link: ${esc(it.current_link)} (${esc(it.current_confidence||"")})`:""}</div>
+    ${it.note?`<div class="note">${esc(it.note)}</div>`:""}
+    ${it.snippet?`<div class="snippet">${esc(it.snippet)}</div>`:""}
+    <div class="rulebar">
+      <select>${optionsHtml()}</select>
+      <button onclick="rule(this)">Assign (manual)</button>
+      <span class="result"></span>
+    </div>
+  </div>`;
+}
+
+async function load(){
+  const s = document.getElementById("status");
+  try {
+    const [reg, pend] = await Promise.all([
+      fetch("/api/registry").then(r=>r.json()),
+      fetch("/api/pending").then(r=>r.json()),
+    ]);
+    REGISTRY = reg;
+    s.textContent = `${pend.length} pending project-link ruling(s) · ${reg.length} registry ids`;
+    const list = document.getElementById("list");
+    list.innerHTML = pend.length ? pend.map(itemHtml).join("")
+      : `<div class="empty">Nothing pending. 🎉</div>`;
+  } catch(e){
+    s.innerHTML = `<span class="err">Failed to load: ${esc(String(e))}</span>`;
+  }
+}
+
+async function rule(btn){
+  const item = btn.closest(".item");
+  const thread_id = item.dataset.thread;
+  const project_id = item.querySelector("select").value;
+  const out = item.querySelector(".result");
+  btn.disabled = true; out.textContent = "…";
+  try {
+    const res = await fetch("/api/rule", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({thread_id, project_id}),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.detail || res.status);
+    out.innerHTML = `<span class="ok">✓ ${esc(data.canonical_name)}</span>`;
+    setTimeout(()=>{ item.style.opacity=.35; item.querySelector("button").textContent="ruled"; }, 300);
+  } catch(e){
+    out.innerHTML = `<span class="err">✗ ${esc(String(e.message||e))}</span>`;
+    btn.disabled = false;
+  }
+}
+load();
+</script>
+</body>
+</html>

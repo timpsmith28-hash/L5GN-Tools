@@ -40,6 +40,7 @@ TESTERS: list[str] = [
     "tests.tester_serve",
     "tests.tester_relink_stage",
     "tests.tester_scrape_stage",
+    "tests.tester_review",
 ]
 
 

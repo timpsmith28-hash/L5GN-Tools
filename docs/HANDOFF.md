@@ -7,7 +7,7 @@ Prime a fresh thread with this. It's the state of the world + how to continue.
 L5GN-Tools is complete and live: a small mesh that reconciles **what the code did**
 (git estate) against **what was discussed** (chat vault), assembled on a headless
 consumer. The core mesh loop runs end-to-end and the gate is green (5 auditors +
-19 hermetic testers, enforced by a pre-commit hook). The infrastructure is done;
+20 hermetic testers, enforced by a pre-commit hook). The infrastructure is done;
 what remains is real but scoped — see `docs/DECISIONS.md` for what's been decided and
 `docs/NEXT_SESSION_PLAN.md` is retired (archived as a completed plan). For *why* the
 system is shaped as it is, read `docs/INTENT.md` and `docs/ARCHITECTURE.md`; for

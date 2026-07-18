@@ -32,7 +32,7 @@ vault. Nothing is half-built; everything below is optional.
   **The vault now lives and updates ON the knight** — the DB is no longer scp'd
   as a snapshot.
 
-**The gate:** `verify.py` registers **5 auditors + 19 testers**, all hermetic,
+**The gate:** `verify.py` registers **5 auditors + 20 testers**, all hermetic,
 enforced by the pre-commit hook. (19 is the count in `verify.py`'s `TESTERS` list
 — if you change it, change this line. `auditor_doc_claims` now checks exactly this
 claim against the code, so a stale number here fails the gate.)

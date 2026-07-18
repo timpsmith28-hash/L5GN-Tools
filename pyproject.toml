@@ -13,11 +13,13 @@ dependencies = []
 # (chronicler/) is a separate writer with its own deps -- install on demand:
 #   pip install -e .[chronicler]     # ingest pipeline (pyyaml + embeddings)
 #   pip install -e .[scrape]         # gemini share-scraper (playwright)
-#   pip install -e .[viewer]         # Datasette read surface (DECISIONS 0007)
+#   pip install -e .[viewer]         # Datasette read surface (DECISIONS 0007 stage 1)
+#   pip install -e .[review]         # narrow write endpoint (DECISIONS 0007 stage 2)
 [project.optional-dependencies]
 chronicler = ["pyyaml>=6", "sentence-transformers>=2"]
 scrape = ["playwright>=1.40"]
 viewer = ["datasette>=0.64"]
+review = ["fastapi>=0.110", "uvicorn>=0.29"]
 
 # Only the importable package ships; run.py / verify.py / auditors / tests stay
 # top-level dev scripts. CID depends on the `l5gntools` package alone.
