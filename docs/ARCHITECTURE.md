@@ -31,16 +31,29 @@ subsystems with opposite guarantees, kept apart on purpose:
 | | `l5gntools/` (+ scanners) | `chronicler/` |
 |---|---|---|
 | Role | read the estate + interpret | **build/update the vault** |
-| Contract | **read-only, stdlib-only** | writer, own deps (pyyaml, embeddings) |
+| Contract | **read-only, stdlib-only** | writer, own deps (pyyaml, embeddings*) |
 | Enforced by | auditors over `registry.SCANNERS` | not audited — deliberately outside |
 | Can it harm a repo/vault? | no (proven read-only) | yes (it's the writer) |
+| Ownership | first-party | **also first-party** (not an upstream) |
 
-Because the auditors scope themselves to `registry.SCANNERS`, vendoring a whole
+Because the auditors scope themselves to `registry.SCANNERS`, absorbing a whole
 writer pipeline in as `chronicler/` doesn't threaten the scanner guarantee *by
 construction* — nothing in `l5gntools/` imports it, and the ingest entrypoint
 runs it in a subprocess so the stdlib-only core never even imports its deps. The
 read-only scanners can therefore run anywhere, against any repo, with zero setup;
-the writer's weight is isolated to the one machine that ingests.
+the writer's weight is isolated to the one machine that ingests. (*The embeddings
+dependency is currently dormant — see §7, Layer C.)
+
+**The boundary is a contract, not an ownership line.** This is worth stating
+plainly because getting it wrong was the single most expensive misreading in the
+estate's history. `chronicler/` is *first-party code* — written here, owned here,
+yours to read, tune, test, and debug. It was once labelled "vendored," which
+carries an unspoken engineering norm (*don't touch vendored code, it's someone
+else's, it'll be overwritten upstream*) — and that label is exactly why its tunables
+sat unexamined and its rationale drifted into an untracked sibling folder. There is
+no upstream. The `l5gntools/` ↔ `chronicler/` boundary governs **what each subsystem
+may do** (read-only vs writer, stdlib vs deps, audited vs not), never **who owns
+it**. All of it is yours; the wall is about capability, not custody.
 
 ## 4. The loop (data flow)
 
@@ -79,6 +92,21 @@ and the **vault** side (chat, via ingest). `drift` is where they reconcile.
   reader opens it `mode=ro` and refuses a version it doesn't expect
   (`schema_mismatch`) rather than misinterpreting. Fresh ingest re-derives
   `substantive` so the frozen-schema contract survives new data.
+- **Rendering is one-directional; the DB is the only write target.** Rendered `.md`
+  files are read-only *output*, never an edit surface. Human viewing goes through a
+  read-only view (Datasette / the report); human rulings go through a narrow write
+  endpoint that writes only `review_queue` ruling columns directly to the DB. Because
+  nothing edits the `.md`, there is nothing to sync back — the render is purely
+  DB → file. (This supersedes an earlier editable-`.md` design whose file→DB sync-back
+  caused the estate's only data-loss incident; see DECISIONS 0002/0008.)
+- **Single-writer is preserved by column scope, not by a lock.** The pipeline owns
+  every DB column except the human-ruling ones; the review endpoint writes only those.
+  Disjoint sets can't collide, so "one writer" survives even with a second write path —
+  structurally, not by convention.
+- **Code and data live in different roots.** The repo (`chronicler/`) is code; the
+  vault and raw exports live at `CHRONICLER_HOME` (the knight's data volume), never
+  inside the repo. A machine's runtime finds its data by that env var, so the same
+  code serves producer and consumer without embedding any host's paths.
 - **History accumulates on the consumer.** A producer only ever sends its latest
   snapshot; the knight archives each into a per-estate `history/`, so `estate_diff`
   has a growing trail to compare even though the wire carries only "now".
@@ -106,14 +134,28 @@ and the **vault** side (chat, via ingest). `drift` is where they reconcile.
   (`chronicler/CLOSEOUT_PROMPT.md`) is a token-expensive, lossy self-report, viable
   only for short threads — not a replacement for a real export. Admin-gated
   work-Claude remains a genuine gap.
-- **Linking is a separate pass.** Fresh ingest lands threads unlinked;
-  `relink.py` (embeddings) ties them to projects on demand, so `drift` sees new
-  threads before they're fully cross-referenced.
+- **The off-box backup is manual and stale.** The knight holds the only live vault;
+  its sole off-box copy (`L5GN-Castle\...\Chronicler_Backup`) is refreshed by hand and
+  has drifted since the knight became primary. An automatic `VACUUM INTO` off-box
+  snapshot is the standing fix. See DECISIONS 0005/0006.
 - **Estate vs account are related but not identical.** A work repo can be
   discussed on a personal account; per-estate reports carry the account dimension
   so the nuance is visible rather than flattened.
 - **Best-effort manifest verification.** `None` (no hash) is treated as "unknown,
   proceed", not a hard failure — deposits from older producers still ingest.
+- **Linking is a separate pass, and thin.** Fresh ingest lands threads unlinked;
+  `relink.py` ties them to projects on demand, so `drift` sees new threads before
+  they're cross-referenced. Folding relink into ingest is the standing fix. Coverage
+  is currently ~8% of substantive threads (see INTENT §2) — the linking layer works
+  but is early, not a solved problem.
+- **Layer C (semantic grouping) is dormant and unproven.** The embeddings-based
+  grouping layer has never produced a group against the real corpus — the dependency
+  was absent when the frozen DB was built, so its two tunables govern nothing. It is
+  kept deliberately (the split above does *not* depend on it — the two working layers
+  are exact-fingerprint and idle-gap), but the estate carries a heavy embeddings
+  dependency that is currently inert and intended to become load-bearing. Installing
+  it, running it, and tuning against real output is committed follow-up. See
+  DECISIONS 0004.
 
 ## 8. Extending it
 

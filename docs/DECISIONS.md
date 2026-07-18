@@ -179,3 +179,156 @@ code, L5GN-Castle holds the data. Two things this commits us to, neither yet ver
    existence. This makes the off-box `VACUUM INTO` backup (previously "Task 7", low
    urgency) a near-term priority, not a rainy-day one. A single disk failure in the
    backup area would currently lose the entire payload.
+
+## 0006 — Correction to 0005: knight is the live primary; the L5GN-Castle copy is a stale backup
+
+**Date:** 2026-07-18 · **Status:** accepted · **Corrects:** 0005 consequences
+
+**Context.** Entry 0005 was written from a cold-read assumption that the knight might
+not be populated, which made the L5GN-Castle copy sound like it could be the only copy
+in existence. That assumption was wrong, and the log drifted from reality within a
+single session — recorded here rather than by editing 0005, because that is what an
+append-only log is for.
+
+**The real state.** The knight is operational and runs the live DB
+(`/home/l5gn/vault/chronicler.db` is the primary). The gaming-rig copy at
+`C:\Users\timps\Documents\GitHub\L5GN-Castle\data\Chronicler_Backup` is a genuine
+off-box backup — this is correct architecture, not a risk. `CHRONICLER_HOME` does not
+need repointing on the gaming rig: it is a *producer*, not the Chronicler runtime, so
+0005's consequence-1 is moot.
+
+**The residual, smaller concern.** That backup is **stale** — frozen at the
+pre-knight-move state and not refreshed since. Everything ingested on the knight since
+the move has **no off-box copy**. So the danger is not "only one copy" but "the second
+copy has drifted and is refreshed only by hand."
+
+**Consequences.** The automated off-box backup (`VACUUM INTO`, previously deferred)
+stays a near-term priority, but reframed: the goal is a *fresh* recurring copy off the
+knight, not a first copy. Until it exists, a knight disk failure loses everything since
+the move. The one-line manual refresh of `Chronicler_Backup` is the stopgap.
+
+---
+
+## 0007 — The DB access surface: Datasette to read, a narrow web endpoint to write
+
+**Date:** 2026-07-18 · **Status:** accepted · **Source:** design thread
+
+**Context.** The pipeline built infrastructure but no way to *see into* the DB. The
+original plan — rendered `.md` files as the working surface — was chosen because it
+needed no tooling (any editor opens a markdown file). That benefit died silently when
+the writer moved to a headless knight: the files now sit on a box with no GUI, and the
+only bridge back is a sync-back path that had never been exercised. So the thesis is
+currently unprovable not because links are thin but because there is no surface to
+interrogate them through — you cannot run the INTENT §2 falsification test at all.
+
+Reading and writing are different problems with different risk. Reading is the actual
+product (browse the corpus, query the links) and is nearly free. Writing — applying
+the ~19 real rulings (15 `link_ambiguous` + 4 `link_downgrade`) — is where care lives,
+because any write surface is a *second writer* and single-writer is doctrine.
+
+**Decision.** Split them, staged:
+
+1. **Read: Datasette now.** Point it at `chronicler.db`, serve it read-only, bind to
+   Tailscale. Zero code, cannot violate single-writer (it only reads), and it is the
+   first time the corpus becomes queryable. Deliberately chosen *before* building
+   anything, to test whether querying the corpus is even useful before investing.
+2. **Write: a narrow web endpoint, later.** When the rulings itch enough, build it as
+   a *stripped-down copy of the `l5gn-mesh-vertex-3_prod` spine* (FastAPI + uvicorn +
+   SQLAlchemy over SQLite, static HTML mounted at `/ui`) — a proven in-estate pattern,
+   not a new design. It surfaces **only** `review_queue` and writes **only** the
+   human-ruling columns (`review_status` and the ruling fields). Bound to Tailscale;
+   no Cloudflare, no public website (that layer was the finicky part of vertex-3 and
+   is entirely separable — drop it, bind to the tailnet interface instead).
+
+**Single-writer preserved structurally.** The endpoint physically writes only the
+review columns; the pipeline owns every other column; they touch disjoint sets and so
+*cannot* collide. Same "can't, not shouldn't" move as the wall — not a lock, not a
+convention, a column boundary.
+
+**Consequences.** Two things to carry when the write endpoint is built, both learned
+by reading vertex-3: (a) take the DB path from `CHRONICLER_HOME`, never hardcode it as
+vertex-3 does (`/home/l5gn/data/castle.db`) — hardcoding re-creates the fork-path
+problem; (b) vertex-3's `CORSMiddleware(allow_origins=["*"], allow_credentials=True)`
+is acceptable *only* because the bind is Tailscale-only — record that as the reason, so
+nobody later flips it public without re-examining. Networking: the knight binds
+`0.0.0.0` and is reachable as `100.x` over Tailscale (phone on cellular, personal
+desktop) and as `192.168.x` over LAN (the work rig, which is not on the tailnet but
+shares the home network — no cellular equivalent for it, accepted).
+
+---
+
+## 0008 — Rendered `.md` is read-only output; sync-back to be removed
+
+**Date:** 2026-07-18 · **Status:** accepted · **Supersedes:** the editable-`.md` premise;
+completes 0002
+
+**Context.** 0002 dropped the `--no-syncback` belt but left sync-back itself in place,
+guarded. This entry removes the reason sync-back exists at all. The chat DB is
+predominantly machine-generated content ingested from existing exports — it is not a
+human-authoring surface. The `.md` files are a *view* of it. Editing that view was
+never actually used, and it is the sole source of the only data-loss incident in the
+estate's history (the 133-link clobber).
+
+**Decision.** Rendered `.md` files are **read-only output**, full stop. Human viewing
+happens through the read surface (0007: Datasette now, report later); human *rulings*
+happen through the narrow write endpoint (0007), which writes the DB directly, never a
+file. The `.md`-as-edit-surface idea is retired.
+
+Because nothing edits the `.md` files, there is nothing to sync back: the render
+becomes purely **DB → file, one direction, forever**. Sync-back code is slated for
+*removal*, not just guarding — the whole hazard class (0002, and the 133-link incident
+behind it) is deleted rather than mitigated. This is the structural endpoint of 0002:
+there is no belt because there is no second write path through files.
+
+**Consequences.** Removes the sync-back hazard class entirely. `render_md.py` becomes
+one-directional; `sync_back()` and the `render_log` 3-way base can be retired once the
+write endpoint (0007) exists to receive the rulings they used to carry — *order
+matters: the endpoint must exist before sync-back is removed, or the ~19 pending
+rulings have nowhere to land.* Until then, the current guarded state stands. Anyone who
+later wants human-editable markdown should build the separate notes system (0009), not
+re-open this path.
+
+---
+
+## 0009 — Deferred: a self-hosted git-backed notes vault (separate toolset)
+
+**Date:** 2026-07-18 · **Status:** accepted as a direction, deferred · **Not part of
+Chronicler**
+
+**Context.** Considered while closing the editable-`.md` question (0008). The appeal:
+replace Obsidian's paid cross-machine Sync with a self-hosted equivalent — the knight
+as always-on truth-holder, Tailscale as transport, a markdown vault synced to every
+edge. General principle in play: most cloud sync is self-buildable; the exception is
+raw scale, which a single user does not need.
+
+**The boundary that makes this safe.** This vault is a **separate system with a
+separate data model** and must **not** touch the chat DB. The chat DB is
+machine-generated, single-writer, read-only at the edge; a notes vault is
+human-authored and multi-writer. Conflating the two is exactly the mistake that
+stranded the edit surface — keeping them apart is the whole point.
+
+**The real design fork (recorded so future-me starts oriented).** The hard part is not
+sync, it is conflict resolution:
+
+- *Async multi-machine* (the actual need — edit on laptop, later open on phone, never
+  truly simultaneous) is **the git problem, already solved by git.** A vault that is a
+  git repo, knight as bare remote, a small auto-commit/pull/push loop per edge, is a
+  weekend build. It is "scripting git," not reinventing much.
+- *Concurrent multi-writer* (two live cursors in one paragraph, the Google Docs feel)
+  needs Operational Transformation / CRDTs — years of specialist work (Yjs, Figma,
+  Docs). **A single user does not have this problem.** Building it would be textbook
+  over-engineering. The standard answer to concurrent edits is a *lock*; the better
+  answer here is *no lock* — git merges after the fact, which is why locks become
+  unnecessary. Google did not solve locking, they eliminated it and paid in OT.
+
+**Decision.** Legitimate future toolset, deferred. When taken up, the fork is: **build
+the git-vault** if versioned, diffable notes are wanted (history-of-thought as a
+first-class feature — the estate's own thesis pointed at personal notes rather than
+chat logs; the coherent, on-brand build); **adopt Syncthing** if the goal is merely
+presence-everywhere with zero code and no version history (a local-first tool that
+shares the estate's values, right when notes-sync should be plumbing you don't think
+about). The unglamorous reliability edges (half-written files mid-sync, clock skew,
+interrupted transfers) are the genuine reason to weigh adopting over building.
+
+**Consequences.** No work now. Captured so the idea does not leak into the Chronicler
+work with its incompatible multi-writer data model. Revisit as its own thread.

@@ -44,10 +44,14 @@ This is a claim, and it can be wrong. It's wrong if the links can't be made at
 useful coverage; wrong if the linked record turns out not to answer real questions;
 wrong if maintaining it costs more than the answers are worth.
 
-**It is currently ~13% proven.** ~150 `link_evidence` links across ~1,171 threads.
-That number is the single most important figure in this estate, and it should appear
-in any honest description of the system's state. The mesh that moves the data is
-finished; the thing the mesh exists to carry is one-eighth connected.
+**It is currently ~8% proven.** The headline figure — 150 `link_evidence` links
+across 1,171 threads (12.8%) — flatters the truth. Of the 332 *substantive* threads
+(≥4 messages, the ones that actually hold reasoning), only 27 carry an evidence link:
+**8.1%**. The other 123 evidence links land on sub-4-message Takeout fragments. So the
+honest coverage of threads that matter is roughly one in twelve, and that 8% — not the
+flattering 13% — is the single most important figure in this estate. The mesh that
+moves the data is finished; the thing the mesh exists to carry is barely connected
+where it counts.
 
 **The falsification test:** ask the system a question only it can answer — *why was
 vocabulary killed as a linking signal?*, *what was the reasoning behind
@@ -123,7 +127,8 @@ Honest failure modes, in rough order of likelihood:
 
 1. **It becomes the thing it catches.** A system built to detect talked-not-built,
    elaborately discussed and thinly used. The infrastructure is done and the thesis
-   is at 13% — this is not a hypothetical, it's the current reading.
+   is at 8% on threads that matter — this is not a hypothetical, it's the current
+   reading.
 2. **The record gets believed while being wrong.** Worse than failure #1, because
    #1 is merely wasted effort. Low-confidence links that get trusted make the
    estate *less* knowable than no links at all.
@@ -138,7 +143,7 @@ features.
 ## 7. What this doc is not allowed to do
 
 Contain a fact. No counts, no status, no "currently implemented as." The one number
-above (~13%) is here because it's the thesis's own scoreboard — **[CONFIRM]** and if
+above (~8%) is here because it's the thesis's own scoreboard — **[CONFIRM]** and if
 that proves too tempting to let rot, cut it and let the reader derive it.
 
 Everything else this doc might want to say about the present belongs in
