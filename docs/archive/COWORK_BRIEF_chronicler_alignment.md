@@ -22,7 +22,7 @@ tasks. Do not act on their findings in the same pass — report, then wait.**
 
 **Rules:** `python verify.py` green before every commit. Every status claim written
 into `docs/` must be checked against the code, not recalled from this session.
-
+ 
 ---
 
 ## Task 0 — Recover the record (do first, blocks nothing else)

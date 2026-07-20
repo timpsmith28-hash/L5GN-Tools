@@ -26,7 +26,7 @@ yourself when you review.
 
 **DO NOT TOUCH list honoured:** no edits to `render_md.py`, `sync_back()`, or the
 `render_log` base.
-
+ 
 ---
 
 ## Status at a glance

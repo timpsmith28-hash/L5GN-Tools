@@ -31,7 +31,7 @@ endpoint (0007 stage 2) exists to receive rulings, which is NOT in this round. U
 then the current guarded state stands. Do not drop the `--no-syncback` belt, do not
 alter `sync_back()` or the `render_log` base, do not "tidy" `render_md.py`'s direction.
 Leave it exactly as it is.
-
+ 
 ---
 
 ## Task A — Datasette read surface (DECISIONS 0007 stage 1)

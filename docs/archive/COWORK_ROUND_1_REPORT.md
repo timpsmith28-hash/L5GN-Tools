@@ -27,7 +27,7 @@ working tree, **staged/uncommitted**, for Tim's review. No `git commit` was run.
 the `render_log` base, or the `--no-syncback` belt. The sync-back guarded state stands
 exactly as it was (per DECISIONS 0008: it can't be removed until the 0007 stage-2 write
 endpoint exists to receive rulings, which was **not** in this round).
-
+ 
 ---
 
 ## Status at a glance

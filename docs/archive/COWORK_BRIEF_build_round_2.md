@@ -24,7 +24,7 @@ to green / verified, leave staged/uncommitted, report clearly. Do not `git commi
 Sync-back removal (DECISIONS 0008) is gated on the write endpoint existing and being
 proven — this round builds the endpoint, it does not yet retire sync-back. That's a
 round-3 task once Tim has tinkered with and trusts the new endpoint.
-
+ 
 ---
 
 ## Task 0 — Ship the registry, confirm the path (fast, do first)

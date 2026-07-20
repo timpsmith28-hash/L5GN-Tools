@@ -18,7 +18,7 @@ built from the real `render_md.py`. The live DB and vault were never written.
 Method note: the sibling `Chronicler\` folder had to be connected mid-task (only
 `L5GN-Tools` was mounted at start). There is no `.db` inside the repo — the live
 data lives only in `Chronicler\`.
-
+ 
 ---
 
 ## Task 0 — Recover the record
