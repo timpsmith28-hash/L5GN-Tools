@@ -393,3 +393,206 @@ future round — not performed in this session, since it's a write against the l
 and this thread has no execution access to it. `relink.py`'s registry-gated stage
 (DECISIONS-adjacent, ARCHITECTURE §7) should re-run in full against the new registry
 once the reset lands.
+
+---
+
+## 0012 — The registry is three-tier: program → project → repo
+
+**Date:** 2026-07-20 · **Status:** accepted · **Source:** design thread; ground-truth
+audit (`L5GN_Project_Registry_Ground_Truth_-_20260720`); live census
+
+**Context.** The linking spec (`docs/project_linking_skillset_spec.md`, S1) defines a
+**flat** registry — `scope` (l5gn/mcf) → project — and explicitly parks anything
+cross-cutting ("registry `scope` field is the hook for extending later; do not build
+MCF-specific logic now"). But the ground-truth audit of the actual repos, Claude
+projects, and folders showed that the largest efforts are not projects — they are
+*programs* that contain many projects. "L5GN OS" is not one project; it is a program
+name under which Citadel MicroIDE, the UCP work, the Mesh work, Chancellor, the
+GAS-era Chronicler, and others all sit. Same for "WizForgeAnalytics" on the work side
+— it is the BI *program* that the individual MCF projects (ActivityStatements,
+ChurnLevelIndicator, PricingModelisation, DataAccessLayer) feed into and are run by.
+Tim's framing: *program* has the useful double meaning — a computer program, and a
+portfolio of projects run together.
+
+The live census confirms this is real in the data, not just tidy in the head:
+`smelt-gateway` 123 evidence threads, `L5GN_Armory_v4` 58, `v1 proto` 10 — three
+distinct repos, each with a substantial independent body of conversation, all serving
+the one CID/Citadel lineage. A single project with aliases would not show three
+separate 10-to-120-thread clusters; sibling repos under one program is exactly what
+that shape means. (Contrast: if one had 123 and the rest 2 each, they'd be aliases of
+one project — the data would have said "flatten," and it didn't.)
+
+**Decision.** Evolve the registry from the spec's two tiers to **three**:
+
+- **Program** — the umbrella (L5GN OS, WizForgeAnalytics). A portfolio identity.
+- **Project** — a coherent effort (Citadel MicroIDE, Crystal Spire, Solution
+  Configurator, ActivityStatements, Chronicler-2026).
+- **Repo / incarnation** — the physical folders that are versions of one project
+  (`v1 proto` → `L5GN_Armory_v4` → `smelt-gateway` are three incarnations of Citadel
+  MicroIDE, not three projects).
+
+This resolves every hard case the flat model couldn't: the CID lineage is three repos
+→ one project → one program, with nothing forced into an alias it isn't. It is a
+deliberate evolution *beyond* the spec, not a gap-fill — past-Tim chose flat and used
+`scope` as the only grouping; present-Tim, with the ground-truth audit in hand, is
+overruling that with evidence. Recorded as a decision, not a silent schema drift.
+
+**Consequences.** This is a real schema change touching three consumers:
+`build_registry.py` (must emit the tier fields), `relink.py`'s scoring (a repo-level
+match should roll up to its project/program for reporting, and the id-vs-canonical_name
+divergence — round-2 flag — must resolve to one identifier scheme across tiers), and
+the review endpoint (must offer rulings at the right tier and show the hierarchy for
+context). It also finally answers the standing Armory question: Citadel MicroIDE is its
+own project (58+ threads of evidence), a child of the L5GN OS program, not an alias of
+anything. The spec's flat `scope` field is superseded by the program tier but not
+deleted — `scope` (l5gn/mcf) remains a useful orthogonal axis (organisational origin),
+distinct from program (portfolio grouping).
+
+---
+
+## 0013 — The read surface serves a snapshot, never the live DB
+
+**Date:** 2026-07-20 · **Status:** accepted · **Source:** design thread; live incident
+(false `database disk image is malformed`)
+
+**Context.** `run.py serve` points Datasette at the live `chronicler.db` with
+`--immutable`. During a session where the review endpoint and pipeline had been
+writing, Datasette began returning `database disk image is malformed` on
+`link_evidence` queries. Investigation (read-only) proved the file was **completely
+healthy**: `PRAGMA integrity_check` = ok, `PRAGMA quick_check` = ok,
+`SELECT COUNT(*)` = 651 rows. Restarting the Datasette process cleared the error
+entirely.
+
+Root cause: `--immutable` is a *promise to SQLite that the file will not change*. It
+lets Datasette skip locking and cache the page map. When another process then writes
+the file, that promise is broken and Datasette serves from a stale page map — which
+surfaces as a false "malformed" error on a perfectly sound database. So the read
+surface was reading the live, actively-written file under a flag that assumes it is
+frozen.
+
+**Decision.** The read surface must serve a **snapshot**, never the live vault.
+`run.py serve` (and any read-only consumer) points Datasette at a fresh `VACUUM INTO`
+snapshot — the same artifact `run.py backup` already produces — not at
+`chronicler.db`. A snapshot is frozen by construction, so `--immutable` is honestly
+true and the false-malformed class cannot recur; and a reader against a copy *cannot*
+collide with the writer at all.
+
+This is the structural half of single-writer applied to reads: the read surface is
+made physically incapable of touching the live file, rather than trusting it to only
+read. Same "can't, not shouldn't" move as the wall and the column-scoped write
+endpoint (0007).
+
+**Consequences.** `serve` gains a snapshot step (or reads the latest backup). Trade-off
+accepted: the read surface is now *slightly stale* — it shows the vault as of the last
+snapshot, not the last second. For a human browsing/ruling corpus this is invisible and
+fine; if live-fresh reads are ever needed, that is a deliberate separate mode, not the
+default. Pairs with 0014 (WAL) as the two halves of enforcing single-writer
+structurally. Note this also means the review endpoint's writes won't appear in `serve`
+until the next snapshot — acceptable, and worth a one-line note in the UI so it isn't
+mistaken for a lost ruling.
+
+---
+
+## 0014 — Single-writer is enforced structurally (WAL + busy_timeout), not by convention
+
+**Date:** 2026-07-20 · **Status:** accepted · **Source:** design thread; the 0013
+incident
+
+**Context.** ARCHITECTURE claims "one writer," but nothing enforces it at the process
+level. The review endpoint (writer), pipeline ingest/relink (writer), Datasette
+(reader), and ad-hoc `sqlite3` sessions can all open the live DB concurrently. The
+0013 false-malformed error was a *harmless* symptom of this — but a worse-timed
+collision between two actual writers is precisely how real SQLite corruption happens.
+The doctrine has now been shown, twice in one week (this and sync-back, 0002), to be a
+*convention* rather than a *structure* — and conventions fail at the worst moment.
+
+**Decision.** Make concurrent access safe by construction:
+- Put the DB in **WAL mode** (`PRAGMA journal_mode=WAL`) — lets one writer and many
+  readers coexist without the reader seeing a torn write or a false-malformed state.
+- Set a **`busy_timeout`** (e.g. 5000ms) on every connection — a blocked access waits
+  and retries instead of erroring out.
+- These are the standard, boring, correct answers. This is not a lock the operator has
+  to remember; it is a property of how every connection opens the file.
+
+**Consequences.** Removes the whole false-malformed / torn-read class and hardens
+against the real corruption it was mimicking. Requires every code path that opens the
+DB (`db.py`'s `get_connection`, the review endpoint, serve's snapshot step) to set
+these pragmas consistently — a single shared connection helper is the right home, so
+it cannot be forgotten on one path. WAL adds a `-wal` / `-shm` sidecar file next to the
+DB; the backup step must snapshot correctly in WAL mode (`VACUUM INTO` handles this,
+but a raw file copy would not — another reason snapshots go through `VACUUM INTO`, per
+0013). Pairs with 0013: 0013 isolates the reader onto a copy, 0014 makes the live file
+safe for the writers that remain.
+
+---
+
+## 0015 — Vocabulary (S2) is revivable with guards; supersedes 0003's "final"
+
+**Date:** 2026-07-20 · **Status:** accepted · **Supersedes:** 0003's "treat as final" ·
+**Source:** design thread; recovered spec (`project_linking_skillset_spec.md` §S2);
+live investigation
+
+**Context.** 0003 recorded vocabulary as dropped-and-final because it "degraded
+linking," attributing the cause to cross-project term overlap with no temporal signal
+to disambiguate eras. Two things recovered/measured this session revise that:
+
+1. **The spec shows S2 was designed *with* guards that were never built.** Vocabulary
+   was meant to ship with (a) a stopword list, (b) a cross-project commonality cutoff
+   (drop terms appearing in many projects — the TF-IDF-shaped weighting), and (c) the
+   S3 activity-window time filter as the era-discriminator. 0003's failure was almost
+   certainly vocabulary run *without* these rails, not vocabulary being unworkable.
+2. **The data now says the guards are viable.** Live queries this session:
+   - Cross-project *alias* overlap is **zero** — no `name_alias` value is claimed by
+     2+ projects (checked both raw and placement-stripped). Alias hygiene is clean;
+     the false-link risk was never in aliases, only in auto-harvested vocab terms.
+   - Dating coverage is **85.6%** (1,099 dated / 1,284 total; 185 undated). The
+     activity-window guard can therefore fire for the large majority of threads —
+     0003 assumed the temporal anchor was dead (true for share-scrape fingerprints,
+     but `created_at` gives a usable date for most threads regardless).
+
+**Decision.** Vocabulary is **revivable**, as a guarded rebuild per spec §S2 — not a
+resurrection of the broken version. The GO is conditional on all three guards being
+present: stopword list, cross-project commonality cutoff, and the activity-window time
+filter (with a conservative higher-threshold fallback for the 14.4% undated threads).
+0003 is not wrong about what happened; it was incomplete about *why*, and it declared
+final a question that new evidence reopens. That is exactly what an append-only log is
+for.
+
+**Consequences.** `build_vocabulary.py` becomes a real rebuild target, not dead code.
+Work required before it writes live evidence: implement the three guards, run it in
+dry-run against the corpus, and spot-check that vocabulary-*safe* projects (unique
+terms like Crystal Spire's `world_graph`) gain signal while vocabulary-*dangerous*
+ones (projects sharing generic design vocabulary) are correctly suppressed by the
+commonality cutoff. Sequencing: S2 depends on S3 activity windows being populated
+(0004-adjacent) to get its era-discriminator — build/confirm activity first. If the
+guards prove insufficient in dry-run, the fallback is "enable vocabulary only for the
+projects it's demonstrably safe for," not all-or-nothing.
+
+---
+
+## 0016 — `chronicler_design_and_intent_v2.md` was never located; ARCHITECTURE.md is its replacement
+
+**Date:** 2026-07-20 · **Status:** accepted · **Source:** design thread
+
+**Context.** The linking spec (`docs/project_linking_skillset_spec.md`) opens with
+"Read first for context: `chronicler_design_and_intent_v2.md` (the as-built Chronicler
+reference)." That document could not be found on any machine, and Tim is unsure it ever
+existed as a discrete file. It leaves a dangling authoritative reference in a spec now
+committed to the repo.
+
+**Decision.** Rather than leave a ghost citation, declare the resolution explicitly:
+**`docs/ARCHITECTURE.md` is the authoritative as-built Chronicler reference** in that
+doc's place. This is honest because ARCHITECTURE.md's content was reconstructed this
+session *from the actual code and DB* (not from the missing doc) — it independently
+covers what v2 would have: the schema, the wall, single-writer, the frozen-vault
+contract, the sync-back history. The spec's reference should be read as pointing at
+ARCHITECTURE.md.
+
+**Consequences.** No lost information — the reference target exists, just under a
+different name and derived independently. If the original v2 doc ever surfaces, it
+should be diffed against ARCHITECTURE.md and any genuinely-new rationale folded in
+(then archived, per the pattern for superseded design docs), but its absence blocks
+nothing. The spec and `cowork_tasks_cleanup_and_qol.md` are now both in `docs/` — note
+that the cleanup doc predates several DECISIONS entries and must be triaged against
+this log before any of its tasks run (in particular, any sync-back QoL item is moot
+per 0008, which removes sync-back entirely).
