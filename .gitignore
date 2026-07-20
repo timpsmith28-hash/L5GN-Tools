@@ -13,11 +13,17 @@ data/urls.txt
 # Chronicler ingest RUNTIME data (per-machine, never code). Only chronicler/ code is tracked.
 /chronicler/**/*.db
 /chronicler/**/*.db-journal
+# WAL sidecars (DECISIONS 0014) -- the -journal rule above does NOT cover these.
+/chronicler/**/*.db-wal
+/chronicler/**/*.db-shm
 /chronicler/**/raw_*/
 /chronicler/**/vault_staging/
 /chronicler/**/scraped_gemini/
 /chronicler/**/zip_downloads/
 /chronicler/**/_debug/
+# Transient read-surface snapshot + its metadata (DECISIONS 0013), overwritten
+# each `run.py serve` launch. Scratch, never source.
+/chronicler/**/serve-snapshot/
 /chronicler/**/manifest.jsonl
 
 # Python

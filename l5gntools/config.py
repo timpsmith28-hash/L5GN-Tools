@@ -80,10 +80,81 @@ def author_aliases() -> dict:
     return out
 
 
+def _root_entries(host: str | None = None) -> list[dict]:
+    """Normalise the ``roots`` config into ``[{"path": Path, "scope": str|None}]``.
+
+    Two accepted shapes, so old config keeps working:
+
+        "roots": ["D:/Work/Github/MCF"]                       # bare, scope unknown
+        "roots": [{"path": "D:/Work/Github/MCF", "scope": "mcf"}]
+
+    The tagged shape is the **config-tag resolution** for scope (DECISIONS 0012 /
+    round-3 Task C.3): a project's ``scope`` is whichever configured root it was
+    scanned under on its producer, declared in that producer's config -- *not*
+    inferred from folder nesting. That matters because the layout differs per
+    machine: the knight has an ``L5GN`` folder, the gaming rig is flat with no
+    ``MCF`` at all, and the work rig has both. Deriving scope from nesting would
+    demand a folder reorg on the gaming rig to satisfy a naming convention;
+    tagging the root in config gets the same answer with no files moved.
+    """
+    roots = machine(host).get("roots")
+    if not roots:
+        return []
+    out: list[dict] = []
+    for r in roots:
+        if isinstance(r, dict):
+            path = r.get("path")
+            if not path:
+                continue
+            out.append({"path": Path(path), "scope": r.get("scope")})
+        else:
+            out.append({"path": Path(r), "scope": None})
+    return out
+
+
 def estate_roots(host: str | None = None) -> list[Path] | None:
     """Configured estate roots for ``host`` as ``Path``s, or ``None`` when none
     are declared -- ``None`` signals callers to use legacy sibling discovery."""
-    roots = machine(host).get("roots")
-    if not roots:
+    entries = _root_entries(host)
+    if not entries:
         return None
-    return [Path(r) for r in roots]
+    return [e["path"] for e in entries]
+
+
+def estate_roots_tagged(host: str | None = None) -> list[dict]:
+    """Configured roots with their scope tags: ``[{"path": Path, "scope": str}]``.
+
+    Empty list when none are declared. Callers that need the scope of a project
+    use :func:`scope_for_path` rather than reading this directly.
+    """
+    return _root_entries(host)
+
+
+def scope_for_path(path, host: str | None = None) -> str | None:
+    """The configured scope tag of the root ``path`` sits under, else ``None``.
+
+    Longest-match wins, so a nested tagged root (``.../Github/MCF`` inside a
+    tagged ``.../Github``) takes precedence over its parent. ``None`` means the
+    producer has not tagged that root yet -- reported honestly rather than
+    guessed at, because a wrong scope silently mis-files a project.
+    """
+    try:
+        target = Path(path).resolve()
+    except (OSError, ValueError):
+        return None
+    best: tuple[int, str | None] = (-1, None)
+    for entry in _root_entries(host):
+        if not entry.get("scope"):
+            continue
+        try:
+            root = entry["path"].resolve()
+        except (OSError, ValueError):
+            continue
+        try:
+            target.relative_to(root)
+        except ValueError:
+            continue
+        depth = len(root.parts)
+        if depth > best[0]:
+            best = (depth, entry["scope"])
+    return best[1]

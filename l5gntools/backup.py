@@ -22,12 +22,12 @@ and every path is resolved from ``CHRONICLER_HOME`` / config, never hardcoded
 from __future__ import annotations
 
 import os
-import sqlite3
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
+from . import dbsafe
 from .deposit import default_transport
 
 SNAPSHOT_PREFIX = "chronicler-"
@@ -84,10 +84,12 @@ def _unique_dest(backup_dir: Path, name: str) -> Path:
 def vacuum_into(src_db: Path, dest: Path) -> Path:
     """Atomic consistent snapshot of ``src_db`` into ``dest`` via ``VACUUM INTO``.
 
-    Opens the source ``mode=ro`` so the vault is never mutated. ``VACUUM INTO``
-    takes only a read lock on the source, so this is safe while the single writer
-    is live. Raises loudly (never silent-fails) if the source is missing or the
-    target already exists.
+    Opens the source through ``dbsafe.connect_readonly`` -- ``mode=ro`` so the
+    vault is never mutated, plus the standing ``busy_timeout`` (DECISIONS 0014)
+    so a snapshot taken while the writer is mid-transaction waits rather than
+    failing. ``VACUUM INTO`` takes only a read lock on the source, so this is safe
+    while the single writer is live. Raises loudly (never silent-fails) if the
+    source is missing or the target already exists.
     """
     src_db = Path(src_db)
     dest = Path(dest)
@@ -95,8 +97,7 @@ def vacuum_into(src_db: Path, dest: Path) -> Path:
         raise FileNotFoundError(f"vault DB not found: {src_db}")
     if dest.exists():
         raise FileExistsError(f"snapshot target already exists: {dest}")
-    uri = f"file:{src_db.as_posix()}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
+    conn = dbsafe.connect_readonly(src_db)
     try:
         conn.execute("VACUUM INTO ?", (str(dest),))
     finally:

@@ -26,6 +26,7 @@ import os
 import sqlite3
 from pathlib import Path
 
+from .. import dbsafe
 from ..common import ESTATE_ROOT
 from ..contract import SAFE
 
@@ -48,9 +49,12 @@ def _resolve_vault_path() -> Path | None:
 
 
 def _connect_ro(path: Path) -> sqlite3.Connection:
-    # as_uri() yields a correct file URI on every platform; mode=ro guarantees
-    # we cannot create a journal or write a single byte into the vault.
-    return sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+    # Routed through the shared pragma helper (DECISIONS 0014) rather than a local
+    # sqlite3.connect: mode=ro still guarantees we cannot write a single byte into
+    # the vault, and the shared busy_timeout means a scan running while the writer
+    # holds the file waits and retries instead of erroring. project_trail reuses
+    # this function, so both vault scanners get it from one place.
+    return dbsafe.connect_readonly(path)
 
 
 def scan_estate(projects: list[Path]) -> dict:

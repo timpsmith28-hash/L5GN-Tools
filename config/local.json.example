@@ -5,8 +5,12 @@
     "push_target": "l5gn-castle:vault/estates",
     "push_transport": "scp"
   },
+  "_roots_note": "roots entries may be a bare path, or {'path': ..., 'scope': 'l5gn'|'mcf'}. The scope tag is what gives a project its registry scope (DECISIONS 0012) -- declared on the producer's root, never inferred from folder nesting, so no rig has to reorganise its folders. Untagged roots still scan; their projects land as scope 'other' and appear under DEPOSIT GAPS in build_registry --report-aliases.",
   "RENAME-ME-WORK-LAPTOP": {
-    "roots": ["D:/Work/Github/MCF"]
+    "roots": [
+      {"path": "D:/Work/Github/MCF", "scope": "mcf"},
+      {"path": "D:/Work/Github/L5GN", "scope": "l5gn"}
+    ]
   },
   "_knight_example": {
     "role": "consumer",

@@ -1,5 +1,6 @@
 {
   "_comment": "TEMPLATE (committed, no real machine data). The real per-machine config lives in config/local.json (gitignored) and OVERRIDES these entries. This file just documents the shape and provides a safe 'default' fallback. Keyed by socket.gethostname() -- run 'python run.py config' to see a machine's hostname. 'roots' = estate roots whose CHILD folders are the projects to scan (omit for legacy sibling discovery). Copy an example below into config/local.json, rename the key to your hostname, and fill in real paths.",
+  "_roots_comment": "'roots' accepts either a bare path string or {'path': ..., 'scope': 'l5gn'|'mcf'}. The tagged form is how a project gets its registry scope (DECISIONS 0012): scope is declared on the root in the PRODUCER's config, never inferred from folder nesting. That is deliberate -- the layout differs on every machine (the knight has an L5GN folder and no MCF, the gaming rig is flat, the work rig has both), so nesting has never been a reliable signal. Tagging the root gets the same answer with no folder reorg. An untagged root still scans fine; its projects land as scope 'other' and are listed in build_registry --report-aliases under DEPOSIT GAPS.",
   "default": {
     "role": "producer",
     "estate": "unknown"
@@ -7,14 +8,17 @@
   "RENAME-ME-GAMING-RIG": {
     "role": "producer",
     "estate": "personal",
-    "roots": ["C:/Users/you/Documents/GitHub"],
+    "roots": [{"path": "C:/Users/you/Documents/GitHub", "scope": "l5gn"}],
     "push_target": "knight-host:vault/estates",
     "push_transport": "scp"
   },
   "RENAME-ME-WORK-LAPTOP": {
     "role": "producer",
     "estate": "work",
-    "roots": ["C:/Users/you/Github/MCF", "C:/Users/you/Github/L5GN"]
+    "roots": [
+      {"path": "C:/Users/you/Github/MCF", "scope": "mcf"},
+      {"path": "C:/Users/you/Github/L5GN", "scope": "l5gn"}
+    ]
   },
   "RENAME-ME-KNIGHT": {
     "role": "consumer",

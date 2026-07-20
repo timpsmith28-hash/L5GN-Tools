@@ -29,7 +29,18 @@ def _cached(relative_name: str):
 
 
 def _scan_one_project(proj: Path, per_project: list, resume: bool) -> dict:
-    entry: dict = {"name": proj.name}
+    # `path` and `scope` are deposited facts, not decoration: the consumer builds
+    # the project registry from this file and must never reach back to the
+    # producer's disk to work out where a project lived or which root it sat
+    # under (the mesh doctrine -- producers deposit facts, consumers read them).
+    # `scope` comes from the producer's config root tag, so a flat estate needs no
+    # folder reorg to be classifiable (DECISIONS 0012 / Task C.3).
+    from . import config
+    entry: dict = {
+        "name": proj.name,
+        "path": str(proj),
+        "scope": config.scope_for_path(proj),
+    }
     for mod in per_project:
         rel_name = f"{mod.NAME}/{proj.name}.json"
         data = _cached(rel_name) if resume else None
@@ -69,13 +80,25 @@ def build_estate(projects: list[Path], resume: bool = True,
             write_json(rel_name, data)
         estate_out[mod.NAME] = data
 
+    from . import config as _config
     _git = toolkit_git_info()
+    _machine = _config.machine()
     estate = {
         "generated_at": now_iso(),
         "toolkit_version": __version__,
         "toolkit_commit": _git["commit"],
         "toolkit_dirty": _git["dirty"],
         "estate_root": str(ESTATE_ROOT),
+        # Who produced this bundle and under which tagged roots. The consumer
+        # reads these instead of assuming a folder layout -- the layout differs on
+        # every machine and matching one has never held. Named `estate_name`, not
+        # `estate`: `estate` already means "the estate-level scan map" to the HTML
+        # viewer, estate_diff and consume, and a key that means two things
+        # depending on config is the kind of thing that bites at 2am.
+        "estate_name": _machine.get("estate"),
+        "producer_host": _machine.get("_hostname"),
+        "roots": [{"path": str(e["path"]), "scope": e.get("scope")}
+                  for e in _config.estate_roots_tagged()],
         "projects": projects_out,
         "estate": estate_out,
     }

@@ -50,10 +50,11 @@ def available() -> bool:
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Delegates to core.connect -> l5gntools.dbsafe, so the endpoint cannot open
+    # the vault with weaker settings than the pipeline does (DECISIONS 0014). This
+    # used to be a local sqlite3.connect with only foreign_keys set -- one of the
+    # paths that bypassed the shared helper.
+    return core.connect(db_path)
 
 
 def create_app(db_path: Path, registry: dict):
@@ -72,12 +73,26 @@ def create_app(db_path: Path, registry: dict):
 
     @app.get("/api/registry")
     def get_registry():
+        # Sorted program -> project -> repo, and each entry carries its own
+        # breadcrumb, so the picker can render the hierarchy for context while
+        # still allowing a ruling at any tier (DECISIONS 0012).
+        tier_order = {"program": 0, "project": 1, "repo": 2}
+
+        def _key(e):
+            # Sort by breadcrumb so children sit directly under their parent,
+            # then by tier so a program precedes its own projects. Uniform key
+            # shape for every entry -- a mixed key raises on the first compare.
+            return ((e.get("hierarchy") or e["canonical_name"]).lower(),
+                    tier_order.get(e.get("tier"), 9),
+                    e["canonical_name"].lower())
+
         return [
             {"id": e["id"], "canonical_name": e["canonical_name"],
+             "tier": e.get("tier"), "hierarchy": e.get("hierarchy"),
+             "program": e.get("program"), "project": e.get("project"),
              "is_sub": e["is_sub"], "estate": e["estate"],
              "account_scope": e["account_scope"]}
-            for e in sorted(registry.values(),
-                            key=lambda e: (e["is_sub"], e["canonical_name"].lower()))
+            for e in sorted(registry.values(), key=_key)
         ]
 
     @app.get("/api/pending")

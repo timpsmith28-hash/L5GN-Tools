@@ -149,4 +149,74 @@ def run() -> list[str]:
                 v.append("config: absent authors.json should yield an empty alias map")
         finally:
             config._AUTHORS = orig_authors
+
+    v.extend(_check_scoped_roots())
+    return v
+
+
+def _check_scoped_roots() -> list[str]:
+    """Roots may be tagged with a scope (DECISIONS 0012 / round-3 Task C.3).
+
+    Both shapes must work: a bare path string (legacy, scope unknown) and
+    {"path":..., "scope":...}. The tagged form is what lets a flat estate be
+    classified without moving any folders, so the fallback path -- untagged
+    yields None rather than a guess -- matters as much as the happy path.
+    """
+    v: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / "GitHub").mkdir()
+        (base / "GitHub" / "Spire").mkdir()
+        (base / "Work").mkdir()
+        (base / "Work" / "MCF").mkdir()
+        (base / "Work" / "MCF" / "ActivityStatements").mkdir()
+        (base / "Loose").mkdir()
+        (base / "Loose" / "Orphan").mkdir()
+
+        mfile = base / "machines.json"
+        mfile.write_text(json.dumps({
+            "testhost": {"roots": [
+                {"path": str(base / "GitHub"), "scope": "l5gn"},
+                {"path": str(base / "Work"), "scope": "l5gn"},
+                {"path": str(base / "Work" / "MCF"), "scope": "mcf"},
+                str(base / "Loose"),
+            ]}
+        }), encoding="utf-8")
+        orig_m, orig_l = config._MACHINES, config._LOCAL
+        config._MACHINES = mfile
+        config._LOCAL = base / "no_local.json"
+        try:
+            # bare strings and tagged dicts both resolve as roots
+            roots = config.estate_roots("testhost") or []
+            if len(roots) != 4:
+                v.append(f"config: estate_roots returned {len(roots)} roots, "
+                         "expected all four (mixed bare + tagged shapes)")
+            if not all(isinstance(r, Path) for r in roots):
+                v.append("config: estate_roots must still return Paths for legacy "
+                         "callers")
+
+            tagged = config.estate_roots_tagged("testhost")
+            if [t.get("scope") for t in tagged] != ["l5gn", "l5gn", "mcf", None]:
+                v.append(f"config: root scope tags read as "
+                         f"{[t.get('scope') for t in tagged]}")
+
+            if config.scope_for_path(base / "GitHub" / "Spire", "testhost") != "l5gn":
+                v.append("config: a project under a tagged root did not inherit its "
+                         "scope -- this is the whole config-tag mechanism")
+
+            # nested tagged root wins over its tagged parent (longest match)
+            got = config.scope_for_path(base / "Work" / "MCF" / "ActivityStatements",
+                                        "testhost")
+            if got != "mcf":
+                v.append(f"config: nested root scope resolved to {got!r}, expected "
+                         "'mcf' -- the more specific root must win")
+
+            # untagged root -> None, never a guess
+            if config.scope_for_path(base / "Loose" / "Orphan", "testhost") is not None:
+                v.append("config: an untagged root must yield None, not an inferred "
+                         "scope (a wrong scope silently mis-files a project)")
+            if config.scope_for_path(base / "Elsewhere", "testhost") is not None:
+                v.append("config: a path under no configured root must yield None")
+        finally:
+            config._MACHINES, config._LOCAL = orig_m, orig_l
     return v

@@ -125,41 +125,113 @@ def utc_now() -> str:
 # ---------------------------------------------------------------------------
 # Registry / alias loading
 # ---------------------------------------------------------------------------
+def _matchers_for(aliases):
+    """Compile boundary-anchored matchers for an alias list."""
+    matchers = []
+    for a in aliases:
+        a = (a or "").strip()
+        if len(a) < MIN_ALIAS_LEN:
+            continue
+        # boundary that treats alnum as "word" chars so 'CID' won't match
+        # 'acidic' but 'Armory v4' still matches inside a sentence.
+        pat = re.compile(r"(?<![A-Za-z0-9])" + re.escape(a) + r"(?![A-Za-z0-9])",
+                         re.IGNORECASE)
+        matchers.append((a, pat))
+    return matchers
+
+
 def load_registry():
-    """Return {canonical_name: {'aliases': [...], 'repo_folder_path': str|None,
-    'matchers': [(alias, compiled_regex), ...]}}."""
+    """Return ``{id: {...}}`` for every link target across all three tiers.
+
+    **Keyed by registry id, not canonical_name** (DECISIONS 0012 / round-3 D.3).
+    This is the fix for the round-2 divergence: relink used to key by
+    canonical_name and write `smelt-gateway` into `threads.project_link`, while
+    the review endpoint wrote ids like `crystal-spire` into the same column, so
+    one column held two incompatible vocabularies. The id wins because it is
+    stable under folder renames -- this estate has actually renamed
+    `L5GN-Armory` to `smelt-gateway`, which would have orphaned every
+    canonical_name-keyed link.
+
+    Each entry carries its place in the hierarchy (`tier`, `program`, `project`)
+    so a repo-level match can roll up to its project and program for display
+    without changing what gets written.
+
+    Reads the tiered registry. A flat (schema v1) registry is refused loudly
+    rather than half-understood -- run build_registry.py to regenerate.
+    """
     if not REGISTRY_PATH.is_file():
         raise SystemExit(f"[relink] registry missing: {REGISTRY_PATH} "
                          "(run build_registry.py first)")
     with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
         registry = json.load(f)
 
-    projects = {}
-    for entry in registry["projects"]:
-        canon = entry["canonical_name"]
-        aliases = list(dict.fromkeys(entry.get("aliases", []) + [canon]))
-        matchers = []
-        for a in aliases:
-            a = (a or "").strip()
-            if len(a) < MIN_ALIAS_LEN:
-                continue
-            # boundary that treats alnum as "word" chars so 'CID' won't match
-            # 'acidic' but 'Armory v4' still matches inside a sentence.
-            pat = re.compile(r"(?<![A-Za-z0-9])" + re.escape(a) + r"(?![A-Za-z0-9])",
-                             re.IGNORECASE)
-            matchers.append((a, pat))
-        root = SCOPE_TO_ROOT.get(entry.get("scope"))
-        repo = f"{root}/{canon}" if root else None
-        projects[canon] = {
-            "aliases": aliases,
-            "repo_folder_path": repo,
-            "matchers": matchers,
+    if "programs" not in registry:
+        raise SystemExit(
+            f"[relink] {REGISTRY_PATH} is a flat (pre-0012) registry with no "
+            "programs tier. Re-run build_registry.py to regenerate it in the "
+            "three-tier shape -- relink will not guess at the hierarchy.")
+
+    targets = {}
+    prog_names = {p["id"]: p.get("name", p["id"]) for p in registry.get("programs", [])}
+
+    def _add(tid, tier, canon, aliases, scope, program, project, low_sig, activity):
+        alias_list = list(dict.fromkeys(list(aliases) + [canon]))
+        targets[tid] = {
+            "id": tid,
+            "tier": tier,
+            "canonical_name": canon,
+            "aliases": alias_list,
+            "matchers": _matchers_for(alias_list),
+            "scope": scope,
+            "program": program,
+            "program_name": prog_names.get(program),
+            "project": project,
+            "repo_folder_path": (f"{SCOPE_TO_ROOT[scope]}/{canon}"
+                                 if scope in SCOPE_TO_ROOT else None),
             # S3: activity window for time_plausibility (None if not built yet).
-            "activity": entry.get("activity"),
-            # Fix B: demote body-only alias hits for this project when set.
-            "low_signal_body": bool(entry.get("low_signal_body")),
+            "activity": activity,
+            # Fix B: demote body-only alias hits for this target when set.
+            "low_signal_body": bool(low_sig),
         }
-    return projects
+
+    for prog in registry.get("programs", []):
+        _add(prog["id"], "program", prog.get("name", prog["id"]),
+             prog.get("aliases", []), prog.get("scope"), prog["id"], None,
+             prog.get("low_signal_body"), prog.get("activity"))
+
+    for proj in registry["projects"]:
+        _add(proj["id"], "project", proj["canonical_name"], proj.get("aliases", []),
+             proj.get("scope"), proj.get("program"), proj["id"],
+             proj.get("low_signal_body"), proj.get("activity"))
+        for repo in proj.get("repos", []):
+            _add(repo["id"], "repo", repo["canonical_name"],
+                 repo.get("aliases", []), repo.get("scope") or proj.get("scope"),
+                 proj.get("program"), proj["id"],
+                 repo.get("low_signal_body", proj.get("low_signal_body")),
+                 repo.get("activity"))
+    return targets
+
+
+def rollup_label(registry, tid) -> str:
+    """`program > project > repo` breadcrumb for one link target.
+
+    Display only. A repo-level evidence match still *scores* and *links* as that
+    repo -- the specific incarnation is the more precise answer and throwing it
+    away would lose information. The breadcrumb is what makes the decision
+    legible: seeing `L5GN OS > Citadel MicroIDE > smelt-gateway` is what tells
+    Tim at a glance that three separate repo rows in the table are one effort.
+    """
+    meta = registry.get(tid)
+    if not meta:
+        return tid
+    parts = []
+    if meta.get("program_name"):
+        parts.append(meta["program_name"])
+    proj = meta.get("project")
+    if proj and proj != tid and proj in registry:
+        parts.append(registry[proj]["canonical_name"])
+    parts.append(meta["canonical_name"])
+    return " > ".join(parts)
 
 
 def alias_hits(text, matchers):
@@ -304,7 +376,61 @@ def score_thread(thread, persisted, registry, content):
 # ---------------------------------------------------------------------------
 # Decision
 # ---------------------------------------------------------------------------
-def decide(thread, candidates, conn):
+TIER_SPECIFICITY = {"repo": 2, "project": 1, "program": 0}
+
+
+def collapse_lineage(candidates, registry):
+    """Collapse candidates that are the same effort at different tiers.
+
+    Once the registry has three tiers, a title like "Crystal Spire world_graph"
+    matches BOTH the project `crystal-spire` and its repo `l5gn-crystal-spire`,
+    because the repo inherits the project's alias. The flat scorer sees two
+    candidates with near-identical scores and declares AMBIGUOUS -- which is
+    exactly wrong: those are not two rival answers, they are one answer at two
+    zoom levels. Left alone, the tier change would have flooded the review queue
+    with self-ambiguity for every project that has a repo.
+
+    So before rivalry is judged, any candidate that is an ancestor or descendant
+    of a stronger candidate is folded into it. The winner is the higher score;
+    ties go to the MORE SPECIFIC tier, because naming the actual incarnation is
+    more informative than naming the umbrella and can always be rolled up for
+    display, whereas the reverse loses information.
+
+    Returns the collapsed candidate list; each survivor gains `rolled_up`, the
+    ids it absorbed, so the report can show the fold rather than hide it.
+    """
+    def lineage(cid):
+        meta = registry.get(cid) or {}
+        return {cid, meta.get("project"), meta.get("program")} - {None}
+
+    survivors = []
+    for cand in candidates:  # already sorted by adjusted, descending
+        cid = cand["project"]
+        absorbed_by = None
+        for kept in survivors:
+            kid = kept["project"]
+            # related iff either is in the other's lineage chain
+            if cid in lineage(kid) or kid in lineage(cid):
+                absorbed_by = kept
+                break
+        if absorbed_by is None:
+            survivors.append(dict(cand, rolled_up=[]))
+            continue
+        # Equal scores: prefer the more specific tier as the surviving identity.
+        keep_tier = TIER_SPECIFICITY.get(
+            (registry.get(absorbed_by["project"]) or {}).get("tier"), -1)
+        cand_tier = TIER_SPECIFICITY.get(
+            (registry.get(cid) or {}).get("tier"), -1)
+        if (abs(cand["adjusted"] - absorbed_by["adjusted"]) < 1e-9
+                and cand_tier > keep_tier):
+            rolled = absorbed_by["rolled_up"] + [absorbed_by["project"]]
+            survivors[survivors.index(absorbed_by)] = dict(cand, rolled_up=rolled)
+        else:
+            absorbed_by["rolled_up"].append(cid)
+    return survivors
+
+
+def decide(thread, candidates, conn, registry=None):
     """Return a decision dict: {category, project?, adjusted?, ...}. Category is
     one of: skip_manual / skip_exact / skip_evidence / none / auto_link /
     downgrade / ambiguous / suggest."""
@@ -317,21 +443,49 @@ def decide(thread, candidates, conn):
     if not candidates:
         return {"category": "none"}
 
+    # Fold same-lineage candidates (a project and its own repo) into one before
+    # judging rivalry -- otherwise every project with a repo self-ambiguates.
+    candidates = collapse_lineage(candidates, registry or {})
+
     best = candidates[0]
     second = candidates[1] if len(candidates) > 1 else None
     lead = best["adjusted"] - (second["adjusted"] if second else 0.0)
 
-    # current fuzzy target (resolved to a project NAME so a fuzzy link to a
-    # Claude-uuid project compares correctly against a registry canonical_name).
-    cur_name = None
-    if thread["project_link"]:
-        cur_name = project_name_of(conn, thread["project_link"])
-    same_project = (cur_name is not None
-                    and cur_name.strip().lower() == best["project"].strip().lower())
+    # Is the existing link already pointing where the evidence points?
+    # project_link now holds a registry id (0012 / D.3), so the id comparison is
+    # the authoritative one. The name comparison is kept as a fallback for
+    # legacy rows written before the id scheme -- a fuzzy link to a Claude-uuid
+    # project stores that uuid, whose NAME is what matches a registry entry.
+    cur_link = thread["project_link"]
+    cur_name = project_name_of(conn, cur_link) if cur_link else None
+    best_name = (registry or {}).get(best["project"], {}).get(
+        "canonical_name", best["project"])
+    same_project = bool(cur_link) and (
+        cur_link == best["project"]
+        or (cur_name is not None
+            and cur_name.strip().lower() == best_name.strip().lower()))
 
     # Ambiguity takes precedence over auto-link (never guess between rivals).
     if (best["adjusted"] >= SUGGEST_THRESHOLD and second
             and second["adjusted"] >= SUGGEST_THRESHOLD and lead < LEAD_MARGIN):
+        # SIBLING ROLL-UP: two rival *repos* of the SAME project are not really
+        # a contested question -- "which Armory incarnation was this?" is
+        # unanswerable from a title, but "this is Citadel MicroIDE" is certain.
+        # Rather than queue an ambiguity a human cannot resolve either, suggest
+        # the parent project, which is the most specific thing the evidence
+        # actually supports. This is the practical payoff of the tier change.
+        reg = registry or {}
+        parent = (reg.get(best["project"]) or {}).get("project")
+        sibling = (reg.get(second["project"]) or {}).get("project")
+        if (parent and parent == sibling and parent in reg
+                and parent not in (best["project"], second["project"])):
+            rolled = dict(best, project=parent, rolled_up=sorted(
+                {best["project"], second["project"]}))
+            rolled["summary"] = (
+                f"{best['summary']}; rolled up from rival repos "
+                f"{best['project']} / {second['project']} of the same project")
+            return {"category": "suggest", "best": rolled,
+                    "rolled_from": [best["project"], second["project"]]}
         return {"category": "ambiguous", "best": best, "second": second}
 
     if best["adjusted"] >= AUTO_LINK_THRESHOLD and lead >= LEAD_MARGIN:
@@ -351,16 +505,23 @@ def decide(thread, candidates, conn):
 # ---------------------------------------------------------------------------
 # Apply
 # ---------------------------------------------------------------------------
-def upsert_project(conn, canon, registry):
-    """Ensure a projects row exists whose project_id == canonical_name, so
-    threads.project_link (a FK) can reference the registry project."""
-    repo = registry.get(canon, {}).get("repo_folder_path")
+def upsert_project(conn, target_id, registry):
+    """Ensure a projects row exists whose ``project_id`` is the REGISTRY ID, so
+    ``threads.project_link`` (a FK) can reference it.
+
+    The id is the primary key and the human-readable ``canonical_name`` goes in
+    ``name`` -- the same shape the review endpoint writes, which is the point:
+    both writers now produce identical rows for the same target instead of one
+    keying on a folder name and the other on an id."""
+    meta = registry.get(target_id, {})
     conn.execute(
         """INSERT INTO projects (project_id, name, repo_folder_path, source_system_id)
            VALUES (?, ?, ?, ?)
            ON CONFLICT(project_id) DO UPDATE SET
+             name=COALESCE(excluded.name, projects.name),
              repo_folder_path=COALESCE(projects.repo_folder_path, excluded.repo_folder_path)""",
-        (canon, canon, repo, None),
+        (target_id, meta.get("canonical_name", target_id),
+         meta.get("repo_folder_path"), None),
     )
 
 
@@ -403,6 +564,12 @@ def apply_decision(conn, thread, dec, registry, now):
     cat = dec["category"]
     tid = thread["thread_id"]
 
+    # Notes carry the full `program > project > repo` breadcrumb, not the bare
+    # id: the id is what gets written, but a human reading the queue needs to see
+    # that a match on `smelt-gateway` is a match on Citadel MicroIDE.
+    def lbl(pid):
+        return f"{pid} ({rollup_label(registry, pid)})"
+
     if cat == "auto_link":
         clear_pending_relink_rows(conn, tid)
         best = dec["best"]
@@ -418,7 +585,7 @@ def apply_decision(conn, thread, dec, registry, now):
             """INSERT INTO review_queue (type, thread_id, confidence, status, note, created_at, resolved_at)
                VALUES ('link_upgrade', ?, ?, 'confirmed', ?, ?, ?)""",
             (tid, best["adjusted"],
-             f"[{verb}] -> {best['project']} (adjusted={best['adjusted']:.3f}); "
+             f"[{verb}] -> {lbl(best['project'])} (adjusted={best['adjusted']:.3f}); "
              f"evidence: {best['summary']}", now, now),
         )
 
@@ -429,7 +596,7 @@ def apply_decision(conn, thread, dec, registry, now):
             """INSERT INTO review_queue (type, thread_id, confidence, status, note, created_at)
                VALUES ('project_link', ?, ?, 'pending', ?, ?)""",
             (tid, best["adjusted"],
-             f"suggest -> {best['project']} (adjusted={best['adjusted']:.3f}); "
+             f"suggest -> {lbl(best['project'])} (adjusted={best['adjusted']:.3f}); "
              f"evidence: {best['summary']}", now),
         )
         conn.execute("UPDATE threads SET review_status='pending' WHERE thread_id=?", (tid,))
@@ -441,8 +608,8 @@ def apply_decision(conn, thread, dec, registry, now):
             """INSERT INTO review_queue (type, thread_id, confidence, status, note, created_at)
                VALUES ('link_ambiguous', ?, ?, 'pending', ?, ?)""",
             (tid, b["adjusted"],
-             f"ambiguous: {b['project']} (adjusted={b['adjusted']:.3f}; {b['summary']}) "
-             f"VS {s['project']} (adjusted={s['adjusted']:.3f}; {s['summary']})", now),
+             f"ambiguous: {lbl(b['project'])} (adjusted={b['adjusted']:.3f}; {b['summary']}) "
+             f"VS {lbl(s['project'])} (adjusted={s['adjusted']:.3f}; {s['summary']})", now),
         )
         conn.execute("UPDATE threads SET review_status='pending' WHERE thread_id=?", (tid,))
 
@@ -454,7 +621,7 @@ def apply_decision(conn, thread, dec, registry, now):
                VALUES ('link_downgrade', ?, ?, 'pending', ?, ?)""",
             (tid, best["adjusted"],
              f"downgrade: existing fuzzy link -> {dec.get('cur_name')!r} now contradicted; "
-             f"new evidence points to {best['project']} "
+             f"new evidence points to {lbl(best['project'])} "
              f"(adjusted={best['adjusted']:.3f}); evidence: {best['summary']}", now),
         )
         conn.execute("UPDATE threads SET review_status='pending' WHERE thread_id=?", (tid,))
@@ -464,7 +631,7 @@ def apply_decision(conn, thread, dec, registry, now):
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
-def build_report(results, scanned, apply):
+def build_report(results, scanned, apply, registry=None):
     """Build the decision-table report as a list of lines (so it can be printed
     AND written to a file with deterministic UTF-8, independent of the shell)."""
     buckets = defaultdict(list)
@@ -500,6 +667,26 @@ def build_report(results, scanned, apply):
         title = (r["thread"]["title"] or "")[:34]
         emit(f"  {b['adjusted']:>8.3f}  {b['project']:<22}  {r['thread']['thread_id'][:12]}  {title}")
         emit(f"  {'':>8}  {'':<22}  = {b['summary']}")
+
+    # SUGGESTIONS: list ALL. These are what the human actually works through, so
+    # each line carries the `program > project > repo` breadcrumb -- the whole
+    # point of the tier change is that Tim can see three separate repo rows are
+    # one effort without having to remember the lineage himself.
+    sg = buckets.get("suggest", [])
+    emit("\n" + "-" * 74)
+    emit(f"SUGGESTIONS ({len(sg)}) - ALL:")
+    for r in sg:
+        b = r["decision"]["best"]
+        title = (r["thread"]["title"] or "")[:34]
+        emit(f"  {b['adjusted']:>8.3f}  {r['thread']['thread_id'][:12]}  {title}")
+        emit(f"  {'':>8}  -> {b['project']}  [{rollup_label(registry or {}, b['project'])}]")
+        if r["decision"].get("rolled_from"):
+            emit(f"  {'':>8}     rolled up from rival repos of the same project: "
+                 f"{', '.join(r['decision']['rolled_from'])}")
+        elif b.get("rolled_up"):
+            emit(f"  {'':>8}     absorbed same-lineage candidates: "
+                 f"{', '.join(b['rolled_up'])}")
+        emit(f"  {'':>8}     evidence: {b['summary']}")
 
     # DOWNGRADES: list ALL.
     dg = buckets.get("downgrade", [])
@@ -567,7 +754,7 @@ def run(apply, no_content_scan, limit, out=None):
                 break
             content = "" if no_content_scan else thread_content(conn, thread["thread_id"])
             candidates = score_thread(thread, persisted, registry, content)
-            decision = decide(thread, candidates, conn)
+            decision = decide(thread, candidates, conn, registry)
             results.append({"thread": thread, "decision": decision})
             if apply:
                 apply_decision(conn, thread, decision, registry, now)
@@ -575,7 +762,7 @@ def run(apply, no_content_scan, limit, out=None):
         if apply:
             conn.commit()
 
-        lines = build_report(results, scanned, apply)
+        lines = build_report(results, scanned, apply, registry)
         if apply:
             written = sum(1 for r in results
                           if r["decision"]["category"] in

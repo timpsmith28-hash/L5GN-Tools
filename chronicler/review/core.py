@@ -36,6 +36,20 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def connect(db_path: Path) -> sqlite3.Connection:
+    """The endpoint's connection to the LIVE vault (DECISIONS 0014).
+
+    Routed through the shared pragma helper so the write endpoint opens the file
+    with exactly the settings every other writer uses -- WAL and a busy_timeout,
+    which is what lets it write while Datasette reads without either seeing a
+    torn state. Deliberately the live DB, not a snapshot: `serve` moved to a
+    snapshot under 0013, but review must see live state or it would re-serve
+    threads that have already been ruled.
+    """
+    from l5gntools.dbsafe import connect as _connect
+    return _connect(db_path)
+
+
 # ---------------------------------------------------------------------------
 # Path resolution -- config-driven, never hardcoded (DECISIONS 0007, round-2 C.4)
 # ---------------------------------------------------------------------------
@@ -91,15 +105,27 @@ def resolve_registry_path(machine: dict | None = None) -> Path:
 # Registry -- the set of ids a ruling is allowed to assign
 # ---------------------------------------------------------------------------
 def load_registry(source) -> dict:
-    """Return {id: {id, canonical_name, repo_folder_path, account_scope, estate,
-    is_sub}} for every link-target the endpoint accepts.
+    """Return ``{id: {...}}`` for every link-target the endpoint accepts, across
+    all three tiers (DECISIONS 0012).
 
-    `source` is a path (str/Path) or an already-parsed dict. Both top-level
-    projects and dict-shaped sub_projects are valid targets -- a human may make a
-    finer ruling (e.g. 'chancellor') than relink, which today only loads top-level
-    entries. String-shaped sub_projects (some registry entries list bare names,
-    e.g. crystal-spire) carry no id and are therefore NOT link targets -- surfaced
-    by report as a registry data-quality note, not silently coerced.
+    `source` is a path (str/Path) or an already-parsed dict.
+
+    **A ruling may be made at any tier.** A thread may genuinely be about a whole
+    program ("how should L5GN OS handle config?"), a project ("Citadel's plugin
+    lifecycle"), or one specific incarnation ("the smelt-gateway rewrite"), and
+    forcing the human to pick a tier the evidence does not support is how you get
+    junk rulings. Each entry carries `tier`, `program`, `project` and a
+    `hierarchy` breadcrumb so the UI can show the context around whatever is
+    being ruled on.
+
+    Every target is keyed by **id**, the single identifier scheme -- the same one
+    relink writes (round-3 D.3). Before that decision, this endpoint wrote ids
+    and relink wrote canonical_names into the same `threads.project_link` column.
+
+    Legacy flat registries (no `programs` key) still load, with every project
+    reported at the project tier and no hierarchy. That keeps a stale registry
+    usable read-only rather than taking the review surface down, but
+    build_registry should be re-run to regenerate the tiers.
     """
     if isinstance(source, dict):
         data = source
@@ -109,27 +135,48 @@ def load_registry(source) -> dict:
 
     scope_to_root = {"l5gn": "L5GN", "mcf": "MCF"}
     out: dict[str, dict] = {}
+    programs = {p["id"]: p for p in data.get("programs", []) if p.get("id")}
 
-    def _add(entry: dict, is_sub: bool):
+    def _add(entry: dict, tier: str, program: str | None, project: str | None):
         pid = entry.get("id")
         if not pid:
             return
         root = scope_to_root.get(entry.get("scope"))
-        canon = entry.get("canonical_name") or pid
+        canon = entry.get("canonical_name") or entry.get("name") or pid
+        crumbs = []
+        if program and program in programs:
+            crumbs.append(programs[program].get("name", program))
+        if project and project != pid and project in out:
+            crumbs.append(out[project]["canonical_name"])
+        crumbs.append(canon)
         out[pid] = {
             "id": pid,
             "canonical_name": canon,
+            "tier": tier,
+            "program": program,
+            "project": project,
+            "hierarchy": " > ".join(crumbs),
             "repo_folder_path": (f"{root}/{canon}" if root else None),
             "account_scope": entry.get("account_scope") or [],
             "estate": entry.get("estate"),
-            "is_sub": is_sub,
+            # Retained for the existing UI sort: repo-tier entries are the
+            # "finer" targets the flat schema called sub-projects.
+            "is_sub": tier == "repo",
         }
 
+    for prog in data.get("programs", []):
+        _add(prog, "program", prog.get("id"), None)
+
     for p in data.get("projects", []):
-        _add(p, is_sub=False)
+        _add(p, "project", p.get("program"), p.get("id"))
+        for repo in p.get("repos") or []:
+            if isinstance(repo, dict):
+                repo.setdefault("scope", p.get("scope"))
+                _add(repo, "repo", p.get("program"), p.get("id"))
+        # Legacy flat shape: dict-shaped sub_projects were the old finer targets.
         for sp in p.get("sub_projects") or []:
             if isinstance(sp, dict):
-                _add(sp, is_sub=True)
+                _add(sp, "repo", p.get("program"), p.get("id"))
     return out
 
 

@@ -11,7 +11,7 @@ Usage:
     python run.py <tool> --all               # one tool across the whole estate
 
 Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
-    python run.py serve  [--port N] [--host H]   # Datasette read surface (--immutable)
+    python run.py serve  [--port N] [--host H]   # Datasette read surface (snapshot, --immutable)
     python run.py review [--port N] [--host H]   # narrow write endpoint (0007 stage 2)
     python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
     python run.py scrape [urls.txt] [--force]    # Gemini share-scrape -> intake
@@ -239,11 +239,22 @@ def _cmd_backup(args: argparse.Namespace) -> int:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    """Launch Datasette read-only against the live vault (DECISIONS 0007 stage 1).
+    """Launch Datasette read-only against a fresh SNAPSHOT (DECISIONS 0007 + 0013).
 
-    Read surface only: `--immutable` cannot write, so single-writer is preserved
-    structurally. Datasette is an optional extra; if it is absent this skips
-    cleanly and loudly with the install hint (never silent-fails)."""
+    Two guarantees, stacked. `--immutable` means the process cannot write, so
+    single-writer is preserved structurally (0007). And what it is immutable
+    *over* is a `VACUUM INTO` snapshot taken at launch, not the live vault (0013)
+    -- because `--immutable` on a file another process is writing is what produced
+    the false `database disk image is malformed` incident. Against a frozen copy
+    the flag's promise is honestly true and a collision is impossible by
+    construction.
+
+    The cost is staleness, so this prints it plainly and puts it in the UI banner:
+    a ruling made in `run.py review` after the snapshot is safe in the live vault,
+    it simply is not in this copy until the next launch.
+
+    Datasette is an optional extra; if it is absent this skips cleanly and loudly
+    with the install hint (never silent-fails)."""
     import subprocess
     from l5gntools import viewer, config
     m = config.machine()
@@ -261,9 +272,24 @@ def _cmd_serve(args: argparse.Namespace) -> int:
               "of the stdlib-only core and the default install:\n"
               "         pip install -e .[viewer]", file=sys.stderr)
         return 2
-    argv = viewer.datasette_argv(db, host=args.host, port=args.port)
+    # Snapshot BEFORE launching: Datasette must never be pointed at the live file.
+    try:
+        snap = viewer.make_serve_snapshot(m)
+    except Exception as exc:  # noqa: BLE001 -- any snapshot failure is fatal here
+        # Loud failure, never a silent fallback to the live DB -- falling back is
+        # exactly the behaviour 0013 forbids.
+        print(f"serve: could not take the read snapshot ({type(exc).__name__}: {exc}). "
+              "Refusing to serve the live vault instead -- that is the false-malformed "
+              "path (DECISIONS 0013).", file=sys.stderr)
+        return 2
+    meta = viewer.write_metadata(snap["dir"], snap["taken_at"])
+    argv = viewer.datasette_argv(snap["snapshot"], host=args.host, port=args.port,
+                                 metadata=meta)
+    print(f"serve: live vault   {snap['db']}")
+    print(f"serve: snapshot     {snap['snapshot']}")
+    print(f"serve: {viewer.staleness_note(snap['taken_at'])}")
     print(f"serve: {' '.join(argv)}")
-    print(f"serve: read-only (--immutable). From a phone on the tailnet: "
+    print(f"serve: read-only (--immutable, on a copy). From a phone on the tailnet: "
           f"http://<knight-100.x>:{args.port}/  |  on the LAN: "
           f"http://<knight-192.168.x>:{args.port}/")
     try:
