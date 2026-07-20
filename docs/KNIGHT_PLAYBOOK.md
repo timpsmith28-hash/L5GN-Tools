@@ -4,7 +4,7 @@ How to stand up the headless knight, wire push-to-deploy from a rig, run the
 mesh, and operate it day to day. Written to be handed to someone else.
 
 > Standing up a **producer** (the work laptop, a second rig) is a separate,
-> shorter walkthrough: see `PRODUCER_SETUP.md`. This document is the consumer
+> shorter walkthrough: see `PRODUCER_PLAYBOOK.md`. This document is the consumer
 > side.
 
 ---

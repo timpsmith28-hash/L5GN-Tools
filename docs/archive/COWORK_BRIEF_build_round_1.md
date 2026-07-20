@@ -4,8 +4,11 @@
 > stage 1), relink folded into the pipeline, off-box backup (0005/0006),
 > `auditor_doc_claims`, and the Gemini scrape stage. All five tasks landed.
 > Read as the record of *what was asked*, frozen at the moment of asking — not as work
-> outstanding. Task E's chromium prerequisite was left open here and is carried by round
-> 3 Task F. Where this brief and the trinity disagree, the trinity wins.
+> outstanding. Task E's chromium prerequisite was left open here and is **still open**:
+> round 3 did not address it, and the install steps live in `KNIGHT_PLAYBOOK.md` §10.3
+> unwalked. (An earlier version of this stamp said round 3 Task F carried it. That was
+> wrong — corrected 2026-07-20.) Where this brief and the trinity disagree, the trinity
+> wins.
 
 # Cowork brief — build round 1 (post-trinity)
 

@@ -34,7 +34,7 @@ been in the *linking* layer, not the schema.
 - `link_ambiguous` / `link_downgrade` `review_queue` items await Tim's rulings.
 - The work rig has not deposited yet, so every MCF project in the registry is
   present as a link target but has no repo facts attached. See
-  `docs/PRODUCER_SETUP.md`.
+  `docs/PRODUCER_PLAYBOOK.md`.
 - S2 vocabulary remains **off**; it is revivable with guards under DECISIONS
   0015, dry-run first.
 

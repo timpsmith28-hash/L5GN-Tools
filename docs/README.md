@@ -18,15 +18,17 @@ These are maintained. If one contradicts the code, that's a bug in the doc.
 | `INTENT.md` | Why the system is worth building. Wants, not facts. | The reason changes — not on a schedule |
 | `ARCHITECTURE.md` | What the system *is*, as built. The authoritative shape reference (DECISIONS 0016) | The shape changes |
 | `DECISIONS.md` | Append-only *why* behind each ruling. Never edited; superseded by a later entry | Never — entries are frozen by construction |
-| `KNIGHT_PLAYBOOK.md` | Deploy + operate the mesh. Operator-facing runbook | The deploy steps change |
+| `KNIGHT_PLAYBOOK.md` | Deploy + operate the **consumer** (the knight). Operator-facing runbook | The deploy steps change |
+| `PRODUCER_PLAYBOOK.md` | Deploy + operate a **producer** rig. The other half of the runbook | The deploy steps change |
 | `SPEC_Chronicler.md` | The linking/skillset spec for the ingest side | The spec is executed or superseded |
 
 `INTENT` / `ARCHITECTURE` / `DECISIONS` are **the trinity**. Where a brief, a
 report or an archived doc disagrees with the trinity, the trinity wins.
 
-Also core, but transient: the **live brief** for the round currently in flight
-(`COWORK_BRIEF_build_round_N.md`). It leaves core `docs/` the moment its pair
-completes — see §3.
+Also core, but transient: the **live round** — its brief
+(`COWORK_BRIEF_build_round_N.md`), its report, and its UAT walk-sheet
+(`UAT_round_N.md`), the sheet Tim actually walks to close the pair. All three
+leave core `docs/` together the moment the pair completes — see §3.
 
 ## 2. Doc classes
 
