@@ -1,3 +1,14 @@
+> **ARCHIVED** 2026-07-20 · completed pair · report: `docs/chronicler_investigation_2026-07-18.md` (archived alongside)
+> Superseded by DECISIONS 0001–0005 + `docs/ARCHITECTURE.md` · Original purpose: the
+> first alignment pass — recover the inherited record, then report (not fix) on the
+> edit-loss path, the dead fingerprint path and the tunables.
+> Read as the request. Its Tasks 5–7 (fold relink, `auditor_doc_claims`, off-box backup)
+> were deliberately *not* executed in that pass and were re-issued as round 1's Tasks
+> B/D/C, where they landed — do not re-run them from here. Its Task 0 found
+> `chronicler_system_design.md` outside the repo (now in `archive/`); the
+> `chronicler_design_and_intent_v2.md` it hunted was never located and is resolved to
+> ARCHITECTURE.md by DECISIONS 0016.
+
 # Cowork brief — Chronicler alignment pass
 
 **Origin:** design thread, 2026-07-17. Written after a cold read of the estate and

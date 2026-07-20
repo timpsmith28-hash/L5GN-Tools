@@ -1,3 +1,13 @@
+> **ARCHIVED** 2026-07-20 · recovered historical design · superseded, not maintained
+> Superseded by docs/ARCHITECTURE.md (the authoritative as-built ref, DECISIONS 0016)
+> · Original purpose: the v1 consolidated design agreed before the first build. Most of
+> it was built and is accurate history. Note where later decisions moved past it: the
+> editable-.md sync-back contract (§9.1, §13) is being *removed* (0008), "vendored"
+> framing is retired for "absorbed/contract-boundary" (§ ARCHITECTURE), the flat
+> project model evolved to three-tier program/project/repo (0012), and the vocabulary
+> signal it specced was dropped then reinstated-with-guards (0003 → 0015). Read as
+> origin, not current truth.
+
 # Chronicler — System Design Reference (v1 consolidation)
 
 Everything agreed so far, in one place, for review before we build the reconciliation piece.

@@ -1,3 +1,11 @@
+> **ARCHIVED** 2026-07-20 · retired · no report — this was a status board, not a task
+> Superseded by the trinity + derivable status · Original purpose: rolling "where we
+> are / what's next". Retired because status-as-a-document is the drift trap: this very
+> file contradicts itself on the tester count ("20 testers" vs "19 is the count", lines
+> apart) — the exact rot it warns against, in the doc about warning against it. Status
+> is now derived from verify.py / git / the DB; forward items carry manually. See
+> docs/README.md. **Do not recreate a status/next-session doc.**
+
 # L5GN-Tools — Status & Next Steps
 
 The **rolling status board**: what's true right now and what to pick up next.

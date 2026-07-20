@@ -1,3 +1,12 @@
+> **ARCHIVED** 2026-07-20 · SUPERSEDED — do NOT run as a task list
+> Superseded by DECISIONS 0008/0012/0013 + build rounds 1–3 · Original purpose: a
+> post-build cleanup/QoL task list. **Most is already built or now wrong:** B2's
+> `run_pipeline.py` exists; B1's bulk-accept and the parked "web UI for review" became
+> the review endpoint; every sync-back reference here is void (0008 *removes*
+> sync-back). The ONLY still-live content — the A2 debris-deletion list — was folded
+> into round-3 Task G. It cites the never-found v2 doc (→ ARCHITECTURE.md, 0016).
+> Triage against DECISIONS before trusting any line here. Kept for provenance only.
+
 # Chronicler — Cowork tasks: post-build cleanup & quality-of-life
 ### Two task sets, run in order (Set A is quick, Set B is the real build)
 

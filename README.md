@@ -91,7 +91,8 @@ L5GN-Tools/
   chronicler/          vendored ingest pipeline (writer; own deps) -- builds the vault
   config/              machines.json (template) + local.json (real, git-ignored)
   deploy/              push-exports.ps1 + knight systemd auto-ingest units
-  docs/                KNIGHT_PLAYBOOK.md (deploy + operator guide), NEXT_SESSION_PLAN.md
+  docs/                the trinity + playbook; see docs/README.md for the map
+    archive/           retired docs, stamped; investigation/ raw thread exchanges
   data/, report.html   generated output (git-ignored)
 ```
 
@@ -101,7 +102,8 @@ L5GN-Tools/
 - **Deploy / operate the mesh:** `docs/KNIGHT_PLAYBOOK.md`
 - **Ingest subsystem + drop zone:** `chronicler/README.md`
 - **Auto-delivery of exports:** `deploy/README.md`
-- **Roadmap / status:** `docs/NEXT_SESSION_PLAN.md`
+- **Doc map / archiving convention:** `docs/README.md`
+- **Status:** derived, not documented — `python verify.py`, `git log`, the DB
 
 Adding a scanner: drop a module in `l5gntools/scanners/` (with `NAME`,
 `DESCRIPTION`, `ESTATE_LEVEL`, `SAFETY`, and `scan`/`scan_estate`) and register it

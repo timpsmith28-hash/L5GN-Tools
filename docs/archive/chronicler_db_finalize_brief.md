@@ -1,3 +1,11 @@
+> **ARCHIVED** 2026-07-20 · recovered historical brief · largely executed, not maintained
+> Superseded by docs/DECISIONS.md + ARCHITECTURE.md · Original purpose: the DB
+> finalize-and-freeze brief. Historically prescient — it foresaw the `019f4273` bad
+> project_link (DECISIONS 0011), the 'none'-vs-NULL normalization, the `substantive`
+> flag, and the sandbox stale-read behaviour that became the false-malformed scare
+> (0013). References the never-found `chronicler_design_and_intent_v2.md` (resolved to
+> ARCHITECTURE.md, 0016). Read as history.
+
 # Chronicler — DB finalize & freeze (final session)
 
 The goal of this session is to leave `chronicler.db` in a clean, honest, frozen

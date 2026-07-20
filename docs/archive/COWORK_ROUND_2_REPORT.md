@@ -1,3 +1,13 @@
+> **ARCHIVED** 2026-07-20 · completed pair · brief: `docs/archive/COWORK_BRIEF_build_round_2.md`
+> Superseded by commit `433a5f1` + DECISIONS 0012–0016 · Original purpose: what round 2
+> built — the review write endpoint (proven column-scoped in `tester_review`), the
+> validated registry, and copy-paste runbooks for backup / reset / relink.
+> Sandboxed again with no path to the knight, so Task 0's *ship*, Task B and Task D are
+> **runbooks handed off, not executed**. Two flags it raised are answered elsewhere: the
+> `project_link` id-vs-`canonical_name` divergence and the PROTECTED-`exact`-row question
+> both go to round 3 Task D. The registry sha256 recorded here is only valid until the
+> registry next changes. Read as testimony, not status.
+
 # Cowork build round 2 — report (2026-07-18)
 
 **Execution constraint up front:** this Cowork session runs in a sandbox with **no

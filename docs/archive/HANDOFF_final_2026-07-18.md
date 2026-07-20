@@ -1,3 +1,10 @@
+> **ARCHIVED** 2026-07-20 · retired · no report — this was a living doc, not a task
+> Superseded by the trinity (INTENT / ARCHITECTURE / DECISIONS) · Original purpose:
+> prime a fresh thread with current state. Held facts-with-numbers that drifted
+> (says "20 testers", "~8% coverage", cites a CHANGELOG.md never made); its "next
+> design topic" is what the 2026-07-18–20 design sessions then executed. Status is now
+> derivable, not a document — see docs/README.md. **Do not recreate a handoff doc.**
+
 # L5GN-Tools — Handoff
 
 Prime a fresh thread with this. It's the state of the world + how to continue.

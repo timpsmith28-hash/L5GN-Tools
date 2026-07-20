@@ -1,3 +1,13 @@
+> **ARCHIVED** 2026-07-20 · completed pair · brief: `docs/archive/COWORK_BRIEF_chronicler_alignment.md`
+> Superseded by DECISIONS 0001–0005, which carry its findings forward as rulings ·
+> Original purpose: a read-only forensic pass over the pipeline and the frozen vault.
+> Nothing was applied — every finding here is a *proposal* that DECISIONS then accepted,
+> amended or moved past. This is the most load-bearing archived doc in the folder: it is
+> the primary evidence behind the conditional file-wins ruling (0001) and the tunables
+> record whose loss motivated DECISIONS.md itself. Its "decisions surfaced for Tim"
+> section is answered — read the entries, not this list. The sync-back machinery it
+> analyses is being *removed* (0008). Read as evidence, not as an open task list.
+
 # Chronicler investigation — 2026-07-18
 
 Read-only forensic pass over the Chronicler pipeline and its frozen data store.

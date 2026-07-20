@@ -1,3 +1,11 @@
+> **ARCHIVED** 2026-07-20 · completed pair · report: `docs/archive/COWORK_ROUND_2_REPORT.md`
+> Superseded by the as-built code (commit `433a5f1`) + DECISIONS 0010–0013 · Original
+> purpose: ship the project registry, reset the untrusted `project_link` values (0011),
+> and build the narrow write endpoint (0007 stage 2) — the round's main deliverable.
+> Read as the request, not current truth: it assumes the flat project model that
+> DECISIONS 0012 replaced with three-tier program→project→repo, and its treatment of the
+> `exact` row was flagged by the report as needing a ruling (round 3 Task D).
+
 # Cowork brief — build round 2: registry live, links reset, write endpoint
 
 **Origin:** design thread, 2026-07-18, following the project-registry design session.

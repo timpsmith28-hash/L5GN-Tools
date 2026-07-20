@@ -1,3 +1,12 @@
+> **ARCHIVED** 2026-07-20 · completed pair · report: `docs/archive/COWORK_ROUND_1_REPORT.md`
+> Superseded by the as-built code (commit `cdd7df4`) + `docs/ARCHITECTURE.md` · Original
+> purpose: the first post-trinity build brief — Datasette read surface (DECISIONS 0007
+> stage 1), relink folded into the pipeline, off-box backup (0005/0006),
+> `auditor_doc_claims`, and the Gemini scrape stage. All five tasks landed.
+> Read as the record of *what was asked*, frozen at the moment of asking — not as work
+> outstanding. Task E's chromium prerequisite was left open here and is carried by round
+> 3 Task F. Where this brief and the trinity disagree, the trinity wins.
+
 # Cowork brief — build round 1 (post-trinity)
 
 **Origin:** design thread, 2026-07-18, after the INTENT/ARCHITECTURE/DECISIONS trinity
