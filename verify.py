@@ -18,6 +18,7 @@ AUDITORS: list[str] = [
     "auditors.auditor_readonly",
     "auditors.auditor_stdlib",
     "auditors.auditor_tool_contract",
+    "auditors.auditor_uat_stamp",
 ]
 
 TESTERS: list[str] = [
@@ -36,6 +37,7 @@ TESTERS: list[str] = [
     "tests.tester_set_substantive",
     "tests.tester_md_transcript",
     "tests.tester_doc_claims",
+    "tests.tester_uat_stamp",
     "tests.tester_dbsafe",
     "tests.tester_build_registry",
     "tests.tester_registry_tiers",

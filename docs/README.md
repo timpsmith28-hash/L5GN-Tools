@@ -90,6 +90,33 @@ say what's wrong with it in the stamp instead.
 
 Prefer `git mv` so the rename is recorded, not a delete-plus-add.
 
+### The uat stamp
+
+A round's results log (`UAT_round_N_results.md`) is the one document that asserts
+*"this was tested"*, and until round 3 it was the only artifact in the system
+with no provenance — every scan output already stamps `toolkit_git_info()`. So a
+results log in core `docs/` must carry, at the top:
+
+```
+<!-- uat: commit=<sha> dirty=<bool> host=<name> walked=<YYYY-MM-DD> gate=<Na/Mt> -->
+```
+
+`commit` and `walked` are required; `gate` is optional but checked against
+`verify.py` when present — omit it rather than assert a count you didn't observe.
+`auditor_uat_stamp` fails the gate if the stamp is missing, if a required field
+is absent, if `commit` doesn't resolve to a real commit in this repo, or if
+`gate` contradicts the registered counts.
+
+It does **not** check whether the walk passed. That is the point: the gate
+polices where an acceptance claim came from, never whether the acceptance was
+earned. `verify.py` answers "does it work"; a human answers "does it do what was
+asked"; this only makes the second answer traceable to a commit.
+
+It exists because a results log once claimed a tester count that matched no
+version of this tree — a stale number recovered from a retired doc in `archive/`
+and laundered into a live one. With no commit on the document, "the walking
+machine was on an old tree" and "the number was invented" were indistinguishable.
+
 ### Why the auditor stops at the archive door
 
 `auditor_doc_claims` scans `README.md` and `docs/*.md` — **non-recursive**, so
@@ -165,9 +192,11 @@ trap is what killed the handoffs.
 Honest list, so nothing here reads as stronger than it is.
 
 - The UAT precondition in §3 is a **convention**. Nothing checks that a UAT was
-  walked before a pair is archived. Making acceptance structural — a prompt at
-  commit time rather than a hermetic gate, since UAT is human judgment — is an
-  open design question.
+  walked before a pair is archived, and nothing ever will — that judgment is
+  human. `auditor_uat_stamp` narrows the gap by checking the *provenance* of the
+  claim (which commit, which host, which day), not the claim. Making the
+  acceptance step itself structural — a prompt at commit time rather than a
+  hermetic gate — remains open.
 - `auditor_doc_claims` cannot distinguish a doc *asserting* a gate count from a
   doc *quoting* one. Its docstring claims narrative past-tense mentions don't
   match; they do, whenever the two numbers appear in the original order — as they
