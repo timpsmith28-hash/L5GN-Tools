@@ -63,6 +63,7 @@ python verify.py                           # the gate
 | Tool | Scope | What it does |
 |---|---|---|
 | `workspace_scanner` | project | AST code inventory (classes/functions/imports), vendored code excluded |
+| `file_census` | project | Three-tier file inventory; names the untracked, un-ignored at-risk set |
 | `git_summary` | project | Latest commit, branch, depth, working-tree state |
 | `git_deep_history` | project | Commit ledger + per-author (alias-folded) / per-day stats |
 | `doc_census` | project | Markdown inventory; README / CLAUDE.md / ADR presence |

@@ -14,6 +14,7 @@ from .scanners import (
     env_scanner,
     estate_diff,
     estate_status,
+    file_census,
     git_deep_history,
     git_summary,
     import_scanner,
@@ -25,6 +26,7 @@ from .scanners import (
 
 SCANNERS = [
     workspace_scanner,
+    file_census,
     git_summary,
     git_deep_history,
     doc_census,

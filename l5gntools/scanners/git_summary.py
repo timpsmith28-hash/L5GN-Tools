@@ -5,7 +5,7 @@ from ..contract import SAFE
 
 from pathlib import Path
 
-from ..common import is_git_repo, run_git
+from ..common import NO_OPTIONAL_LOCKS, is_git_repo, run_git
 
 NAME = "git_summary"
 DESCRIPTION = "Latest commit, branch, history depth and working-tree state."
@@ -23,7 +23,10 @@ def scan(target: Path) -> dict:
         parts = latest.split("\x1f")
         h, date, author, subject = (parts + ["", "", "", ""])[:4]
 
-    porcelain = run_git(target, "status", "--porcelain")
+    # --no-optional-locks: asking "is the tree dirty" must not make git refresh
+    # .git/index, which would be a write inside the scanned folder. run_git
+    # injects it too; it is explicit here so the intent is greppable.
+    porcelain = run_git(target, NO_OPTIONAL_LOCKS, "status", "--porcelain")
     dirty = len([ln for ln in porcelain.splitlines() if ln.strip()])
     count = run_git(target, "rev-list", "--count", "HEAD") or "0"
     first = run_git(target, "log", "--reverse", "--format=%cI", "--max-parents=0")

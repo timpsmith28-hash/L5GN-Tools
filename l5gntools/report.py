@@ -168,6 +168,34 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .pill.warn{background:rgba(240,136,62,.15);color:var(--warn)}
   .pill.bad{background:rgba(248,81,73,.15);color:var(--bad)}
   .muted{color:var(--muted)} .num{text-align:right;font-variant-numeric:tabular-nums}
+  /* --- file census tree (Task D). Native <details> does the collapsing, so
+     there is no toggle script to go wrong and no framework to fetch. --- */
+  .risk{border:1px solid var(--bad);background:rgba(248,81,73,.07);border-radius:8px;
+        padding:8px 14px;margin:0 0 20px}
+  .risk>summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:baseline;
+                padding:4px 0;font-size:16px}
+  .riskbody{padding-top:6px}
+  .rgrp{border-top:1px solid var(--line);padding:2px 0}
+  .rgrp>summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;
+                padding:4px 0}
+  .rgrp .kids{max-height:340px;overflow:auto}
+  .proj{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+        margin:0 0 10px;padding:6px 12px}
+  .proj>summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:baseline;
+                padding:4px 0;font-weight:600}
+  .tree{margin:8px 0 4px}
+  .tree details{margin:0}
+  .tree summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;
+                padding:2px 0}
+  summary::-webkit-details-marker{display:none}
+  .tw::before{content:'\25b8';color:var(--muted);display:inline-block;width:12px;flex:none}
+  details[open]>summary>.tw::before{content:'\25be'}
+  .row{display:flex;gap:10px;align-items:baseline;padding:2px 0 2px 22px}
+  .kids{margin-left:5px;border-left:1px solid var(--line);padding-left:12px}
+  .nm{flex:1;min-width:0;overflow-wrap:anywhere}
+  .sz{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px}
+  .massrow{padding:2px 0 2px 22px;display:flex;gap:10px;align-items:baseline;opacity:.8}
+  .note{color:var(--warn);font-size:12px;padding:4px 0 4px 22px}
 </style></head>
 <body>
 <h1>L5GN Estate Report</h1>
@@ -201,6 +229,140 @@ addTab('status','Git Status',v=>{
 addTab('code','Code Inventory',v=>{
   const rows=DATA.projects.map(p=>{const w=p.workspace_scanner||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(w.py_files!=null?w.py_files:'')+'</span>','<span class="num">'+(w.classes!=null?w.classes:'')+'</span>','<span class="num">'+(w.functions!=null?w.functions:'')+'</span>',esc((w.top_classes||[]).slice(0,8).join(', '))];});
   v.innerHTML=table(['Project','.py files','Classes','Functions','Sample classes'],rows);
+});
+// --- Files tab: the file census, browsable (Task D) -------------------------
+// The at-risk set renders FIRST and outside the tree: "untracked and not
+// ignored" is the thing worth seeing before anything else, and burying it
+// inside a collapsed folder would be the same as not reporting it.
+function fmtB(n){if(n==null)return '';const u=['B','KB','MB','GB','TB'];let i=0,x=n;
+  while(x>=1024&&i<u.length-1){x/=1024;i++;}
+  return (i===0?x:x.toFixed(x<10?1:0))+' '+u[i];}
+function censusTree(c){
+  const mk=n=>({name:n,dirs:{},files:[],mass:[],direct:0,dbytes:0,collapsed:false});
+  const root=mk('.');
+  function node(p){
+    if(!p||p==='.')return root;
+    let cur=root;
+    for(const part of p.split('/')){if(!cur.dirs[part])cur.dirs[part]=mk(part);cur=cur.dirs[part];}
+    return cur;
+  }
+  (c.directories||[]).forEach(d=>{const n=node(d.path);
+    n.direct=d.files;n.dbytes=d.bytes;n.ext=d.ext;n.collapsed=!!d.depth_collapsed;});
+  (c.files||[]).forEach(f=>{const i=f.path.lastIndexOf('/');
+    node(i<0?'.':f.path.slice(0,i)).files.push(f);});
+  (c.mass||[]).forEach(m=>{
+    if(m.partial){const n=node(m.path);n.mass.push(Object.assign({},m,{name:'(ignored files here)'}));return;}
+    const i=m.path.lastIndexOf('/');
+    node(i<0?'.':m.path.slice(0,i)).mass.push(Object.assign({},m,{name:i<0?m.path:m.path.slice(i+1)}));
+  });
+  (function total(n){let f=n.direct,b=n.dbytes;
+    n.mass.forEach(m=>{f+=m.files;b+=m.bytes;});
+    Object.keys(n.dirs).forEach(k=>{const t=total(n.dirs[k]);f+=t.f;b+=t.b;});
+    n.tf=f;n.tb=b;return {f:f,b:b};})(root);
+  return root;
+}
+function renderNode(n,label,open){
+  const kids=Object.keys(n.dirs).sort();
+  let h='<details'+(open?' open':'')+'><summary><span class="tw"></span>'
+       +'<span class="nm">'+esc(label)+'/</span><span class="sz">'
+       +n.tf+' files &middot; '+fmtB(n.tb)+'</span></summary><div class="kids">';
+  if(n.collapsed)h+='<div class="note">contains folded-in content from below the depth cap</div>';
+  kids.forEach(k=>{h+=renderNode(n.dirs[k],k,false);});
+  // Tier 3 rows: one line, never expandable -- there is nothing behind them.
+  n.mass.forEach(m=>{h+='<div class="massrow"><span class="nm muted">'+esc(m.name)
+    +(m.partial?'':'/')+'</span><span class="sz">'+m.files+' files &middot; '+fmtB(m.bytes)
+    +'  '+pill(m.reason,m.reason==='ignored'?'muted':'warn')+'</span></div>';});
+  n.files.forEach(f=>{const p=f.git==='untracked'?' '+pill('untracked','bad'):'';
+    h+='<div class="row"><span class="nm">'+esc(f.name||f.path.split('/').pop())+p
+      +'</span><span class="sz">'+fmtB(f.bytes)+'</span></div>';});
+  if(!kids.length&&!n.mass.length&&!n.files.length)h+='<div class="note muted">(empty)</div>';
+  return h+'</div></details>';
+}
+addTab('files','Files',v=>{
+  const withCensus=DATA.projects.filter(p=>p.file_census);
+  if(!withCensus.length){v.innerHTML='<p class="muted">No file_census data in this build. '
+    +'Run <code>python run.py build --fresh</code>.</p>';return;}
+
+  // The at-risk set is grouped by project + top-level directory. On a real
+  // estate it runs to thousands of files concentrated in a handful of places
+  // (one directory accounted for 3,599 of 3,673 in the first real build), and a
+  // 3,673-row table is a list nobody reads -- which is the same failure as not
+  // reporting it. Grouping is presentation only: every path is still here,
+  // one expand away, and every count is exact.
+  const groups={}; const rollups=[]; let riskFiles=0, riskBytes=0;
+  withCensus.forEach(p=>{(p.file_census.at_risk||[]).forEach(a=>{
+    if(a.rollup){rollups.push([p.name,a]);riskFiles+=a.files;riskBytes+=a.bytes;return;}
+    const cut=a.path.indexOf('/');
+    const dir=cut<0?'(project root)':a.path.slice(0,cut);
+    const key=JSON.stringify([p.name,dir]);
+    (groups[key]=groups[key]||{proj:p.name,dir:dir,files:[],bytes:0}).files.push(a);
+    groups[key].bytes+=a.bytes; riskFiles++; riskBytes+=a.bytes;
+  });});
+  const glist=Object.keys(groups).map(k=>groups[k])
+    .sort((a,b)=>b.files.length-a.files.length||b.bytes-a.bytes);
+  const nogit=withCensus.filter(p=>p.file_census.at_risk_note);
+
+  let h='<details class="risk" open><summary><span class="tw"></span>'
+    +'<span class="nm"><b>At risk</b> &mdash; on disk, not in git</span><span class="sz">'
+    +(riskFiles?riskFiles+' files &middot; '+fmtB(riskBytes)+' across '+glist.length+' location(s)'
+              :'nothing at risk')+'</span></summary><div class="riskbody">'
+    +'<div class="muted">Untracked and not ignored. Delete the folder and these are gone. '
+    +'Grouped by directory and never truncated &mdash; expand a row for every path. '
+    +'A vendored tree that is wholly unprotected shows as one exact rollup.</div>';
+  if(!riskFiles&&!nogit.length)
+    h+='<p>'+pill('clean','ok')+' every file is tracked or deliberately ignored.</p>';
+  rollups.forEach(r=>{const a=r[1];
+    h+='<div class="massrow"><span class="nm"><b>'+esc(r[0])+'</b> / <code>'+esc(a.path)
+      +'/</code> '+pill('whole '+a.reason+' tree: '+a.files+' files','bad')
+      +'</span><span class="sz">'+fmtB(a.bytes)+'</span></div>';});
+  glist.forEach((g,i)=>{
+    h+='<details class="rgrp" data-g="'+i+'"><summary><span class="tw"></span>'
+      +'<span class="nm"><b>'+esc(g.proj)+'</b> / <code>'+esc(g.dir)
+      +(g.dir==='(project root)'?'':'/')+'</code></span><span class="sz">'
+      +g.files.length+' file'+(g.files.length===1?'':'s')+' &middot; '+fmtB(g.bytes)
+      +'</span></summary><div class="kids" data-pending="1"></div></details>';});
+  if(nogit.length)h+='<p>'+pill('not a git repository','bad')+' '
+    +esc(nogit.map(p=>p.name).join(', '))+' &mdash; no file in these is in version control at all.</p>';
+  h+='</div></details>';
+
+  withCensus.forEach((p,i)=>{const c=p.file_census,s=c.summary||{};
+    h+='<details class="proj" data-i="'+i+'"><summary><span class="tw"></span>'
+      +'<span class="nm">'+esc(p.name)+'</span><span class="sz">'
+      +(s.total_files||0)+' files &middot; '+fmtB(s.total_bytes)+' &middot; working set '
+      +((s.working_set||{}).files||0)+' &middot; mass '+fmtB((s.mass||{}).bytes)
+      +((s.at_risk||{}).files?'  '+pill((s.at_risk).files+' at risk','bad'):'')
+      +'</span></summary><div class="tree" data-pending="1"></div></details>';});
+  v.innerHTML=h;
+
+  // Build each tree on first expand: eleven full trees up front is a lot of DOM
+  // for a page whose whole point is that it opens instantly from a file:// URL.
+  v.querySelectorAll('details.proj').forEach(d=>{
+    d.addEventListener('toggle',()=>{
+      const box=d.querySelector('.tree');
+      if(!d.open||!box.dataset.pending)return;
+      delete box.dataset.pending;
+      const c=withCensus[+d.dataset.i].file_census;
+      let inner=renderNode(censusTree(c),c.project||'.',true);
+      if(c.truncated)inner='<div class="note">Per-file listing capped at '+c.file_cap
+        +' of '+c.file_count+' working-set files. Directory totals below are complete; '
+        +'the at-risk set above is complete.</div>'+inner;
+      box.innerHTML=inner;
+    });
+  });
+  // Same lazy contract for an at-risk group: one of them holds thousands of
+  // rows, and paying for it before anyone clicks would undo the point.
+  v.querySelectorAll('details.rgrp').forEach(d=>{
+    d.addEventListener('toggle',()=>{
+      const box=d.querySelector('.kids');
+      if(!d.open||!box.dataset.pending)return;
+      delete box.dataset.pending;
+      const g=glist[+d.dataset.g];
+      box.innerHTML=g.files.slice().sort((a,b)=>b.bytes-a.bytes).map(a=>
+        '<div class="row"><span class="nm"><code>'+esc(a.path)+'</code></span>'
+        +'<span class="sz">'+fmtB(a.bytes)+' &middot; '+esc((a.mtime||'').slice(0,10))
+        +'</span></div>').join('');
+    });
+  });
 });
 addTab('docs','Docs',v=>{
   const rows=DATA.projects.map(p=>{const d=p.doc_census||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(d.doc_count||0)+'</span>',d.has_readme?pill('yes','ok'):pill('no','bad'),d.has_claude_md?pill('yes','ok'):pill('no','muted'),'<span class="num">'+(d.adr_files||0)+'</span>'];});

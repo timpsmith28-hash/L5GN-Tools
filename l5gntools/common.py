@@ -136,11 +136,50 @@ def is_git_repo(path: Path) -> bool:
     return (path / ".git").exists()
 
 
+#: The global flag that stops git refreshing ``.git/index`` while answering a
+#: read-only question. ``git status`` (and ``diff``, and anything that stats the
+#: working tree) will opportunistically rewrite the index it just re-scanned --
+#: a *write inside a scanned folder*, which the read-only contract forbids. The
+#: flag is not an optimisation; it is the contract.
+NO_OPTIONAL_LOCKS = "--no-optional-locks"
+
+#: Subcommands that only read. ``--no-optional-locks`` is injected for these so a
+#: future caller cannot forget it. Deliberately an allowlist, not a denylist: a
+#: subcommand nobody has thought about gets no injection and behaves exactly as
+#: it does today, so adding one here is a decision rather than an accident.
+READ_ONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset({
+    "status", "diff", "ls-files", "log", "rev-list", "rev-parse", "show",
+    "cat-file", "branch", "remote", "shortlog", "for-each-ref", "describe",
+})
+
+
+def git_argv(path: Path, args: tuple[str, ...] | list[str]) -> list[str]:
+    """The argv :func:`run_git` will execute -- pure, so a tester can assert the
+    injection without spawning git.
+
+    ``--no-optional-locks`` is a *global* option, so it goes before the
+    subcommand. Injection is idempotent: a caller that passes the flag
+    explicitly (which the git-touching scanners do, so the intent is greppable
+    at the call site) gets exactly one copy.
+    """
+    args = list(args)
+    subcommand = next((a for a in args if not a.startswith("-")), None)
+    prefix = ([NO_OPTIONAL_LOCKS]
+              if subcommand in READ_ONLY_GIT_SUBCOMMANDS
+              and NO_OPTIONAL_LOCKS not in args
+              else [])
+    return ["git", "-C", str(path), *prefix, *args]
+
+
 def run_git(path: Path, *args: str) -> str:
-    """Run ``git -C path <args>`` and return stripped stdout ('' on failure)."""
+    """Run ``git -C path <args>`` and return stripped stdout ('' on failure).
+
+    Read-only subcommands are run with ``--no-optional-locks`` -- see
+    :func:`git_argv`.
+    """
     try:
         res = subprocess.run(
-            ["git", "-C", str(path), *args],
+            git_argv(path, args),
             capture_output=True, text=True, timeout=60,
         )
         return res.stdout.strip()
@@ -152,7 +191,10 @@ def toolkit_git_info() -> dict:
     """The toolkit's own git state, so a report reveals which build produced it
     (cross-machine version parity). ``commit`` is None if git is unavailable."""
     commit = run_git(TOOLKIT_ROOT, "rev-parse", "--short", "HEAD")
-    dirty = bool(run_git(TOOLKIT_ROOT, "status", "--porcelain"))
+    # --no-optional-locks explicit at the call site as well as injected by
+    # run_git: this one asks git to stat the whole working tree, which is
+    # precisely when git wants to rewrite the index it just scanned.
+    dirty = bool(run_git(TOOLKIT_ROOT, NO_OPTIONAL_LOCKS, "status", "--porcelain"))
     return {"commit": commit or None, "dirty": dirty}
 
 

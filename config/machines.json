@@ -20,11 +20,13 @@
       {"path": "C:/Users/you/Github/L5GN", "scope": "l5gn"}
     ]
   },
+  "_census_comment": "'run.py census' is role-aware. A producer censuses its 'roots'. A consumer censuses two roots: the deployed toolkit ('code_root', optional -- it defaults to the toolkit the command is running from, which IS the deploy) and the vault ('chronicler_home'). Both resolved here, never hardcoded.",
   "RENAME-ME-KNIGHT": {
     "role": "consumer",
     "estate": "both",
     "vault": "/home/you/vault/chronicler.db",
     "estates_dir": "/home/you/vault/estates",
-    "chronicler_home": "/home/you/vault"
+    "chronicler_home": "/home/you/vault",
+    "code_root": "/home/you/L5GN-Tools"
   }
 }

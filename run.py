@@ -9,6 +9,7 @@ Usage:
     python run.py build                      # run everything -> data/ + report.html
     python run.py <tool> [--target NAME]     # one tool on one project
     python run.py <tool> --all               # one tool across the whole estate
+    python run.py census [--target PATH]     # this machine reports its own domain
 
 Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py serve  [--port N] [--host H]   # Datasette read surface (snapshot, --immutable)
@@ -350,6 +351,29 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
         return 0
 
 
+def _cmd_census(args: argparse.Namespace) -> int:
+    """Role-aware machine census (Task C).
+
+    A consumer never runs `build`, so `file_census` alone leaves the knight
+    invisible. This asks whichever machine it runs on to describe its own ground:
+    a producer's configured roots, or the knight's code root plus vault root.
+    Paths come from config; nothing is hardcoded.
+    """
+    from pathlib import Path
+    from l5gntools import census as cen
+    from l5gntools import config
+    m = config.machine()
+    try:
+        report = cen.run_census(machine=m,
+                                target=Path(args.target) if args.target else None)
+    except FileNotFoundError as exc:
+        print(f"census: {exc}", file=sys.stderr)
+        return 2
+    for line in cen.format_summary(report):
+        print(line)
+    return 0
+
+
 def _cmd_config() -> int:
     from l5gntools import config
     m = config.machine()
@@ -376,6 +400,8 @@ def _cmd_list() -> int:
         scope = "estate" if m.ESTATE_LEVEL else "project"
         print(f"  {m.NAME:<20} [{scope:^7}]  {m.DESCRIPTION}")
     print("\n  build                [ all   ]  run every tool -> data/ + report.html")
+    print("  census               [machine]  this machine reports its own domain "
+          "(producer roots, or the knight's code + vault roots)")
     return 0
 
 
@@ -424,8 +450,9 @@ def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
-                   help="a tool name, or 'list' / 'build' / 'config' / 'deposit' / "
-                        "'consume' / 'ingest' / 'serve' / 'review' / 'backup' / 'scrape'")
+                   help="a tool name, or 'list' / 'build' / 'census' / 'config' / "
+                        "'deposit' / 'consume' / 'ingest' / 'serve' / 'review' / "
+                        "'backup' / 'scrape'")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -455,6 +482,8 @@ def main(argv: list[str]) -> int:
         return _cmd_deposit(args)
     if args.command == "consume":
         return _cmd_consume()
+    if args.command == "census":
+        return _cmd_census(args)
     if args.command == "backup":
         return _cmd_backup(args)
     if args.command == "serve":

@@ -54,11 +54,18 @@ from db import CHRONICLER_ROOT
 from build_inventory import (
     walk_paths, NONGIT_MAX_DEPTH, git_head, nongit_signature,
     read_json, write_json_atomic, utc_now,
+    census_signature, index_deposits,
+)
+# Deposit discovery is build_registry's, reused rather than re-implemented --
+# the same single estate-resolution path build_inventory now uses.
+from build_registry import (
+    REGISTRY_PATH,
+    find_estate_snapshots,
+    read_estate_snapshot,
+    resolve_estates_dir,
 )
 
 GITHUB_ROOT_FS = CHRONICLER_ROOT.parent.parent
-REGISTRY_PATH = GITHUB_ROOT_FS / "L5GN" / ".intel_sync" / "project_registry.json"
-SCOPE_TO_ROOT = {"l5gn": "L5GN", "mcf": "MCF"}
 
 PRODUCER_VERSION = "build_activity/1.0"
 BURST_GAP_DAYS = 7          # spec S3: a gap > 7 days splits a burst
@@ -233,39 +240,118 @@ def unchanged(entry: dict, sig) -> bool:
     return act.get("source_signature") == val
 
 
+def deposit_dates(dep: dict):
+    """Sorted unique activity dates for one deposited project.
+
+    Git projects: every commit date from `git_deep_history.commits`, which the
+    producer already collected -- so the burst clustering S3 needs works without
+    ever reaching back to a producer's disk. Falls back to `commits_by_day`, and
+    then to the first/last pair in `git_summary`, so a thin deposit degrades to a
+    coarse window rather than to nothing.
+
+    Non-git projects: the census file mtimes. Same coarse precision as the old
+    local walk, from the deposit instead.
+    """
+    deep, gs, census = dep["deep"], dep["git_summary"], dep["census"]
+    is_git = bool(gs.get("is_git") or deep.get("is_git"))
+
+    if is_git:
+        dates = {d for d in (parse_iso_date(c.get("date"))
+                             for c in deep.get("commits") or []) if d}
+        if not dates:
+            dates = {d for d in (parse_iso_date(k)
+                                 for k in (deep.get("commits_by_day") or {})) if d}
+        if not dates:
+            dates = {d for d in (parse_iso_date(gs.get("first_commit_date")),
+                                 parse_iso_date(gs.get("latest_date"))) if d}
+        return sorted(dates), "commit", bool(deep.get("truncated"))
+
+    dates = {d for d in (parse_iso_date(f.get("mtime"))
+                         for f in census.get("files") or []) if d}
+    return sorted(dates), "mtime", bool(census.get("truncated"))
+
+
+def build_activity_from_deposit(dep: dict) -> dict:
+    dates, precision, truncated = deposit_dates(dep)
+    gs = dep["git_summary"]
+    is_git = bool(gs.get("is_git"))
+    commit = gs.get("latest_hash") if is_git else None
+    return {
+        "first_commit": dates[0].isoformat() if dates else None,
+        "last_commit": dates[-1].isoformat() if dates else None,
+        "bursts": cluster_bursts(dates),
+        "precision": precision,
+        # A truncated source means the EARLIEST dates are the ones missing (git
+        # log is newest-first), so first_commit may be later than the truth.
+        # Said out loud rather than silently narrowing the window.
+        "truncated_source": truncated,
+        "source": "deposit",
+        "source_commit": commit,
+        "source_signature": None if commit else census_signature(dep["census"]),
+        "built_at": utc_now(),
+    }
+
+
 def resolve_fs(entry: dict) -> Path:
-    root = SCOPE_TO_ROOT.get(entry["scope"])
-    if root is None:
-        raise SystemExit(f"[build_activity] unknown scope {entry['scope']} "
-                         f"on {entry['canonical_name']}")
-    return GITHUB_ROOT_FS / root / entry["canonical_name"]
+    """Local-disk path from the deposit's recorded path -- the fallback only.
+
+    It deliberately does NOT reconstruct ``<root>/<scope>/<canonical_name>``:
+    that layout exists on no machine in the estate and was the defect that kept
+    every project resolving missing here.
+    """
+    return Path(entry.get("path") or "")
 
 
-def run(force: bool, dry_run: bool):
+def run(force: bool, dry_run: bool, estates_dir: str | None = None):
     if not REGISTRY_PATH.is_file():
         raise SystemExit(f"[build_activity] registry missing: {REGISTRY_PATH} "
                          "(run build_registry.py first)")
     registry = read_json(REGISTRY_PATH)
 
+    resolved = resolve_estates_dir(estates_dir)
+    snapshots = [read_estate_snapshot(e) for e in find_estate_snapshots(resolved)]
+    deposits = index_deposits(snapshots)
+    if not deposits:
+        where = str(resolved) if resolved else "(no estates_dir configured)"
+        raise SystemExit(
+            f"[build_activity] no estate deposits found under {where} and no "
+            "local build output. Run `run.py build` on a producer and "
+            "`run.py deposit --push`, or pass --estates-dir.")
+
     built, skipped, missing = [], [], []
     for entry in registry["projects"]:
+        name = entry["canonical_name"]
         if entry.get("_orphaned"):
-            missing.append(entry["canonical_name"])
+            missing.append(name)
             continue
-        fs_path = resolve_fs(entry)
-        if not fs_path.is_dir():
-            missing.append(entry["canonical_name"])
-            continue
-        is_git = entry.get("vcs") == "git"
-        sig = current_signature(fs_path, is_git)
-        if not force and unchanged(entry, sig):
-            skipped.append(entry["canonical_name"])
-            continue
-        act = build_activity_block(fs_path, is_git)
+
+        dep = deposits.get(name)
+        if dep:
+            commit = (dep["git_summary"].get("latest_hash")
+                      if dep["git_summary"].get("is_git") else None)
+            sig = ("git", commit) if commit else ("sig", census_signature(dep["census"]))
+            if not force and unchanged(entry, sig):
+                skipped.append(name)
+                continue
+            act = build_activity_from_deposit(dep)
+        else:
+            # Fallback: producer running against its own tree, project not in
+            # any deposit. Deposits win wherever both exist.
+            fs_path = resolve_fs(entry)
+            if not fs_path.is_dir():
+                missing.append(name)
+                continue
+            is_git = entry.get("vcs") == "git"
+            sig = current_signature(fs_path, is_git)
+            if not force and unchanged(entry, sig):
+                skipped.append(name)
+                continue
+            act = build_activity_block(fs_path, is_git)
+
         if not dry_run:
             entry["activity"] = act
             entry["registry_updated"] = utc_now()
-        built.append((entry["canonical_name"], act))
+        built.append((name, act))
 
     if not dry_run:
         registry["generated_at"] = utc_now()

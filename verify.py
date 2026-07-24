@@ -24,6 +24,8 @@ AUDITORS: list[str] = [
 TESTERS: list[str] = [
     "tests.tester_common",
     "tests.tester_scanners",
+    "tests.tester_file_census",
+    "tests.tester_census",
     "tests.tester_contract",
     "tests.tester_config",
     "tests.tester_vault_reader",
@@ -40,6 +42,8 @@ TESTERS: list[str] = [
     "tests.tester_uat_stamp",
     "tests.tester_dbsafe",
     "tests.tester_build_registry",
+    "tests.tester_build_inventory",
+    "tests.tester_build_activity",
     "tests.tester_registry_tiers",
     "tests.tester_backup",
     "tests.tester_serve",
