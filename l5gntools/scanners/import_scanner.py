@@ -8,7 +8,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from ..common import is_vendored, iter_files
+from ..common import iter_files
+from ._scope import Scope
 
 NAME = "import_scanner"
 DESCRIPTION = "Import census: stdlib vs third-party vs local module usage."
@@ -24,6 +25,7 @@ def _stdlib_names() -> set[str]:
 
 
 def scan(target: Path) -> dict:
+    scope = Scope(target)
     stdlib = _stdlib_names()
     # Local top-level module/package names = python files/dirs at project root.
     local: set[str] = {p.stem for p in target.glob("*.py")}
@@ -33,7 +35,7 @@ def scan(target: Path) -> dict:
     third_party: Counter[str] = Counter()
     files = 0
     for path in iter_files(target, suffixes=(".py",)):
-        if is_vendored(path):
+        if scope.skip(path):
             continue
         files += 1
         try:
@@ -56,4 +58,5 @@ def scan(target: Path) -> dict:
         "py_files_scanned": files,
         "third_party": dict(third_party.most_common()),
         "top_imports": dict(counts.most_common(25)),
+        "scope": scope.report(),
     }

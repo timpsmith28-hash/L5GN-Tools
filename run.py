@@ -417,7 +417,14 @@ def _cmd_build(args: argparse.Namespace) -> int:
         print("  (subset cached; run 'build' with no --only to assemble)")
         return 0
     print(f"Building estate report over {len(projects)} project(s) [{mode}]...")
-    data_path, report_path = build_all(projects, resume=not args.fresh)
+    try:
+        data_path, report_path = build_all(projects, resume=not args.fresh)
+    except RuntimeError as exc:
+        # The report self-check failed: what was written is not a parseable
+        # governance artifact. Fail loud rather than leave a broken report that
+        # reads as complete (COWORK_BRIEF_scanner_bugfixes.md Task B.2).
+        print(f"build: {exc}", file=sys.stderr)
+        return 1
     print(f"  data feed : {data_path}")
     print(f"  viewer    : {report_path}")
     return 0

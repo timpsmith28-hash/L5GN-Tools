@@ -198,6 +198,18 @@ def toolkit_git_info() -> dict:
     return {"commit": commit or None, "dirty": dirty}
 
 
+# --- Honest truncation -------------------------------------------------------
+def capped(items: list, cap: int) -> tuple[list, bool, int]:
+    """Bound a list-producing scanner's output *honestly*.
+
+    Returns ``(kept, truncated, true_count)`` -- the same contract `file_census`
+    uses: never a silent slice. A scanner emits ``kept`` alongside ``truncated``
+    and the true ``count`` so a reader (and the report) can tell a short list from
+    a capped one. The unbounded alternative is what truncated the 18:22 build
+    mid-write (`COWORK_BRIEF_scanner_bugfixes.md` Task B)."""
+    return list(items[:cap]), len(items) > cap, len(items)
+
+
 # --- Output (the ONLY writer -- always under DATA_DIR) -----------------------
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")

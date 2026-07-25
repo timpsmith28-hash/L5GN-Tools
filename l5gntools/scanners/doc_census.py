@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from ..common import iter_files, rel
+from ._scope import Scope
 
 NAME = "doc_census"
 DESCRIPTION = "Markdown inventory: titles, headings, sizes, README/ADR presence."
@@ -18,11 +19,14 @@ _HEADING = re.compile(r"^#{1,6}\s", re.MULTILINE)
 
 
 def scan(target: Path) -> dict:
+    scope = Scope(target)
     docs: list[dict] = []
     adr_count = 0
     has_readme = has_claude = has_glossary = False
 
     for path in iter_files(target, suffixes=(".md",)):
+        if scope.skip(path):
+            continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         m = _H1.search(text)
         name_lower = path.name.lower()
@@ -51,4 +55,5 @@ def scan(target: Path) -> dict:
         "has_glossary": has_glossary,
         "adr_files": adr_count,
         "docs": docs,
+        "scope": scope.report(),
     }

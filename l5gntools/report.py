@@ -18,6 +18,130 @@ from .common import (DATA_DIR, ESTATE_ROOT, TOOLKIT_ROOT, now_iso,
 from .registry import SCANNERS
 
 
+#: A single (project, scanner) payload larger than this is called out in the
+#: report as an anomaly. Not fatal -- a large `file_census.at_risk` is legitimate
+#: -- but "298 markers from one project" is a signal, not a detail
+#: (`COWORK_BRIEF_scanner_bugfixes.md` Task B.3).
+PAYLOAD_ANOMALY_BYTES = 500_000
+
+#: Marker the HTML template uses to embed the data feed. The self-check re-reads
+#: the written report and confirms the block between this and the following line
+#: still parses as JSON -- catching the truncated-mid-write failure class.
+_DATA_OPEN = "const DATA = "
+_DATA_CLOSE = ";\nconst esc="
+
+
+def scope_summary(estate: dict) -> list[dict]:
+    """Per-root scope honesty (governance Task A / D1).
+
+    For each configured root: how many projects were scanned under its scope, and
+    whether it was **scanned** (non-empty) or resolved to **empty** this run. A
+    root listed but yielding zero projects must read as "empty this run", not as
+    "zero projects exist" -- the work run's bug was labelling both the same and
+    letting a reader conclude L5GN had no projects.
+    """
+    by_scope: dict[str, int] = {}
+    for p in estate.get("projects", []):
+        s = p.get("scope") or "(untagged)"
+        by_scope[s] = by_scope.get(s, 0) + 1
+
+    out: list[dict] = []
+    seen: set[str] = set()
+    for root in estate.get("roots", []):
+        scope = root.get("scope")
+        n = by_scope.get(scope, 0) if scope else 0
+        out.append({"path": root.get("path"), "scope": scope, "projects": n,
+                    "state": "scanned" if n > 0 else "empty"})
+        if scope:
+            seen.add(scope)
+    # Scopes present in the data but with no matching declared root (e.g. legacy
+    # sibling discovery) still get a row, so the selector has something honest.
+    for s, n in sorted(by_scope.items()):
+        if s not in seen and s != "(untagged)":
+            out.append({"path": None, "scope": s, "projects": n, "state": "scanned"})
+    return out
+
+
+def _payload_audit(projects_out: list[dict], estate_out: dict) -> list[dict]:
+    """Per-(project, scanner) size census. Flags oversized payloads and any
+    scanner that hit its honest cap, so a runaway is visible in the report rather
+    than only discovered when the whole feed fails to render."""
+    anomalies: list[dict] = []
+
+    def consider(project: str, scanner: str, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        size = len(json.dumps(payload, default=str))
+        truncated = bool(payload.get("truncated"))
+        if size > PAYLOAD_ANOMALY_BYTES or truncated:
+            anomalies.append({
+                "project": project, "scanner": scanner, "bytes": size,
+                "truncated": truncated,
+            })
+
+    for entry in projects_out:
+        name = entry.get("name", "?")
+        for key, val in entry.items():
+            if key in ("name", "path", "scope"):
+                continue
+            consider(name, key, val)
+    for key, val in (estate_out or {}).items():
+        consider("(estate)", key, val)
+    anomalies.sort(key=lambda a: -a["bytes"])
+    return anomalies
+
+
+def extract_embedded_data(html: str) -> str:
+    """The JSON string the HTML viewer will parse, pulled back out of the written
+    page. Raises ValueError if the markers are gone -- itself a broken report."""
+    try:
+        start = html.index(_DATA_OPEN) + len(_DATA_OPEN)
+        end = html.index(_DATA_CLOSE, start)
+    except ValueError as exc:
+        raise ValueError("report.html: data markers not found -- template broken "
+                         "or output truncated before the script body") from exc
+    return html[start:end]
+
+
+def validate_report(estate_text: str, html_text: str,
+                    anomalies: list[dict] | None = None) -> list[str]:
+    """Pure self-check: both the data feed and the report's embedded copy must be
+    valid JSON. Returns human-readable violations (empty == clean). The testable
+    core of :func:`_self_validate`.
+
+    On a parse failure it names the largest payload from ``anomalies`` as the
+    likely culprit -- the best available attribution for a truncated feed."""
+    problems: list[str] = []
+    try:
+        json.loads(estate_text)
+    except ValueError as exc:
+        problems.append(f"data/estate.json does not parse: {exc}")
+    culprit = ""
+    if anomalies:
+        top = anomalies[0]
+        culprit = (f" -- largest payload is {top['scanner']} on {top['project']} "
+                   f"({top['bytes']} bytes); suspect it first")
+    try:
+        json.loads(extract_embedded_data(html_text))
+    except ValueError as exc:
+        problems.append(f"report.html embedded DATA does not parse: {exc}{culprit}")
+    return problems
+
+
+def _self_validate(data_path: Path, report_path: Path,
+                   anomalies: list[dict] | None) -> None:
+    """Re-read what was just written and fail loud if it is not parseable JSON.
+    A report you cannot parse fails its own job (Task B.2)."""
+    problems = validate_report(
+        data_path.read_text(encoding="utf-8"),
+        report_path.read_text(encoding="utf-8"),
+        anomalies,
+    )
+    if problems:
+        raise RuntimeError("report self-check FAILED (the emitted governance "
+                           "artifact is broken):\n  - " + "\n  - ".join(problems))
+
+
 def _cached(relative_name: str):
     p = (DATA_DIR / relative_name)
     if p.exists() and p.stat().st_size > 0:
@@ -99,9 +223,14 @@ def build_estate(projects: list[Path], resume: bool = True,
         "producer_host": _machine.get("_hostname"),
         "roots": [{"path": str(e["path"]), "scope": e.get("scope")}
                   for e in _config.estate_roots_tagged()],
+        # Oversized / capped scanner payloads, surfaced so a runaway is a visible
+        # line in the report rather than a silent truncation (Task B.3).
+        "anomalies": _payload_audit(projects_out, estate_out),
         "projects": projects_out,
         "estate": estate_out,
     }
+    # Per-root scope honesty, computed after projects so it can count them.
+    estate["scope_summary"] = scope_summary(estate)
     write_json("estate.json", estate)
     _archive_snapshot(estate)
     return estate
@@ -131,7 +260,11 @@ def render_html(estate: dict) -> Path:
 def build_all(projects: list[Path], resume: bool = True) -> tuple[Path, Path]:
     estate = build_estate(projects, resume=resume, with_estate=True)
     report = render_html(estate)
-    return DATA_DIR / "estate.json", report
+    data_path = DATA_DIR / "estate.json"
+    # Re-read from disk and confirm both artifacts parse. A truncated write looks
+    # like a finished report until you try to use it -- so fail loud here instead.
+    _self_validate(data_path, report, estate.get("anomalies"))
+    return data_path, report
 
 
 def scan_subset(projects: list[Path], resume: bool = True) -> None:
@@ -196,10 +329,25 @@ _TEMPLATE = r"""<!DOCTYPE html>
   .sz{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px}
   .massrow{padding:2px 0 2px 22px;display:flex;gap:10px;align-items:baseline;opacity:.8}
   .note{color:var(--warn);font-size:12px;padding:4px 0 4px 22px}
+  .banner{border:1px solid var(--warn);background:rgba(240,136,62,.10);border-radius:8px;
+          padding:10px 14px;margin:0 0 16px;font-size:13px}
+  .banner b{color:var(--warn)}
+  .critban{border:2px solid var(--bad);background:rgba(248,81,73,.12);border-radius:8px;
+           padding:12px 16px;margin:0 0 16px;font-size:13px}
+  .critban b{color:var(--bad)}
+  .tierpill{font-weight:600}
+  #scopebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px;font-size:13px}
+  #scopebar select{background:var(--panel);color:var(--fg);border:1px solid var(--line);
+                   border-radius:6px;padding:4px 8px;font:inherit}
+  .scopehon{color:var(--muted)} .scopehon .empty{color:var(--warn)}
+  .caveat{color:var(--warn);font-size:12px}
 </style></head>
 <body>
 <h1>L5GN Estate Report</h1>
 <div class="sub" id="meta"></div>
+<div id="critical"></div>
+<div id="anomalies"></div>
+<div id="scopebar"></div>
 <div class="tabs" id="tabs"></div>
 <div id="views"></div>
 <script>
@@ -209,6 +357,66 @@ function pill(t,c){return '<span class="pill '+c+'">'+esc(t)+'</span>';}
 function table(h,rows){let s='<table><thead><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>';s+=rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('');return s+'</tbody></table>';}
 document.getElementById('meta').textContent =
   'Generated '+DATA.generated_at+'  |  toolkit v'+DATA.toolkit_version+' ('+(DATA.toolkit_commit||'nogit')+(DATA.toolkit_dirty?'-dirty':'')+')  |  '+DATA.projects.length+' projects  |  '+DATA.estate_root;
+// Payload anomalies (Task B.3): a runaway or capped scanner is a visible banner,
+// not a surprise truncation. Silent when the estate is clean.
+(function(){const a=DATA.anomalies||[];if(!a.length)return;
+  const fmt=n=>{const u=['B','KB','MB'];let i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(1):x)+' '+u[i];};
+  const rows=a.map(x=>'<code>'+esc(x.scanner)+'</code> on <b>'+esc(x.project)+'</b> &mdash; '
+    +fmt(x.bytes)+(x.truncated?' '+pill('capped','warn'):' '+pill('oversized','bad'))).join('<br>');
+  document.getElementById('anomalies').innerHTML=
+    '<div class="banner"><b>&#9888; Payload anomalies ('+a.length+')</b> &mdash; a scanner emitted an '
+    +'unusually large or capped payload. Capped means honestly truncated; oversized means review the source.<br>'+rows+'</div>';})();
+// --- Blast radius (Task A/B) ------------------------------------------------
+function tierPill(t){const c=(t==='raw-write-prod'||t==='raw-write')?'bad'
+  :t==='guarded-write'?'warn':'muted';
+  return '<span class="pill '+c+' tierpill">'+esc(t)+'</span>';}
+// UNCOMMITTED-CRITICAL: the single loudest thing the report can say, at the very
+// top -- write-capable code with no commit behind it. Estate-wide, not scoped.
+(function(){const rows=[];
+  DATA.projects.forEach(p=>{const b=p.blast_radius;if(!b||!b.uncommitted_critical)return;
+    b.uncommitted_critical.forEach(c=>rows.push([p.name,c]));});
+  if(!rows.length)return;
+  const rank={'raw-write-prod':4,'raw-write':3,'guarded-write':2};
+  rows.sort((a,b)=>(rank[b[1].tier]||0)-(rank[a[1].tier]||0));
+  const body=rows.map(r=>'<code>'+esc(r[0])+'</code> / <code>'+esc(r[1].path)+'</code> '
+    +tierPill(r[1].tier)+' <span class="muted">'+esc(r[1].git_state)+'</span>').join('<br>');
+  document.getElementById('critical').innerHTML=
+    '<div class="critban"><b>&#9888; UNCOMMITTED-CRITICAL ('+rows.length+')</b> &mdash; '
+    +'write-capable code with no commit behind it: the exact code that can mutate the '
+    +'outside world, with no provenance in version history.<br>'+body+'</div>';})();
+// --- Scope filter (governance Task A) ---------------------------------------
+// One scan carries every scope; the *view* is filtered client-side, so switching
+// between all / l5gn / mcf never re-scans. Choice held in memory only.
+let activeScope='all', activeView='status';
+function SP(){return activeScope==='all'?DATA.projects
+  :DATA.projects.filter(p=>((p.scope||'(untagged)')===activeScope));}
+function inScope(name){return SP().some(p=>p.name===name);}
+function renderScopebar(){
+  const sum=DATA.scope_summary||[];
+  const scopes=[...new Set(DATA.projects.map(p=>p.scope||'(untagged)'))].sort();
+  let opts='<option value="all">all scopes</option>'
+    +scopes.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+  // D1 scope honesty: each root reads scanned-N or empty-this-run, never "zero".
+  const hon=sum.map(r=>'<span>'+esc(r.scope||'(untagged)')+': '
+    +(r.state==='empty'?'<span class="empty">empty this run</span>'
+      :('scanned, '+r.projects+' project'+(r.projects===1?'':'s')))+'</span>')
+    .join(' &middot; ');
+  document.getElementById('scopebar').innerHTML=
+    '<label>Scope <select id="scopesel">'+opts+'</select></label>'
+    +'<span class="scopehon">'+(hon||'single scope')+'</span>'
+    +'<span id="caveat" class="caveat"></span>';
+  document.getElementById('scopesel').onchange=e=>{activeScope=e.target.value;rescope();};
+}
+function updateCaveat(){
+  // D2: counts are not comparable across scope views. When a filter is active,
+  // say so, because a count dropping is the filter narrowing, not a cleanup.
+  const c=document.getElementById('caveat');if(!c)return;
+  c.innerHTML=activeScope==='all'?'':
+    '&#9888; filtered to <b>'+esc(activeScope)+'</b> ('+SP().length
+    +' of '+DATA.projects.length+' projects) &mdash; summary counts reflect this view, not the whole estate.';
+}
+function rescope(){for(const k in views){views[k].done=false;views[k].view.innerHTML='';}
+  updateCaveat();select(activeView);}
 const views={};
 function addTab(id,label,render){
   const t=document.createElement('div');t.className='tab';t.textContent=label;t.onclick=()=>select(id);
@@ -216,18 +424,33 @@ function addTab(id,label,render){
   const v=document.createElement('div');v.className='view';document.getElementById('views').append(v);
   views[id]={tab:t,view:v,render,done:false};
 }
-function select(id){for(const k in views){const on=k==id;views[k].tab.classList.toggle('active',on);views[k].view.classList.toggle('active',on);if(on&&!views[k].done){views[k].render(views[k].view);views[k].done=true;}}}
+function select(id){activeView=id;for(const k in views){const on=k==id;views[k].tab.classList.toggle('active',on);views[k].view.classList.toggle('active',on);if(on&&!views[k].done){views[k].render(views[k].view);views[k].done=true;}}}
 
 addTab('status','Git Status',v=>{
-  const rows=((DATA.estate.estate_status||{}).rows||[]).map(r=>{
+  const rows=((DATA.estate.estate_status||{}).rows||[]).filter(r=>inScope(r.project)).map(r=>{
     if(!r.is_git) return ['<b>'+esc(r.project)+'</b>',pill('not git','muted'),'','','','',''];
     const dirty=r.dirty_files>200?pill(r.dirty_files,'bad'):r.dirty_files>0?pill(r.dirty_files,'warn'):pill('clean','ok');
     return ['<b>'+esc(r.project)+'</b>','<code>'+esc(r.latest_hash)+'</code>',esc((r.latest_date||'').slice(0,10)),esc(r.branch),'<span class="num">'+r.commit_count+'</span>',dirty,esc((r.latest_subject||'').slice(0,70))];
   });
   v.innerHTML=table(['Project','Latest','Date','Branch','Commits','Working tree','Subject'],rows);
 });
+addTab('blast','Blast Radius',v=>{
+  const rows=SP().map(p=>{const b=p.blast_radius||{};
+    const fams=Object.entries(b.by_family||{}).sort((a,b2)=>b2[1]-a[1])
+      .map(kv=>esc(kv[0])+':'+kv[1]).join(', ');
+    const crit=(b.uncommitted_critical||[]).length;
+    return [b.tier_rank||0,'<b>'+esc(p.name)+'</b>',tierPill(b.tier||'none'),
+      '<span class="num">'+(b.hit_count||0)+'</span>',fams||'<span class="muted">—</span>',
+      crit?pill(crit+' UNCOMMITTED-CRITICAL','bad'):(b.truncated?pill('capped','warn'):'')];})
+    .sort((a,b2)=>b2[0]-a[0]).map(r=>r.slice(1));
+  v.innerHTML='<div class="muted">Ranked by write blast radius &mdash; the loudest signal, '
+    +'above file size. <b>raw-write-prod</b> = an ungated production write; <b>raw-write</b> = '
+    +'ungated non-prod; <b>guarded-write</b> = a gate is present (presence only, never judged good); '
+    +'unknown target env is ranked as prod. Verdicts and paths only &mdash; no script body is shown.</div>'
+    +table(['Project','Tier','Signals','Families','Alarm'],rows);
+});
 addTab('code','Code Inventory',v=>{
-  const rows=DATA.projects.map(p=>{const w=p.workspace_scanner||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(w.py_files!=null?w.py_files:'')+'</span>','<span class="num">'+(w.classes!=null?w.classes:'')+'</span>','<span class="num">'+(w.functions!=null?w.functions:'')+'</span>',esc((w.top_classes||[]).slice(0,8).join(', '))];});
+  const rows=SP().map(p=>{const w=p.workspace_scanner||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(w.py_files!=null?w.py_files:'')+'</span>','<span class="num">'+(w.classes!=null?w.classes:'')+'</span>','<span class="num">'+(w.functions!=null?w.functions:'')+'</span>',esc((w.top_classes||[]).slice(0,8).join(', '))];});
   v.innerHTML=table(['Project','.py files','Classes','Functions','Sample classes'],rows);
 });
 // --- Files tab: the file census, browsable (Task D) -------------------------
@@ -279,7 +502,7 @@ function renderNode(n,label,open){
   return h+'</div></details>';
 }
 addTab('files','Files',v=>{
-  const withCensus=DATA.projects.filter(p=>p.file_census);
+  const withCensus=SP().filter(p=>p.file_census);
   if(!withCensus.length){v.innerHTML='<p class="muted">No file_census data in this build. '
     +'Run <code>python run.py build --fresh</code>.</p>';return;}
 
@@ -365,28 +588,52 @@ addTab('files','Files',v=>{
   });
 });
 addTab('docs','Docs',v=>{
-  const rows=DATA.projects.map(p=>{const d=p.doc_census||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(d.doc_count||0)+'</span>',d.has_readme?pill('yes','ok'):pill('no','bad'),d.has_claude_md?pill('yes','ok'):pill('no','muted'),'<span class="num">'+(d.adr_files||0)+'</span>'];});
+  const rows=SP().map(p=>{const d=p.doc_census||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(d.doc_count||0)+'</span>',d.has_readme?pill('yes','ok'):pill('no','bad'),d.has_claude_md?pill('yes','ok'):pill('no','muted'),'<span class="num">'+(d.adr_files||0)+'</span>'];});
   v.innerHTML=table(['Project','Docs','README','CLAUDE.md','ADR files'],rows);
 });
 addTab('hygiene','Hygiene',v=>{
-  const rows=DATA.projects.map(p=>{const b=p.bloat_audit||{},e=p.env_scanner||{};
+  const rows=SP().map(p=>{const b=p.bloat_audit||{},e=p.env_scanner||{};
     const flags=(b.flags||[]).map(f=>pill(f,'warn')).join(' ')||pill('clean','ok');
-    const sec=(e.secret_suspects||[]).length;const secpill=sec?pill(sec+' suspect file(s)','bad'):pill('none','ok');
+    const susp=(e.secret_suspects||[]);const tracked=e.tracked_suspect_count||0;
+    // TRACKED (committed secret) is the alarm -- surface it distinctly.
+    const secpill=tracked?pill(tracked+' TRACKED','bad')
+      :susp.length?pill(susp.length+' suspect file(s)','warn'):pill('none','ok');
     return ['<b>'+esc(p.name)+'</b>',b.has_gitignore?pill('yes','ok'):pill('no','bad'),'<span class="num">'+(b.tracked_bloat_paths||0)+'</span>',flags,secpill];});
   v.innerHTML=table(['Project','.gitignore','Bloat paths','Flags','Secret suspects'],rows);
 });
 addTab('dupes','Duplicates',v=>{
   const d=DATA.estate.duplicate_finder||{};
-  let h='<h2>Same filename across projects <span class="muted">('+(d.shared_filename_groups||0)+' groups)</span></h2>';
-  h+=table(['Filename','Projects'],(d.shared_filenames||[]).map(x=>['<code>'+esc(x.filename)+'</code>',esc(x.projects.join(', '))]));
-  h+='<h2>Byte-identical files across projects <span class="muted">('+(d.identical_content_groups||0)+' groups)</span></h2>';
-  h+=table(['sha1','Copies','Locations'],(d.identical_content||[]).map(x=>['<code>'+esc(x.sha1)+'</code>','<span class="num">'+x.count+'</span>',esc(x.locations.join('  |  '))]));
+  // Estate-level data: filter each group to projects/locations in the active scope.
+  const shared=(d.shared_filenames||[]).map(x=>{
+    const ps=x.projects.filter(inScope);return ps.length>=2?Object.assign({},x,{projects:ps}):null;
+  }).filter(Boolean);
+  const ident=(d.identical_content||[]).map(x=>{
+    const locs=x.locations.filter(l=>inScope(l.split('/')[0]));
+    return new Set(locs.map(l=>l.split('/')[0])).size>=2?Object.assign({},x,{locations:locs,count:locs.length}):null;
+  }).filter(Boolean);
+  let h='<h2>Same filename across projects <span class="muted">('+shared.length+' groups'
+    +(activeScope==='all'?'':', filtered')+')</span></h2>'
+    +'<div class="muted">Labelled by content: <b>identical</b> = byte-for-byte copy (shared-toolkit or drift candidate); '
+    +'<b>divergent</b> = same name, forked content.</div>';
+  h+=table(['Filename','Content','Projects'],shared.map(x=>['<code>'+esc(x.filename)+'</code>',
+    x.content==='divergent'?pill('divergent','warn'):pill('identical','ok'),esc(x.projects.join(', '))]));
+  h+='<h2>Byte-identical files across projects <span class="muted">('+ident.length+' groups)</span></h2>';
+  h+=table(['sha1','Copies','Locations'],ident.map(x=>['<code>'+esc(x.sha1)+'</code>','<span class="num">'+x.count+'</span>',esc(x.locations.join('  |  '))]));
   v.innerHTML=h;
 });
-addTab('todos','TODO / ADR',v=>{
-  const rows=DATA.projects.map(p=>{const t=p.todo_adr_scanner||{};const tags=Object.entries(t.markers_by_tag||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(t.marker_count||0)+'</span>',esc(tags),'<span class="num">'+(t.adr_count||0)+'</span>'];});
-  v.innerHTML=table(['Project','Markers','By tag','ADRs'],rows);
+addTab('todos','TODO / ADR / Decisions',v=>{
+  const rows=SP().map(p=>{const t=p.todo_adr_scanner||{};
+    const tags=Object.entries(t.markers_by_tag||{}).map(kv=>kv[0]+':'+kv[1]).join(', ');
+    // Both decision conventions side by side: adr/NNNN files and DECISIONS.md
+    // entries, the latter tier-counted (governance Task B).
+    const tiers=Object.entries(t.decision_tiers||{})
+      .sort((a,b)=>b[1]-a[1]).map(kv=>esc(kv[0])+':'+kv[1]).join(', ');
+    return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(t.marker_count||0)+'</span>',esc(tags),
+      '<span class="num">'+(t.adr_count||0)+'</span>',
+      '<span class="num">'+(t.decisions_count||0)+'</span>',tiers||'<span class="muted">—</span>'];});
+  v.innerHTML=table(['Project','Markers','By tag','ADR files','DECISIONS entries','Decision tiers'],rows);
 });
+renderScopebar();
 select('status');
 </script>
 </body></html>
