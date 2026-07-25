@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-25 · completed pair (walk-sheet) · walked; results in UAT_round_3_results.md
+> Superseded by: RUNBOOK_knight_fresh_build.md + RUNBOOK_refresh_and_deposit.md for the knight-side procedure; the rig-runnable equivalents were re-walked in UAT_cowork_run_2026-07-24_results.md.
+> The operational walk-sheet as run 2026-07-21. Its "PRODUCER_SETUP.md §9" note refers to the file now named PRODUCER_PLAYBOOK.md. Knight items A–D were the acceptance not fully closed here; they are overtaken by the fresh-build runbook rather than re-walked against this sheet.
+
 # UAT walk-sheet — build round 3
 
 The acceptance checks for round 3, in the form you actually run them.

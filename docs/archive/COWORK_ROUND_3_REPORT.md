@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-25 · completed pair · pairs with COWORK_BRIEF_build_round_3.md
+> Superseded by: ARCHITECTURE.md for current shape; build_inventory's census-reading refactor (23b5ffa) moved past this report's folder-walk assumptions. DECISIONS 0012–0016 remain the live rulings.
+> Testimony, true when written (2026-07-20); do not edit the numbers. Its "PRODUCER_SETUP.md" references (row F, deploy section) name a file since renamed to PRODUCER_PLAYBOOK.md (1f260ed). Tester counts here (5a/19–20t) are that day's state, not now (6a/37t) — the stale-count problem this round's follow-up fixed structurally via auditor_uat_stamp (4d885f9).
+
 # Cowork report — build round 3: concurrency safety, three-tier registry, estate-driven build
 
 **Date:** 2026-07-20 · **Pairs with:** `COWORK_BRIEF_build_round_3.md`

@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-25 · completed pair · pairs with COWORK_ROUND_3_REPORT.md; walk-sheet UAT_round_3.md + results UAT_round_3_results.md archive alongside
+> Superseded by: the build landed at 48ce16d ff.; its estate-driven registry + three-tier model were refined by the census/intent work (23b5ffa — build_inventory now reads the deposited census, not a folder walk). DECISIONS 0012–0016 hold the rulings this brief implemented and remain live.
+> Read as the round-3 request as asked. Dangling ref: the "new PRODUCER_SETUP.md" (task F) became PRODUCER_PLAYBOOK.md (1f260ed) — no PRODUCER_SETUP.md exists. Gate counts below are stale (round 3 = 5a/19–20t; current 6a/37t). Knight acceptance (items A–D) was closed operationally by RUNBOOK_knight_fresh_build.md, not by walking this brief on the knight.
+
 # Cowork brief — build round 3: concurrency safety, three-tier registry, estate-driven build
 
 **Origin:** design thread, 2026-07-20. Read `docs/DECISIONS.md` **0012–0016** and

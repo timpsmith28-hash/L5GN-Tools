@@ -19,6 +19,10 @@ You can save this directly into your repo to update `docs/UAT_ROUND_3_EXECUTION_
 
 ---
 
+> **ARCHIVED** 2026-07-25 · completed pair (results log) · partner to UAT_round_3.md
+> Superseded by: auditor_uat_stamp (4d885f9), built because this log's "5 auditors and 18 testers" matched no version of the tree — the stale count laundered from the retired HANDOFF. Current gate is 6a/37t.
+> Frozen evidence — the body's wrong "18 testers" stays as recorded, corrected in the note above it, never edited (README §3). The uat comment's commit=1f260ed was inferred from the knight's pull, not observed. Leaving core docs/ also drops it from auditor_uat_stamp's non-recursive scan, as intended.
+
 # UAT Round 3 Execution Log
 
 * **Date:** July 21, 2026
