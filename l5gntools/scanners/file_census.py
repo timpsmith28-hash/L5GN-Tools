@@ -226,6 +226,12 @@ def _classify_dir(name: str, child_rel: str, git: dict | None) -> str | None:
 
 
 # --- the scan ----------------------------------------------------------------
+def _has_commits(target: Path) -> bool:
+    """True when the repo has at least one commit. A freshly `git init`-ed repo
+    is `is_git: true` with an unborn HEAD -- `rev-list HEAD` returns nothing."""
+    return bool(run_git(target, "rev-list", "-n", "1", "HEAD"))
+
+
 def scan(target: Path) -> dict:
     target = Path(target)
     git = _git_lookup(target)
@@ -404,6 +410,20 @@ def scan(target: Path) -> dict:
         # Nothing is in version control at all, so "untracked" is not a
         # distinction this project can make. Said plainly rather than reported as
         # an empty at-risk list, which would read as reassurance.
-        "at_risk_note": (None if git is not None else
-                         "not a git repository -- no file here is in version control"),
+        #
+        # Two flavours of "nothing protected", because the report must not read as
+        # reassuring when it is not (governance Task E): a non-git folder, and a
+        # git repo with **zero commits** -- `TSsToAssets` on the work rig is
+        # `is_git: true`, `.gitignore` present, 0 commits, 117 at-risk files. An
+        # initialised repo protects nothing until something is committed.
+        "at_risk_note": _at_risk_note(target, git),
     }
+
+
+def _at_risk_note(target: Path, git: dict | None) -> str | None:
+    if git is None:
+        return "not a git repository -- no file here is in version control"
+    if not _has_commits(target):
+        return ("repo initialised but has no commits -- nothing is under version "
+                "control")
+    return None
