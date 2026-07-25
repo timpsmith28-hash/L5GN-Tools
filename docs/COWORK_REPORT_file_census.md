@@ -8,7 +8,7 @@ added C and E and refined the report tab against Tim's first real build**, so
 review. §§1–8 are round 1 as written; §9 is the round-2 append and **supersedes
 §3's deposit-size projection with a measured figure.**
 
-`python verify.py` — **GREEN**, 6 auditors + 28 testers (see §9: this number
+`python verify.py` — **GREEN**, 6 auditors + 37 testers (see §9: this number
 changed in round 2, and `auditor_doc_claims` caught the stale copy in this file).
 
 ---

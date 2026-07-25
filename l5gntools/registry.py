@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .contract import build_manifest
 from .scanners import (
+    blast_radius,
     bloat_audit,
     doc_census,
     drift,
@@ -33,6 +34,7 @@ SCANNERS = [
     import_scanner,
     env_scanner,
     bloat_audit,
+    blast_radius,
     todo_adr_scanner,
     estate_status,
     duplicate_finder,
