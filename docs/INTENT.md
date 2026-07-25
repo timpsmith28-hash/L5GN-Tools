@@ -66,6 +66,11 @@ Not "the pipeline runs." The pipeline runs today. Success is:
   without the answer being "I remember roughly."
 - A drift report says something true and surprising — discussed but never built,
   or built without ever being discussed.
+- The record can be *shown*, not just recalled. A question about *why* gets an
+  answer you could hand to someone who needs the justification — a reviewer, a
+  council, a future maintainer — not just one you half-remember. Recall serves
+  you; **defensibility serves whoever doubts you**, and the second is the harder
+  test the record either passes or doesn't.
 - The record is trustworthy enough to act on. A link that's probably right is worse
   than no link, because it gets believed.
 
@@ -82,9 +87,14 @@ building of this." It's "could I debug this at 2am, alone."
 
 Named because each one, unstated, invites scope creep that looks like progress:
 
-- **Not a product.** One operator, three machines, an SSH key. Not multi-tenant,
-  not hardened against an adversary, not for anyone else. The deposit contract
-  is a wall against *mistakes*, not attackers.
+- **Not a product — but no longer only mine.** One operator, three machines, an
+  SSH key. Not multi-tenant, not hardened against an adversary, no SLA.
+  **[CONFIRM]** A second workstream (WizForgeAnalytics) now vendors this toolkit
+  and floats on `main` — that makes `main` load-bearing for someone else, but it
+  is a *consumer who complains*, not a customer who is owed. The deposit contract
+  is still a wall against *mistakes*, not attackers. If this ever grows users with
+  expectations, that's a different project, and this non-goal is where it must be
+  re-argued.
 - **Not a chat archive.** Archiving is the cheap part. Unlinked chat is a pile.
   Linkage is the whole product; storage is table stakes.
 - **Not comprehensive.** Work-account Gemini going forward is out of scope by
@@ -120,6 +130,13 @@ the design is wrong — or this list needs an argument made against it.
   merge them. Spend paranoia only where loss is permanent.
 - **One writer.** Concurrency isn't a feature worth its cost here.
 - **The wall is real.** Work and personal do not mix, structurally, at rest.
+- **Rigor is graduated, not maximal.** The gates exist because willpower fails,
+  but ceremony applied everywhere is its own failure — the operator routes around
+  a tool that demands a decision log for a throwaway script, and a routed-around
+  gate protects nothing. **[CONFIRM]** The stakes are declared, not assumed: a
+  PII-handling work repo and a scratch experiment do not earn the same friction.
+  Strict where it matters, quiet where it doesn't — a tool that cannot dial down
+  is one that gets abandoned, and an abandoned governance tool defends nothing.
 
 ## 6. How we'd know this failed
 
@@ -134,7 +151,12 @@ Honest failure modes, in rough order of likelihood:
    estate *less* knowable than no links at all.
 3. **The operator can't maintain it.** The gap between directing a build and owning
    it. Measured against the 2am test, not against whether the build lands.
-4. **The upkeep exceeds the answers.** If the manual loop stays manual, the honest
+4. **It gets too tight to use.** The discipline that makes it defensible becomes
+   the discipline that makes it unbearable; the operator starts skipping the
+   decision entry "just this once," and the defensibility claim is quietly false
+   from that day. **[CONFIRM]** This is the failure the graduated-rigor constraint
+   exists to prevent, and the one most likely to arrive disguised as diligence.
+5. **The upkeep exceeds the answers.** If the manual loop stays manual, the honest
    move is to shrink the system, not to add to it.
 
 Any of these is a reason to stop or cut scope. None of them is a reason to add
