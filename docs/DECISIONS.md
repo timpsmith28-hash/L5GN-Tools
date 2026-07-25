@@ -596,3 +596,144 @@ nothing. The spec and `cowork_tasks_cleanup_and_qol.md` are now both in `docs/` 
 that the cleanup doc predates several DECISIONS entries and must be triaged against
 this log before any of its tasks run (in particular, any sync-back QoL item is moot
 per 0008, which removes sync-back entirely).
+
+---
+
+## 0018 — Persona / LLM inference is a separate, pluggable service, never inside the toolkit wall
+
+**Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread (command deck review) · **Builds on:** 0007; INTENT §4/§5
+
+**Context.** The v2 command-deck mockup adds Personas (configured agents that query the
+vault and chat) and assisted Query. Vertex-3's `api/inference.py` implements exactly
+this, but pulls in SQLAlchemy (`shared_schema.SessionLocal`) and an Ollama runtime.
+`chronicler/review/app.py` deliberately shed both — *"No SQLAlchemy… raw sqlite3 keeps
+the write path auditable at a glance"*, and FastAPI/uvicorn are an optional extra, never
+in the stdlib-only core. The knight is not resource-rich, so a heavy local model is not a
+given.
+
+**Decision.** Persona/LLM inference lives in a **separate service** (the vertex-3 spine,
+retrofitted), not in L5GN-Tools. The toolkit and the deck's read/write backend stay
+stdlib-walled; the deck **links or proxies** the inference service. The inference
+**backend is pluggable**: embeddings (`sentence-transformers`, the vendored
+`all-MiniLM-L6-v2`) on the knight for retrieval; generation is a swappable backend that
+may run off-box (gaming rig or a hosted API) when a query needs it. Exact model is a
+config/benchmark choice on the actual knight, not an architectural commitment. The honest
+default is **knight = embeddings + retrieval; generation is a swappable backend.**
+
+**Consequences.** No heavyweight ORM or model runtime crosses the toolkit's dependency
+wall. The deck degrades cleanly: if the inference service is down, reads and rulings still
+work. A further DECISIONS entry is required before any persona output is allowed to
+*write* — personas suggest, they never rule (see 0019).
+
+---
+
+## 0019 — Any LLM- or query-exposed DB path is structurally read-only
+
+**Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread · **Builds on:** 0013, 0014; INTENT §5 ("guarantees are structural, not behavioural")
+
+**Context.** The deck's Query and Personas screens are declared read-only, with a
+scope-box in the UI (`review_queue` marked no-write). But an LLM that emits SQL is
+write-*capable* unless the connection cannot write, and the estate's own doctrine is that
+a guarantee which survives only because something *remembers* it is a defect. A scope-box
+is UI copy, not a boundary.
+
+**Decision.** Every DB handle exposed to assisted-query or a persona is opened
+**structurally read-only** — a read-only connection (`mode=ro` / `PRAGMA query_only`),
+surfaced through `dbsafe` so it is the single enforced place, not per-caller. A persona
+physically cannot write through its handle. The scope-box remains as *disclosure*, but the
+boundary is the connection, not the copy.
+
+**Consequences.** Personas can only ever produce suggestions a human ratifies on the
+Linking screen — 0007's write path stays the *only* writer to the vault. `dbsafe` gains a
+read-only-connection helper alongside its existing WAL/busy_timeout one. A hermetic tester
+asserts a write attempted through the query handle fails.
+
+---
+
+## 0020 — The Command Deck is a program-tier entity, scanned from the personal rig only
+
+**Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread · **Builds on:** 0012
+
+**Context.** The deck spans the vertex-derived inference service, the deck backend/UI, and
+its consumption of L5GN-Tools — Tim's largest cross-threading effort to date, big enough to
+warrant a program designation rather than sitting as a loose project. Separately, the
+governance direction requires the toolkit to see its own most write-and-execute-heavy code,
+which today it does not (the toolkit's own repo is outside any scanned root).
+
+**Decision.** Register the Command Deck as a **program** in `config/project_registry.json`
+(three-tier, per 0012), with the deck backend/UI and the inference service as
+projects/repos under it. It is **scanned from the personal (gaming) rig only** — added as a
+config root there — not from the knight or the work rig. It participates in normal scans,
+`blast_radius` and `UNCOMMITTED-CRITICAL` like any other program.
+
+**Consequences.** The estate's most write-and-execute-heavy new surface is finally inside
+the scanner's sight. The program's name and its member repos are a registry ratification
+item, folded into the reconciliation worksheet rather than decided here.
+
+---
+
+## 0021 — The deck reads the serve snapshot; one supervisor runs the read/review/deck trio
+
+**Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread · **Builds on:** 0013
+
+**Context.** The deck's vault-backed views (Linking queue, Query, Personas) read
+`chronicler.db`. 0013 already ruled the read surface serves a *snapshot*, never the live
+DB, after the false-`malformed` torn-read incident; a persona querying the live DB
+mid-ingest is that same class of fault. Separately, the knight now runs up to three
+long-lived processes — snapshot serve, the review write-endpoint, and the deck backend —
+which is new operational territory.
+
+**Decision.** All deck vault reads go through the **`serve` snapshot**, not the live DB —
+making `serve` a deck dependency, which is acceptable because the deck links to it anyway. A
+**single supervisor** brings the trio up: the knight already uses systemd units
+(`deploy/chronicler-ingest.service`/`.path`), so the recommended shape is a systemd
+**target** pulling in serve + review + deck as units (`systemctl start l5gn-deck.target`),
+with a `run.py`-level launcher as the foreground/dev equivalent.
+
+**Consequences.** No deck view can catch a half-written vault. One command brings the
+surface up or down; unit boundaries keep each process independently restartable and logged.
+The snapshot refresh cadence becomes a deck concern to state explicitly — how stale the
+deck's view may be is now a design parameter, not an accident.
+
+---
+
+## 0022 — Knight-side command execution writes an append-only run ledger
+
+**Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread · **Builds on:** the `toolkit_git_info` / `auditor_uat_stamp` provenance pattern
+
+**Context.** The deck's knight-side buttons (`consume`, `ingest`) run subprocesses and
+stream stdout but persist nothing — no record that a run happened, its target, result, or
+trigger. This is the run/execution ledger the r141 finding argued for, and the same instinct
+as stamping acceptance claims: an action asserting *"this ran"* should carry provenance.
+Without it, the deck mutates the vault with less traceability than archiving a doc now has.
+
+**Decision.** Every command fired through `POST /api/commands/*` writes an **append-only
+run-ledger row** — timestamp, command, target, exit status, and the fact it was
+deck-triggered. The ledger is the provenance artifact for *actions*, mirroring what
+`toolkit_git_info` does for scans and the uat stamp does for acceptance claims.
+
+**Consequences.** A fired `consume` is traceable after the fact. The ledger is a new small
+store, separate from the vault; its exact location and whether it is surfaced back into the
+deck are implementation details for the brief. It also gives the deck an honest activity feed
+for free.
+
+---
+
+## 0023 — Work-estate visibility is auth-gated; only personal-estate reads stay open
+
+**Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread · **Builds on:** 0010; INTENT §4
+
+**Context.** The plan gates only "writes or executes" and leaves reads open, with the
+tailnet as the boundary. But the mesh-wide view co-renders personal and work on the knight,
+and work carries MCF / PII-adjacent material. 0010 kept the deposit wall hard on disk; the
+deck is the first surface to show both estates together, to any tailnet device, with no code.
+
+**Decision.** **Work-estate data is behind the same TOTP gate as the write tier — even to
+view.** Personal-estate reads stay ungated (the tailnet is enough for Tim's own material).
+The wall thus becomes not only a disk boundary (0010) but a *visibility* boundary on the
+display surface: seeing work requires the code; seeing personal does not.
+
+**Consequences.** A phone on the tailnet browses personal freely but must authenticate to
+reveal the work column; the mesh-wide view renders the work side as gated-until-unlocked.
+This is the first place the wall governs *reading*, not just writing or merging — stated
+here so a later "just show everything" convenience change has to argue against this entry.
