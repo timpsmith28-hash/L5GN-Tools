@@ -76,12 +76,14 @@ try:
 except (AttributeError, ValueError):
     pass
 
-from db import get_connection, CHRONICLER_ROOT, DB_PATH
+from db import (get_connection, CHRONICLER_ROOT, DB_PATH, resolve_registry_path,
+                origin_for, ensure_origin_column)
 # S3 time signal (replaces the old 1.0 stub): live plausibility + date parsing.
 from build_activity import time_plausibility, parse_thread_date
 
 GITHUB_ROOT_FS = CHRONICLER_ROOT.parent.parent
-REGISTRY_PATH = GITHUB_ROOT_FS / "L5GN" / ".intel_sync" / "project_registry.json"
+# Task F: one shared resolver (env-overridable, per host) -- no local literal.
+REGISTRY_PATH = resolve_registry_path()
 SCOPE_TO_ROOT = {"l5gn": "L5GN", "mcf": "MCF"}
 
 PRODUCER_VERSION = "relink/1.0"
@@ -94,6 +96,11 @@ CAP = 0.97                 # per-weight cap: no single signal is ever absolute
 AUTO_LINK_THRESHOLD = 0.90 # adjusted score to auto-link
 LEAD_MARGIN = 0.25         # best must beat 2nd-best by this to auto-link / avoid ambiguity
 SUGGEST_THRESHOLD = 0.60   # adjusted score to queue a suggestion
+# Task B: an auto-link writes an `evidence`-LOCKED row a human can no longer
+# change, so it must rest on more than one confident sentence. It requires at
+# least this many INDEPENDENT origins (post-Task-A co-origin collapse). One
+# origin, however strong, is a `suggest` at most -- never a silent lock.
+MIN_AUTOLINK_ORIGINS = 2
 
 # Inline signal weights (persisted signals carry their own weight from S4/S5).
 WEIGHT_ALIAS_TITLE = 0.8
@@ -105,9 +112,14 @@ WEIGHT_ALIAS_CONTENT = 0.6
 # relink reads the flag; no project name is ever hardcoded here.
 WEIGHT_ALIAS_CONTENT_LOWSIG = 0.15
 
-# Per-signal-type "count only the strongest N" caps. Spec: vocabulary hits
-# count max 3. Others uncapped (weight cap still applies to each).
-SIGNAL_COUNT_CAP = {"vocabulary": 3}
+# Per-signal-type "count only the strongest N" caps (Task C). This bounds how
+# many DISTINCT-ORIGIN hits of one type contribute -- a different lever from
+# Task A, which collapses CO-ORIGIN duplicates upstream. vocabulary keeps the
+# spec's 3; filename_xref and path_mention were previously UNCAPPED, so one
+# file-heavy thread drove the product to ~1.0. Set to 3 (mirroring vocabulary)
+# after the snapshot dry-run showed cap 3 and cap 5 are decision-identical -- 3
+# is the tighter, spec-consistent choice that loses nothing (COWORK_REPORT).
+SIGNAL_COUNT_CAP = {"vocabulary": 3, "filename_xref": 3, "path_mention": 3}
 
 MIN_ALIAS_LEN = 3          # ignore 1-2 char aliases as inline matchers (noise)
 
@@ -174,7 +186,8 @@ def load_registry():
     targets = {}
     prog_names = {p["id"]: p.get("name", p["id"]) for p in registry.get("programs", [])}
 
-    def _add(tid, tier, canon, aliases, scope, program, project, low_sig, activity):
+    def _add(tid, tier, canon, aliases, scope, program, project, low_sig, activity,
+             repo_path=None):
         alias_list = list(dict.fromkeys(list(aliases) + [canon]))
         targets[tid] = {
             "id": tid,
@@ -186,8 +199,13 @@ def load_registry():
             "program": program,
             "program_name": prog_names.get(program),
             "project": project,
-            "repo_folder_path": (f"{SCOPE_TO_ROOT[scope]}/{canon}"
-                                 if scope in SCOPE_TO_ROOT else None),
+            # Task E: the REAL on-disk path if the registry carries one, else NULL.
+            # Never the old synthetic `<scope-root>/<canon>` -- that path exists on
+            # no rig, and writing it into projects.repo_folder_path mis-classifies a
+            # concept as a repo (vault_reader keys repo-vs-concept on this being
+            # NULL) and splits a project's thread count. No guess: a real path or
+            # nothing.
+            "repo_folder_path": repo_path or None,
             # S3: activity window for time_plausibility (None if not built yet).
             "activity": activity,
             # Fix B: demote body-only alias hits for this target when set.
@@ -197,18 +215,20 @@ def load_registry():
     for prog in registry.get("programs", []):
         _add(prog["id"], "program", prog.get("name", prog["id"]),
              prog.get("aliases", []), prog.get("scope"), prog["id"], None,
-             prog.get("low_signal_body"), prog.get("activity"))
+             prog.get("low_signal_body"), prog.get("activity"),
+             prog.get("repo_folder_path"))
 
     for proj in registry["projects"]:
         _add(proj["id"], "project", proj["canonical_name"], proj.get("aliases", []),
              proj.get("scope"), proj.get("program"), proj["id"],
-             proj.get("low_signal_body"), proj.get("activity"))
+             proj.get("low_signal_body"), proj.get("activity"),
+             proj.get("repo_folder_path"))
         for repo in proj.get("repos", []):
             _add(repo["id"], "repo", repo["canonical_name"],
                  repo.get("aliases", []), repo.get("scope") or proj.get("scope"),
                  proj.get("program"), proj["id"],
                  repo.get("low_signal_body", proj.get("low_signal_body")),
-                 repo.get("activity"))
+                 repo.get("activity"), repo.get("repo_folder_path"))
     return targets
 
 
@@ -251,15 +271,23 @@ def alias_hits(text, matchers):
 # Evidence gathering
 # ---------------------------------------------------------------------------
 def load_persisted_evidence(conn):
-    """thread_id -> project -> list of {id, signal, weight, detail}."""
+    """thread_id -> project -> list of {id, signal, weight, detail, origin}.
+
+    `origin` (Task A) is read from the column when the producers have stamped it;
+    a DB built before Task A (or a legacy row with a NULL origin) yields None and
+    the scorer derives the same key from (signal, detail) on the fly -- so the
+    co-origin collapse behaves identically whether stamped or derived."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(link_evidence)")}
+    has_origin = "origin" in cols
+    sql = ("SELECT evidence_id, thread_id, project, signal, weight, detail"
+           + (", origin" if has_origin else "") +
+           " FROM link_evidence WHERE thread_id IS NOT NULL AND project IS NOT NULL")
     out = defaultdict(lambda: defaultdict(list))
-    for r in conn.execute(
-        "SELECT evidence_id, thread_id, project, signal, weight, detail "
-        "FROM link_evidence WHERE thread_id IS NOT NULL AND project IS NOT NULL"
-    ):
+    for r in conn.execute(sql):
         out[r["thread_id"]][r["project"]].append({
             "id": r["evidence_id"], "signal": r["signal"],
             "weight": r["weight"], "detail": r["detail"],
+            "origin": (r["origin"] if has_origin else None),
         })
     return out
 
@@ -300,13 +328,43 @@ def human_ruled_threads(conn):
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
-def combine(signals):
-    """signals: list of dicts {signal, weight, id?, detail}. Applies per-type
-    count caps + the per-weight CAP, returns (adjusted_score, used_signals)."""
-    by_type = defaultdict(list)
-    for s in signals:
-        by_type[s["signal"]].append(s)
+def _origin_of(s):
+    """The co-origin key for one signal: the stamped `origin` if present, else
+    derived from (signal, detail) so a pre-Task-A row collapses the same way."""
+    return s.get("origin") or origin_for(s.get("signal") or "", s.get("detail") or "")
 
+
+def combine(signals):
+    """signals: list of dicts {signal, weight, id?, detail, origin?}. Returns
+    (score, used_signals, n_origins).
+
+    Task A -- CO-ORIGIN COLLAPSE (the core fix). Signals that name the SAME origin
+    are one piece of evidence, not several: a filename_xref, a path_mention and a
+    name_alias all citing `world_graph` collapse to a single contribution at the
+    STRONGEST of their weights, BEFORE the independent-evidence product runs.
+    Cross-type corroboration therefore counts only when the types cite DIFFERENT
+    origins -- which kills the 0.997-from-one-sentence over-count.
+
+    Task C -- DISTINCT-ORIGIN COUNT CAP. After the collapse, cap how many
+    distinct-origin hits of the SAME type contribute (SIGNAL_COUNT_CAP), so a
+    thread naming N files can't drive the product to 1.0 without limit. A and C
+    are different levers: A collapses co-origin duplicates; C bounds
+    distinct-origin pile-up. Both are needed and neither replaces the other.
+
+    The per-weight CAP still applies to every surviving signal. `n_origins` is the
+    count of independent origins behind the score -- Task B's corroboration gate.
+    """
+    # Task A: one representative (strongest) signal per origin.
+    by_origin = defaultdict(list)
+    for s in signals:
+        by_origin[_origin_of(s)].append(s)
+    reps = [max(group, key=lambda s: s["weight"] or 0.0) for group in by_origin.values()]
+
+    # Task C (+ existing vocabulary cap): keep only the strongest N distinct-origin
+    # reps per signal type.
+    by_type = defaultdict(list)
+    for s in reps:
+        by_type[s["signal"]].append(s)
     used = []
     for stype, group in by_type.items():
         group = sorted(group, key=lambda s: s["weight"] or 0.0, reverse=True)
@@ -320,7 +378,8 @@ def combine(signals):
         w = min(s["weight"] or 0.0, CAP)
         prod *= (1.0 - w)
     score = 1.0 - prod
-    return score, used
+    n_origins = len({_origin_of(s) for s in used})
+    return score, used, n_origins
 
 
 def score_thread(thread, persisted, registry, content):
@@ -346,6 +405,9 @@ def score_thread(thread, persisted, registry, content):
             per_project[canon].append({
                 "id": None, "signal": "name_alias", "weight": w,
                 "detail": f"{alias}@{place}",
+                # Task A: co-origin key so an inline alias hit collapses with a
+                # filename_xref / path_mention naming the same token.
+                "origin": origin_for("name_alias", f"{alias}@{place}"),
             })
 
     # S3 time signal is a per-thread multiplier; parse the date once. An undated
@@ -355,7 +417,7 @@ def score_thread(thread, persisted, registry, content):
 
     candidates = []
     for project, signals in per_project.items():
-        score, used = combine(signals)
+        score, used, n_origins = combine(signals)
         activity = registry.get(project, {}).get("activity")
         tp = time_plausibility(tdate, activity)
         adjusted = score * tp
@@ -364,10 +426,13 @@ def score_thread(thread, persisted, registry, content):
             f"{s['signal']}:{s['detail']}({min(s['weight'] or 0, CAP):.2f})"
             for s in sorted(used, key=lambda s: s["weight"] or 0, reverse=True)
         )
-        summary += f"; time*{tp:.2f}{time_note}"
+        # Task B: surface the corroboration count so the report shows WHY a strong
+        # single-origin thread was a suggestion, not an auto-link.
+        summary += f"; origins={n_origins}; time*{tp:.2f}{time_note}"
         candidates.append({
             "project": project, "score": score, "adjusted": adjusted,
             "used": used, "evidence_ids": evidence_ids, "summary": summary,
+            "origins": n_origins,
         })
     candidates.sort(key=lambda c: c["adjusted"], reverse=True)
     return candidates
@@ -489,6 +554,15 @@ def decide(thread, candidates, conn, registry=None):
         return {"category": "ambiguous", "best": best, "second": second}
 
     if best["adjusted"] >= AUTO_LINK_THRESHOLD and lead >= LEAD_MARGIN:
+        # Task B: an auto-link locks an `evidence` row a human can no longer
+        # change, so it must rest on >= 2 independent origins. A strong but
+        # single-origin winner (one confident filename or one repo-name mention)
+        # is downgraded to a suggestion the human can act on -- never a silent
+        # lock. Suggest/ambiguous/downgrade thresholds are unchanged.
+        if best.get("origins", 0) < MIN_AUTOLINK_ORIGINS:
+            if conf == "fuzzy" and not same_project:
+                return {"category": "downgrade", "best": best, "cur_name": cur_name}
+            return {"category": "suggest", "best": best, "single_origin": True}
         if conf == "fuzzy" and not same_project:
             return {"category": "downgrade", "best": best, "cur_name": cur_name}
         return {"category": "auto_link", "best": best, "was": conf,
@@ -535,10 +609,10 @@ def persist_inline(conn, thread_id, best, now):
             continue  # already a persisted row
         cur = conn.execute(
             "INSERT INTO link_evidence "
-            "(thread_id, project, signal, weight, detail, produced_at, producer_version) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(thread_id, project, signal, weight, detail, origin, produced_at, producer_version) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (thread_id, best["project"], s["signal"], s["weight"], s["detail"],
-             now, PRODUCER_VERSION),
+             _origin_of(s), now, PRODUCER_VERSION),
         )
         ids.append(cur.lastrowid)
     return ids
@@ -723,6 +797,8 @@ def run(apply, no_content_scan, limit, out=None):
     conn = get_connection()
     now = utc_now()
     try:
+        if apply:
+            ensure_origin_column(conn)   # Task A: column present before we persist inline rows
         persisted = load_persisted_evidence(conn)
         ruled = human_ruled_threads(conn)
         threads = conn.execute(

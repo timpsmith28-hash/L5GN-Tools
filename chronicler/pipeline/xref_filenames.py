@@ -40,10 +40,12 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import get_connection, CHRONICLER_ROOT
+from db import (get_connection, CHRONICLER_ROOT, resolve_registry_path,
+                origin_for, ensure_origin_column)
 
 GITHUB_ROOT_FS = CHRONICLER_ROOT.parent.parent
-REGISTRY_PATH = GITHUB_ROOT_FS / "L5GN" / ".intel_sync" / "project_registry.json"
+# Task F: one shared resolver (env-overridable, per host) -- no local literal.
+REGISTRY_PATH = resolve_registry_path()
 
 PRODUCER_VERSION = "xref_filenames/1.1"   # 1.1: export-artifact exclusion (fix C)
 SIGNAL = "filename_xref"
@@ -97,6 +99,7 @@ CREATE TABLE IF NOT EXISTS link_evidence (
     signal           TEXT,      -- name_alias|vocabulary|filename_xref|path_mention|time_window
     weight           REAL,      -- 0..1
     detail           TEXT,      -- e.g. the matched basename
+    origin           TEXT,      -- Task A: canonical co-origin key (the file/token this is about)
     produced_at      TEXT,      -- UTC ISO-8601
     producer_version TEXT
 );
@@ -188,13 +191,15 @@ def compute_votes(attachments, index):
 def write_evidence(conn, votes):
     now = utc_now()
     conn.executescript(LINK_EVIDENCE_DDL)
+    ensure_origin_column(conn)      # Task A: migrate a pre-origin DB in place
     # idempotent: clear only this producer's own signal rows, then re-insert.
     conn.execute("DELETE FROM link_evidence WHERE signal = ?", (SIGNAL,))
     conn.executemany(
         "INSERT INTO link_evidence "
-        "(thread_id, project, signal, weight, detail, produced_at, producer_version) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [(t, p, SIGNAL, w, d, now, PRODUCER_VERSION) for (t, p, w, d) in votes],
+        "(thread_id, project, signal, weight, detail, origin, produced_at, producer_version) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [(t, p, SIGNAL, w, d, origin_for(SIGNAL, d), now, PRODUCER_VERSION)
+         for (t, p, w, d) in votes],
     )
     conn.commit()
 

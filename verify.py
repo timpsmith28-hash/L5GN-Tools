@@ -57,6 +57,8 @@ TESTERS: list[str] = [
     "tests.tester_backup",
     "tests.tester_serve",
     "tests.tester_relink_stage",
+    "tests.tester_relink_scoring",
+    "tests.tester_registry_path",
     "tests.tester_scrape_stage",
     "tests.tester_review",
 ]

@@ -50,7 +50,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import get_connection
+from db import get_connection, origin_for, ensure_origin_column
 from build_inventory import REGISTRY_PATH
 
 PRODUCER_VERSION = "extract_path_mentions/1.0"
@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS link_evidence (
     signal           TEXT,
     weight           REAL,
     detail           TEXT,
+    origin           TEXT,      -- Task A: canonical co-origin key (the file/token this is about)
     produced_at      TEXT,
     producer_version TEXT
 );
@@ -247,13 +248,15 @@ def write_evidence(conn, votes, rescan, new_watermark):
     # still land as one all-or-nothing transaction committed at the end.
     conn.executescript(LINK_EVIDENCE_DDL)
     conn.executescript(PATH_SCAN_LOG_DDL)
+    ensure_origin_column(conn)      # Task A: migrate a pre-origin DB in place
     if rescan:
         conn.execute("DELETE FROM link_evidence WHERE signal = ?", (SIGNAL,))
     conn.executemany(
         "INSERT INTO link_evidence "
-        "(thread_id, project, signal, weight, detail, produced_at, producer_version) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [(t, p, SIGNAL, w, d, now, PRODUCER_VERSION) for (t, p, w, d) in votes],
+        "(thread_id, project, signal, weight, detail, origin, produced_at, producer_version) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [(t, p, SIGNAL, w, d, origin_for(SIGNAL, d), now, PRODUCER_VERSION)
+         for (t, p, w, d) in votes],
     )
     set_watermark(conn, new_watermark)
     conn.commit()

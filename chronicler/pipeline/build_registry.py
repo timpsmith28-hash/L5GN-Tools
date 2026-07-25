@@ -60,12 +60,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import get_connection, CHRONICLER_ROOT
+from db import get_connection, CHRONICLER_ROOT, resolve_registry_path
 
 # --- Locations -------------------------------------------------------------
 # CHRONICLER_ROOT is .../Github/L5GN/Chronicler ; the Github root is two up.
 GITHUB_ROOT_FS = CHRONICLER_ROOT.parent.parent          # filesystem path
-REGISTRY_PATH = GITHUB_ROOT_FS / "L5GN" / ".intel_sync" / "project_registry.json"
+# Task F: resolved through ONE shared function (env-overridable, per host), not a
+# literal duplicated across the pipeline. build_inventory / build_activity /
+# build_vocabulary import THIS REGISTRY_PATH, so they inherit the resolution.
+REGISTRY_PATH = resolve_registry_path()
 INTENT_MD = GITHUB_ROOT_FS / "L5GN" / "Intent.md"
 
 # The producer's own build output, used when this runs on a rig with no estate

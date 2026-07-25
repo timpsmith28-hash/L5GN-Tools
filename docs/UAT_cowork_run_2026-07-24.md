@@ -5,7 +5,7 @@ Per-brief detail lives in each `UAT_<brief>.md`; this is the single sheet to wal
 top to bottom. All work is **staged, not committed**. Built on `23b5ffa`.
 
 Gate after each brief: `python verify.py` must be GREEN. Current (live, maintained):
-6 auditors + 37 testers. Per-brief sections below record each brief's own
+6 auditors + 39 testers. Per-brief sections below record each brief's own
 build-time count in the frozen `**N**` form.
 
 Order run: scanner_bugfixes → governance_scanners → blast_radius → estate_restructure.

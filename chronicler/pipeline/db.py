@@ -25,6 +25,7 @@ stdlib-only contract that permits importing `l5gntools` and forbids importing
 side. Callers here are unaffected -- `from db import get_connection` is unchanged.
 """
 import os
+import re
 import sqlite3
 from pathlib import Path
 
@@ -46,6 +47,85 @@ CHRONICLER_ROOT = Path(os.environ.get("CHRONICLER_HOME", str(PIPELINE_DIR.parent
 # also the escape hatch for filesystems without SQLite file locking (fuse sandboxes).
 DB_PATH = Path(os.environ.get("CHRONICLER_DB_PATH", str(CHRONICLER_ROOT / "chronicler.db")))
 SCHEMA_PATH = PIPELINE_DIR / "schema.sql"
+
+
+def resolve_registry_path() -> Path:
+    """The one place the pipeline decides where ``project_registry.json`` lives
+    (relink_scoring Task F; reconciliation report Task G).
+
+    Order, most-explicit first:
+      1. ``CHRONICLER_REGISTRY_PATH`` env -- the knob to set on a deploy target so
+         the writer (build_registry) and every reader point at one file
+         deterministically, independent of where the checkout happens to sit.
+      2. else the per-host derived location
+         ``<github_root>/L5GN/.intel_sync/project_registry.json`` where
+         ``<github_root> = CHRONICLER_ROOT.parent.parent`` -- the historical
+         layout, now computed in ONE place instead of a literal duplicated across
+         build_registry / build_inventory / build_activity / build_vocabulary /
+         relink / xref_filenames.
+
+    This returns a *location*, never checks existence: writer and readers must
+    agree on the same path whether or not the file is there yet. A reader that
+    finds nothing at the resolved path fails loud on its own (each consumer already
+    does an ``is_file()`` guard) -- the defect F removes is the *silent* fallback
+    to a different literal, so this resolver deliberately has none.
+    """
+    env = os.environ.get("CHRONICLER_REGISTRY_PATH")
+    if env:
+        return Path(env)
+    return CHRONICLER_ROOT.parent.parent / "L5GN" / ".intel_sync" / "project_registry.json"
+
+
+# ---------------------------------------------------------------------------
+# Co-origin identity (relink_scoring Task A)
+# ---------------------------------------------------------------------------
+# Evidence signals that name the SAME file/token are one piece of evidence, not
+# several -- a filename_xref on `world_graph.json`, a path_mention on the
+# `L5GN-Crystal-Spire` folder and an inline name_alias on `world_graph` must not
+# compound as if independently corroborated. These helpers give every producer
+# AND the consumer (relink) one canonical key for "what this signal is about", so
+# co-origin duplicates collapse identically whether the key was stamped at
+# produce time (the `link_evidence.origin` column) or derived on read.
+_ORIGIN_EXT_RE = re.compile(r"\.[A-Za-z0-9]{1,8}$")   # one trailing file extension
+_ORIGIN_STRIP_RE = re.compile(r"[-_\s./\\]+")          # separators that name-variants differ by
+
+
+def normalize_origin(raw: str) -> str:
+    """Lower-case, drop one trailing extension, strip separators, so that
+    `world_graph.json`, `world-graph` and `World Graph` all collapse to
+    `worldgraph`, and the folder token `L5GN_Armory_v4` / alias `l5gn armory v4`
+    both collapse to `l5gnarmoryv4`."""
+    if not raw:
+        return ""
+    s = raw.strip().lower()
+    s = _ORIGIN_EXT_RE.sub("", s)
+    s = _ORIGIN_STRIP_RE.sub("", s)
+    return s
+
+
+def origin_for(signal: str, detail: str) -> str:
+    """Canonical co-origin key for one evidence row. name_alias details carry a
+    `token@placement` shape (`world_graph@title`) -- the token before `@` is the
+    origin. Every other signal's detail is already the file/token itself
+    (filename_xref basename, path_mention source label)."""
+    if not detail:
+        return ""
+    token = detail.split("@", 1)[0] if signal == "name_alias" else detail
+    return normalize_origin(token)
+
+
+def ensure_origin_column(conn) -> bool:
+    """Idempotently add `link_evidence.origin` to an existing DB. A fresh build
+    already has it (the producers' CREATE TABLE carries the column); this migrates
+    a DB created before Task A. Returns True if the column is present afterwards,
+    False if the table doesn't exist yet (nothing to migrate)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(link_evidence)")}
+    if not cols:
+        return False
+    if "origin" not in cols:
+        conn.execute("ALTER TABLE link_evidence ADD COLUMN origin TEXT")
+    return True
+
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     """The one read/write connection factory for the pipeline.

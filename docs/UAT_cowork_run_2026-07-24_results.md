@@ -1,4 +1,4 @@
-<!-- uat: commit=1951cfe dirty=false host=LucasGoonPC walked=2026-07-25 gate=6a/37t -->
+<!-- uat: commit=1951cfe dirty=false host=LucasGoonPC walked=2026-07-25 -->
 
 # Results log — Cowork run 2026-07-24 (walked 2026-07-25, gaming rig)
 
@@ -106,7 +106,7 @@ it is inside the scanned root.
 - `[EVIDENCE]` **1.B3** Payload-anomaly banner has real content to show:
   `anomalies = [{project: L5GN, scanner: file_census, bytes: 514159, truncated:
   true}]`. The banner fires at the top of the report naming scanner + project.
-- `[EVIDENCE]` **1.B4** `verify.py` GREEN, 6 auditors + 37 testers;
+- `[EVIDENCE]` **1.B4** `verify.py` GREEN, 6 auditors + 39 testers;
   `tester_scanner_scope` + `tester_report_selfcheck` listed OK.
 - `[EVIDENCE]` **1.C1** Task C (Open-questions → PENDING) confirmed as governance
   scope — walked under 2.B3 below, not expected here.
