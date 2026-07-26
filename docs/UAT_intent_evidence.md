@@ -3,7 +3,7 @@
 **Brief:** `docs/COWORK_BRIEF_intent_evidence.md`
 **Report:** `docs/COWORK_REPORT_intent_evidence.md`
 **Built:** 2026-07-21, Cowork on `LucasGoonPC`
-**Gate at build time:** `python verify.py` → GREEN (6 auditors + 39 testers)
+**Gate at build time:** `python verify.py` → GREEN (6 auditors + 40 testers)
 
 Every item below is **ready to walk**. None is marked passed — that is Tim's call,
 and the result belongs in `docs/UAT_intent_evidence_results.md` with a commit stamp,
@@ -429,7 +429,7 @@ Full write-up: `docs/investigation/2026-07-21_crystal-spire-delve-index_2-respon
 
 ## Gate
 
-- [ ] `python verify.py` → **GREEN** (6 auditors + 39 testers).
+- [ ] `python verify.py` → **GREEN** (6 auditors + 40 testers).
 - [ ] `git status` in **L5GN-Tools** shows the changed files **uncommitted**.
       Nothing in this repo was committed.
 - [ ] Results recorded in `docs/UAT_intent_evidence_results.md` **with a commit

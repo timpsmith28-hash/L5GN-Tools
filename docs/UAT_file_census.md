@@ -4,7 +4,7 @@ Pair: `docs/COWORK_BRIEF_file_census.md` + `docs/COWORK_REPORT_file_census.md`.
 Built on top of `03bac5d`; **nothing is committed**, so walk this against the
 staged working tree.
 
-Gate at build time: `python verify.py` **GREEN**, 6 auditors + 39 testers.
+Gate at build time: `python verify.py` **GREEN**, 6 auditors + 40 testers.
 
 Every check below is **ready to walk**. None is passed — only Tim walking it
 makes it that, and this pair is not archivable until he has.
@@ -291,7 +291,7 @@ powershell -File deploy\pull-report.ps1
 
 ## J — the round-2 gate
 
-- [ ] **J1.** `python verify.py` is GREEN and reports **6 auditors + 39 testers**.
+- [ ] **J1.** `python verify.py` is GREEN and reports **6 auditors + 40 testers**.
 - [ ] **J2.** `python run.py list` shows `file_census` among the tools and
       `census` among the commands.
 - [ ] **J3.** `README.md`'s tools table has the `file_census` row.

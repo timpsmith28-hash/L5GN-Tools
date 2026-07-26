@@ -3,7 +3,7 @@
 **Brief:** `docs/COWORK_BRIEF_relink_scoring.md`
 **Report:** `docs/COWORK_REPORT_relink_scoring.md`
 **Built:** 2026-07-25, gaming rig. **Nothing committed** — walk against the staged tree.
-**Gate at build time:** `python verify.py` → GREEN (6 auditors + 39 testers).
+**Gate at build time:** `python verify.py` → GREEN (6 auditors + 40 testers).
 
 Every item below is **ready to walk**, none marked passed — that is Tim's call, and
 the result belongs in `docs/UAT_relink_scoring_results.md` with a commit stamp, or

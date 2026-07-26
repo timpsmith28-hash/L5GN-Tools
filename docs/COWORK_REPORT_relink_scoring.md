@@ -1,7 +1,7 @@
 # Cowork report — relink scoring: evidence made independent before it compounds
 
 **Pair:** `docs/COWORK_BRIEF_relink_scoring.md`. Session 2026-07-25, gaming rig.
-**Gate:** `python verify.py` → **GREEN** (6 auditors + 39 testers), before and after
+**Gate:** `python verify.py` → **GREEN** (6 auditors + 40 testers), before and after
 (the +2 testers are `tester_relink_scoring` and `tester_registry_path`).
 **Nothing committed.** Everything staged for Tim's review.
 
@@ -168,6 +168,6 @@ testers.
   results log), and the now-stale optional `gate=6a/37t` was dropped from the
   walked results stamp (`docs/README.md` §3 — omit rather than assert a count you
   didn't observe). Actual archiving of the finished pairs is deferred to Step 5.
-- **`verify.py` GREEN** (6 auditors + 39 testers) before and after.
+- **`verify.py` GREEN** (6 auditors + 40 testers) before and after.
 
 Nothing committed. Nothing written to any live vault.

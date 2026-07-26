@@ -60,6 +60,7 @@ from build_inventory import (
 # the same single estate-resolution path build_inventory now uses.
 from build_registry import (
     REGISTRY_PATH,
+    GROUPS_PATH,
     find_estate_snapshots,
     read_estate_snapshot,
     resolve_estates_dir,
@@ -168,7 +169,10 @@ def time_plausibility(thread_date, activity):
         t = parse_iso_date(b.get("to"))
         if f and t:
             bursts.append((f, t))
-    first = parse_iso_date(activity.get("first_commit"))
+    # first_seen (curated anchor, folded in by apply_first_seen) takes precedence
+    # over the git first_commit for the hard-zero lead: the era can legitimately
+    # begin before the code (design talk precedes the repo).
+    first = parse_iso_date(activity.get("first_seen") or activity.get("first_commit"))
     if not bursts and not first:
         return TP_NEUTRAL_NO_WINDOW
 
@@ -302,11 +306,65 @@ def resolve_fs(entry: dict) -> Path:
     return Path(entry.get("path") or "")
 
 
+def load_curated_first_seen(groups_path=GROUPS_PATH) -> dict:
+    """id -> curated ``first_seen`` (ISO date) from the curated seed.
+
+    A curated ``first_seen`` is the human anchor for "the work began before the
+    code" -- the earliest of the candidate start dates the operator weighs (git
+    init, earliest chat thread, an archived zip, memory). It is deliberately a
+    curated value, NOT auto-derived from the threads it gates, so a single
+    mis-linked early thread can never silently widen a window. A project's anchor
+    also applies to its repos, so a repo whose git history was truncated or
+    re-created (a fresh clone/extract) inherits the project's known real start.
+    """
+    try:
+        g = read_json(groups_path)
+    except Exception:
+        return {}
+    out = {}
+    for proj in g.get("projects", []):
+        fs = proj.get("first_seen")
+        if fs:
+            out[proj["id"]] = fs
+            for repo in proj.get("repos", []):
+                out.setdefault(repo["id"], fs)
+    return out
+
+
+def apply_first_seen(act: dict, curated_iso: str) -> dict:
+    """Fold a curated ``first_seen`` into an activity block.
+
+    Records ``first_seen`` as the EARLIEST of {curated anchor, git first_commit}
+    -- both are kept, git stays in ``first_commit`` for provenance -- and widens
+    the earliest burst back to it so the known era scores in-window rather than
+    being time-zeroed. A curated anchor can only push the window EARLIER, never
+    later (it is a min); if it is later than the git start it changes nothing.
+    """
+    if not act:
+        return act
+    cands = [d for d in (curated_iso, act.get("first_commit")) if d]
+    dates = [d for d in (parse_iso_date(c) for c in cands) if d]
+    if not dates:
+        return act
+    fs = min(dates)
+    act["first_seen"] = fs.isoformat()
+    if act.get("bursts"):
+        earliest = min(act["bursts"], key=lambda b: b.get("from") or "9999-99-99")
+        ed = parse_iso_date(earliest.get("from"))
+        if ed and fs < ed:
+            earliest["from"] = fs.isoformat()
+    else:
+        act["bursts"] = [{"from": fs.isoformat(),
+                          "to": act.get("last_commit") or fs.isoformat()}]
+    return act
+
+
 def run(force: bool, dry_run: bool, estates_dir: str | None = None):
     if not REGISTRY_PATH.is_file():
         raise SystemExit(f"[build_activity] registry missing: {REGISTRY_PATH} "
                          "(run build_registry.py first)")
     registry = read_json(REGISTRY_PATH)
+    curated_first_seen = load_curated_first_seen()
 
     resolved = resolve_estates_dir(estates_dir)
     snapshots = [read_estate_snapshot(e) for e in find_estate_snapshots(resolved)]
@@ -347,6 +405,13 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
                 skipped.append(name)
                 continue
             act = build_activity_block(fs_path, is_git)
+
+        # A curated first_seen (the operator's known real start, e.g. chat that
+        # predates the code) widens the window earlier so the era scores
+        # in-window instead of being time-zeroed. Never narrows it.
+        cfs = curated_first_seen.get(entry.get("id"))
+        if cfs:
+            act = apply_first_seen(act, cfs)
 
         if not dry_run:
             entry["activity"] = act
