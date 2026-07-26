@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS threads (
     review_status       TEXT DEFAULT 'auto',   -- auto / confirmed / pending
     raw_ref             TEXT,              -- path back to source file
     parser_version      TEXT,
+    -- derived: 1 if the thread has >= SUBSTANTIVE_MIN_MESSAGES (4) messages, else 0.
+    -- NULL on fresh insert; backfilled by set_substantive.py (a DB-only pipeline stage
+    -- that runs every pass, keeping the frozen-schema 'substantive is always set'
+    -- contract true after new ingests). Was missing from schema.sql -- present in the
+    -- live DB via an old migration, so only a from-scratch build surfaced the gap.
+    substantive         INTEGER,
     -- frontmatter-contract fields (9.1), stored here so renderer/sync-back has one home:
     review_note         TEXT,
     suggested_close     INTEGER DEFAULT 0,
