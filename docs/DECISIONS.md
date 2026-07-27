@@ -599,6 +599,69 @@ per 0008, which removes sync-back entirely).
 
 ---
 
+## 0017 — The `projects` table is reset and rebuilt, not migrated; 0011's debt is paid
+
+**Date:** drafted 2026-07-21, ratified 2026-07-27 · **Status:** accepted ·
+**Executes:** 0011 · **Source:** `COWORK_BRIEF_projects_reconciliation.md`;
+drafted in full in `docs/COWORK_REPORT_projects_reconciliation.md` §"Drafted
+DECISIONS 0017"; live census 2026-07-21T10:50Z
+
+**Context.** 0011 ruled that existing `project_link` values were noise from early
+auto-accept testing and should be reset rather than trusted. The runbook was
+written; no knight access existed to run it, so every relink and ruling since
+layered onto a table the repo had already decided not to trust. Measured on
+2026-07-21: 25 `projects` rows in three generations — 9 Claude uuids, 7 current
+registry ids, 9 legacy — carrying 226 links across five duplicate identity
+clusters, with zero orphans. The FK held throughout; the problem was duplication,
+not breakage.
+
+Two findings made "reset" mean more than clearing two columns. `config/project_registry.json`
+had never been shipped to the knight after round 3, so the three-tier registry
+(0012) had never existed there. And `relink.score_thread` keys candidates by the
+raw `link_evidence.project` string, with `upsert_project` inserting whatever that
+string says — 332 of 657 evidence rows were keyed to folder names rather than
+ids, so a reset that left the evidence alone would be undone by the next relink
+run.
+
+**Decision.** Reset and rebuild; do not migrate. A careful merge of 226 links
+across five identity clusters would produce a result nobody could audit, and the
+manual tagging at risk was 13 rulings — of which 10 pointed at an id (`l5gn-os`)
+that had since changed meaning and 2 looked mis-ruled on their own titles. The
+links are re-earned through relink and through rulings, under one identity scheme.
+
+**How it was actually executed (2026-07-27).** Not by the reset-and-re-key runbook
+this entry was drafted around. The knight took the **fresh build** path
+(`RUNBOOK_knight_fresh_build.md`) instead: the vault was rebuilt from the two
+irreplaceable inputs, so `link_evidence` and `project_link` started empty
+(verified: both `COUNT(*) = 0` before the apply) and there were no legacy rows to
+clear and no folder-name-keyed evidence to re-key. The 332-row re-key and the
+270-thread clear described above therefore never ran — the debt was paid by
+rebuild rather than by migration, which is the same decision reached by the
+cheaper route. The first id-keyed evidence pass wrote clean; the golden apply
+(`docs/archive/COWORK_REPORT_apply_alignment.md`) landed 343 threads against it.
+
+**Consequences.** The pre-reset links are gone, 13 of them human rulings — that is
+the bad part, accepted deliberately. What survived: every thread and message, the
+Claude uuid rows (Claude's own entities, holding no links), and every alias
+authored by hand. `l5gn-os` keeps its program meaning.
+
+Two follow-ups this entry commits us to, **both still open as of 2026-07-27**:
+
+1. `relink.load_registry`'s flat-registry guard must test registry **content**,
+   not key presence — it currently refuses only on a missing `programs` key,
+   which the generator always emits.
+2. The candidate-scoring path must **refuse a `link_evidence.project` key that is
+   not a link target**. `evidence_votes` still groups by whatever string the
+   column holds, with no check that it resolves in the registry.
+
+Without both, a third generation of identity rows can grow back the same way the
+second did. The `seed_suppress` defect found during the golden apply
+(`b7c2390` — a curated alias removal silently regenerated, false-linking six
+threads) is the same family of fault: a generator writing an identity nobody
+ratified.
+
+---
+
 ## 0018 — Persona / LLM inference is a separate, pluggable service, never inside the toolkit wall
 
 **Date:** 2026-07-25 · **Status:** accepted · **Source:** design thread (command deck review) · **Builds on:** 0007; INTENT §4/§5
