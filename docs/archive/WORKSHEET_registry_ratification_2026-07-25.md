@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-27 · superseded · no report — a ratification worksheet, not a brief/report pair
+> Superseded by: the ratified rulings are now live in `config/project_registry.json` (rig-local, gitignored) and confirmed applied — `apply_alignment`'s precondition 2 (`docs/archive/UAT_apply_alignment_results.md`) states MET, registry re-run against the live vault.
+> Read as the ratification record as it stood 2026-07-25. Any ruling here that conflicts with the live registry file has been overtaken by that file, not by a later doc — the registry itself is the current truth, per `docs/README.md`'s derivability rule.
+
 # Registry ratification worksheet — 2026-07-25
 
 The reconciliation decision session. Prepared from the first registry build that

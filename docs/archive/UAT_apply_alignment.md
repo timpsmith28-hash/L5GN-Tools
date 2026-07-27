@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-27 · completed pair (walk-sheet) · walked; results in `UAT_apply_alignment_results.md`
+> Superseded by: nothing — walked clean, all items ruled per the results log's closing walk-sheet cross-reference table.
+> Both apply passes (contaminated 412, corrected 343) are accounted for in the results log; this checklist was walked only against the corrected, final state.
+
 # UAT walk-sheet — apply alignment (golden close-out)
 
 **Brief:** `docs/COWORK_BRIEF_apply_alignment.md`

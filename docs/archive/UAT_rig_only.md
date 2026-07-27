@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-27 · superseded · no report — a rig-only interim checklist, never paired with its own brief
+> Superseded by: the knight is now fully live and walked end-to-end (`docs/archive/UAT_apply_alignment_results.md`, `docs/UAT_repo_tier_producers_results.md`) — the rig-only constraint this doc exists to work around no longer applies.
+> Written before the knight existed, to prove what could be checked with "no knight, no work rig, no push." Its cited sheets (`UAT_file_census.md` etc.) are still live docs in their own right; read this only as a historical snapshot of what was rig-checkable in July 2026, not as a current task list.
+
 # UAT — what can be proved on the gaming rig alone
 
 Everything here runs on `LucasGoonPC` with **no knight, no work rig, no push**.

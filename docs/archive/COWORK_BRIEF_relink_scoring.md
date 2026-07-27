@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-27 · completed pair · pairs with `COWORK_REPORT_relink_scoring.md`; walk-sheet `UAT_relink_scoring.md` + results `UAT_relink_scoring_results.md` archive alongside
+> Superseded by: nothing supersedes the request itself — its scorer fix (A/B/C/E/F) landed at `52193bd`, was walked (`UAT_relink_scoring_results.md`, 2026-07-25), and was consumed as `apply_alignment`'s precondition 1, which is what closed the need for this brief to stay live.
+> Read as the request as asked (co-origin collapse, corroboration floor, count caps, no synthetic `repo_folder_path`, one registry path). Task D (measured-ownership stoplist) was explicitly deferred by the brief itself, not silently dropped — still open if wanted.
+
 # Cowork brief — relink scoring: evidence must be independent before it can compound
 
 **Origin:** design thread, 2026-07-25, out of `COWORK_REPORT_intent_evidence.md`.

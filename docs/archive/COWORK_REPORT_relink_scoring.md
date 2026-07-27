@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=d1a1b76 -->
 
+> **ARCHIVED** 2026-07-27 · completed pair · pairs with `COWORK_BRIEF_relink_scoring.md`; walk-sheet + results archive alongside
+> Superseded by: the scorer fix this reports on landed and was walked (`UAT_relink_scoring_results.md`, 2026-07-25), then consumed by `apply_alignment`'s precondition 1.
+> Read as testimony from 2026-07-25 (gaming rig, against a 4-day-old snapshot, no live vault touched). Its own `gate-frozen` marker above already exempts this file's "6 auditors + 40 testers" claim from live-count drift — do not update that number.
+
 # Cowork report — relink scoring: evidence made independent before it compounds
 
 **Pair:** `docs/COWORK_BRIEF_relink_scoring.md`. Session 2026-07-25, gaming rig.

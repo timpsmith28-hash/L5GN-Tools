@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-27 · completed pair · pairs with `COWORK_REPORT_apply_alignment.md`; walk-sheet `UAT_apply_alignment.md` + results `UAT_apply_alignment_results.md` archive alongside
+> Superseded by: nothing — this is the terminal state of the golden-close-out effort the doc pipeline (rounds 1–3, repo-tier producers, relink scoring) was building toward. The chats-linked-to-projects state now lives in the vault itself, not in a doc.
+> Read as the request as asked. Work-estate (MCF) chats remain deliberately unaligned per this brief's own stated exception (no full export) — not a gap to "fix" later without a real export existing.
+
 # Cowork brief — apply alignment: the golden moment (chats linked to projects & programs)
 
 **Origin:** design thread, 2026-07-25. This is the brief that reaches the **Golden

@@ -1,5 +1,9 @@
 <!-- uat: commit=5711962 dirty=false host=l5gn-castle-worker walked=2026-07-27 -->
 
+> **ARCHIVED** 2026-07-27 · completed pair (results) · walked 2026-07-25, ruling MET
+> Superseded by: `apply_alignment`'s precondition 1, which names this document as the thing that closed it.
+> B's exact decision-table counts were explicitly deferred here to `apply_alignment`'s Task 7 dry-run — that deferral was honoured and closed there (see `docs/archive/UAT_apply_alignment_results.md`), not re-litigated in this file.
+
 # Results log — relink scoring (walked 2026-07-27)
 
 Partner to `docs/UAT_relink_scoring.md` / `docs/COWORK_BRIEF_relink_scoring.md` /

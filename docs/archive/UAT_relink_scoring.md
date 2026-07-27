@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=d1a1b76 -->
 
+> **ARCHIVED** 2026-07-27 · completed pair (walk-sheet) · walked; results in `UAT_relink_scoring_results.md`
+> Superseded by: nothing — the walk closed cleanly (A/C/E/F items MET; B's mechanism MET, its exact decision-table counts explicitly deferred to `apply_alignment`'s Task 7 dry-run, where they were actually walked).
+> Its own `gate-frozen` marker above holds; do not update the auditor/tester count in the body below.
+
 # UAT walk-sheet — relink scoring
 
 **Brief:** `docs/COWORK_BRIEF_relink_scoring.md`

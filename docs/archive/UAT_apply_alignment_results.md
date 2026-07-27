@@ -1,5 +1,9 @@
 <!-- uat: commit=5711962 dirty=false host=l5gn-castle-worker walked=2026-07-27 -->
 
+> **ARCHIVED** 2026-07-27 · completed pair (results) · walked 2026-07-27, ruling "closed for this round"
+> Superseded by: nothing — terminal results log of the golden-close-out effort.
+> The first, contaminated apply (412 changed, 55 auto-links) is preserved in this file with its own in-body superseded notice — read that notice, not the raw numbers, if skimming. The corrected/final state is the second pass (343 changed, 3 auto-links), the "Task 10 re-verification" section, and the closing walk-sheet cross-reference table.
+
 # Results log — apply alignment (walked 2026-07-27, knight)
 
 Partner to `docs/UAT_apply_alignment.md` / `docs/COWORK_BRIEF_apply_alignment.md`.

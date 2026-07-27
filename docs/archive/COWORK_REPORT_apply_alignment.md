@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-07-27 · completed pair · pairs with `COWORK_BRIEF_apply_alignment.md`; walk-sheet + results archive alongside
+> Superseded by: nothing — terminal report of this effort. The seed_suppress fix it documents (`b7c2390`) and the vault-freeze fix (`finalize_db.py --apply`) are both live in the vault/registry now, not pending.
+> Read as testimony from 2026-07-27. The "412 changed" first-apply figures it references are already marked superseded within its own text and in `UAT_apply_alignment_results.md` — do not treat as current even on a second read.
+
 # Cowork report — apply alignment: the golden close-out (chats linked to projects & programs)
 
 **Pair:** `docs/COWORK_BRIEF_apply_alignment.md`. Session 2026-07-27, knight
