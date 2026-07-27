@@ -44,7 +44,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import get_connection, DB_PATH
+from db import get_connection, DB_PATH, CHRONICLER_ROOT
 
 try:
     from build_inventory import REGISTRY_PATH, read_json
@@ -55,7 +55,27 @@ except Exception:                       # registry helpers optional for reportin
 SCHEMA_VERSION = "1.0-frozen"           # bump on any future schema change + migration
 SCHEMA_USER_VERSION = 1                 # PRAGMA user_version integer mirror
 SUBSTANTIVE_MIN_MESSAGES = 4            # agreed cut: >= 4 messages == substantive
-FROZEN_SQL_PATH = Path(__file__).resolve().parent / "schema_frozen.sql"
+PIPELINE_DIR = Path(__file__).resolve().parent
+# The repo's TRACKED schema dump. It documents the real, shared schema -- it
+# must never silently pick up whatever a throwaway/dev CHRONICLER_HOME happens
+# to contain (found live: solo_playbook round, 2026-07-27 -- running --apply
+# against a dev vault overwrote this tracked file with the dev vault's shape,
+# a 52-deletion/81-insertion diff caught only by `git status` before commit).
+# db.CHRONICLER_ROOT defaults to this same directory's parent when
+# CHRONICLER_HOME is unset -- that "unset" case is the only one where writing
+# straight into the repo is safe by default. Any explicit CHRONICLER_HOME
+# (dev throwaway OR a real deploy target) gets the dump written next to ITS
+# OWN vault instead, unless --freeze-repo-schema explicitly overrides.
+FROZEN_SQL_PATH = PIPELINE_DIR / "schema_frozen.sql"
+
+
+def frozen_schema_target(force_repo: bool = False) -> tuple[Path, bool]:
+    """Where to write the frozen-schema dump this run, and whether that's the
+    repo's tracked copy (True) or a vault-local one (False)."""
+    is_default_root = CHRONICLER_ROOT == PIPELINE_DIR.parent
+    if force_repo or is_default_root:
+        return FROZEN_SQL_PATH, True
+    return CHRONICLER_ROOT / "schema_frozen.sql", False
 
 _UUIDV7_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
@@ -212,7 +232,7 @@ def stamp_version(conn):
     conn.execute(f"PRAGMA user_version = {SCHEMA_USER_VERSION}")
 
 
-def dump_frozen_schema(conn):
+def dump_frozen_schema(conn, target: Path = FROZEN_SQL_PATH):
     rows = conn.execute(
         "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid").fetchall()
     header = (
@@ -228,8 +248,9 @@ def dump_frozen_schema(conn):
         "--   * threads.substantive == 1 iff the thread has >= "
         f"{SUBSTANTIVE_MIN_MESSAGES} messages.\n\n")
     body = "\n".join((r["sql"].rstrip() + ";") for r in rows)
-    FROZEN_SQL_PATH.write_text(header + body + "\n", encoding="utf-8")
-    return FROZEN_SQL_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(header + body + "\n", encoding="utf-8")
+    return target
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +264,7 @@ def backup_db():
     return dst
 
 
-def run(apply: bool):
+def run(apply: bool, force_repo_schema: bool = False):
     conn = get_connection()
     try:
         canon = registry_canon()
@@ -277,8 +298,13 @@ def run(apply: bool):
         print(f"P2 migrated {n2} 'none' -> NULL.")
         print(f"P3 substantive flag populated (>= {SUBSTANTIVE_MIN_MESSAGES} msgs).")
         print(f"schema_version stamped: {SCHEMA_VERSION} (user_version {SCHEMA_USER_VERSION}).")
-        frozen = dump_frozen_schema(conn)
+        target, is_repo = frozen_schema_target(force_repo_schema)
+        frozen = dump_frozen_schema(conn, target)
         print(f"frozen schema dumped: {frozen}")
+        if not is_repo:
+            print(f"  (NOT the repo's tracked schema_frozen.sql -- CHRONICLER_HOME "
+                  f"is set to {CHRONICLER_ROOT}, not the repo default. Pass "
+                  f"--freeze-repo-schema to overwrite the tracked copy instead.)")
 
         census(conn, "after")
         # post-conditions
@@ -297,5 +323,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Chronicler DB finalize & freeze (P1-P3 + freeze).")
     ap.add_argument("--apply", action="store_true",
                     help="Backup, then run P1-P3, stamp schema_version, dump schema_frozen.sql.")
+    ap.add_argument("--freeze-repo-schema", action="store_true",
+                    help="Force the dump to the repo's tracked schema_frozen.sql even when "
+                         "CHRONICLER_HOME is set to a non-default location. Use only for a "
+                         "deliberate, real schema-migration freeze -- never for a dev/throwaway vault.")
     args = ap.parse_args()
-    run(args.apply)
+    run(args.apply, args.freeze_repo_schema)

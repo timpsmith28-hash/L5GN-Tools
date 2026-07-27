@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=22df436 -->
+
 # UAT walk-sheet — repo-tier producers
 
 **Brief:** `docs/COWORK_BRIEF_repo_tier_producers.md`

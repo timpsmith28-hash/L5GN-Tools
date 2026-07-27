@@ -1,4 +1,5 @@
 <!-- uat: commit=5711962 dirty=false host=l5gn-castle-worker walked=2026-07-27 -->
+<!-- gate-frozen: commit=22df436 -->
 
 # Results log — repo-tier producers (walked 2026-07-27)
 
