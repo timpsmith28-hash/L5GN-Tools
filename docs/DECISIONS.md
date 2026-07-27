@@ -800,3 +800,39 @@ display surface: seeing work requires the code; seeing personal does not.
 reveal the work column; the mesh-wide view renders the work side as gated-until-unlocked.
 This is the first place the wall governs *reading*, not just writing or merging — stated
 here so a later "just show everything" convenience change has to argue against this entry.
+
+---
+
+## 0024 — Project-link rejections are an endpoint-owned, append-only `review_rulings` table
+
+**Date:** 2026-07-27 · **Status:** proposed · **Source:** COWORK_BRIEF_command_deck_proto.md Task 3 · **Builds on:** 0007; 0022's ledger shape
+
+**Context.** `review_queue` is pipeline-owned: relink is its only writer, and
+the review endpoint's audited invariant (0007, `tester_review`) is that a
+human ruling touches only `threads.project_link` / `threads.project_confidence`
+plus an idempotent `projects` identity row — never `review_queue`. An accept
+is expressible as a link (`project_confidence='manual'`), which is why that
+column boundary has held. A rejection has nowhere equivalent to go: it is a
+fact about a *proposal*, and proposals are `review_queue` rows, which the
+endpoint has never been allowed to write.
+
+**Decision.** Add a new table, written only by the review endpoint,
+append-only: `review_rulings (thread_id TEXT, candidate_project TEXT,
+verdict TEXT, ruled_at TEXT)`. "Not this project" inserts a row with
+`verdict='rejected'`; the grouped read surface (`pending_rulings`,
+`queue_by_project`) joins against it and excludes any `(thread_id,
+candidate_project)` pair with a rejected verdict from that project's batch —
+the same exclusion mechanism as the existing `project_confidence='manual'`
+rule, one join further out. `review_queue` itself is never written by the
+endpoint; the single-writer guarantee 0007 established is preserved exactly,
+not widened.
+
+**Consequences.** One more table and one more join on every grouped read.
+A rejection becomes inspectable after the fact (who rejected what, when),
+the same provenance instinct as 0022's ledger and the UAT stamp — and this
+table can very plausibly *become* (or feed) that ledger later rather than
+being a one-off. The alternative — `review_queue.status='rejected'`,
+written directly by the endpoint — is fewer moving parts but reopens a
+boundary that has held since 0007 for the sake of one UI round; if that
+trade is ever preferred it should be a deliberate re-litigation of this
+entry, not an incidental choice made while building the deck.
