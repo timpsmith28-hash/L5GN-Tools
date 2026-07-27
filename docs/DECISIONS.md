@@ -805,7 +805,7 @@ here so a later "just show everything" convenience change has to argue against t
 
 ## 0024 — Project-link rejections are an endpoint-owned, append-only `review_rulings` table
 
-**Date:** 2026-07-27 · **Status:** proposed · **Source:** COWORK_BRIEF_command_deck_proto.md Task 3 · **Builds on:** 0007; 0022's ledger shape
+**Date:** 2026-07-27 · **Status:** accepted · **Source:** COWORK_BRIEF_command_deck_proto.md Task 3 · **Builds on:** 0007; 0022's ledger shape
 
 **Context.** `review_queue` is pipeline-owned: relink is its only writer, and
 the review endpoint's audited invariant (0007, `tester_review`) is that a
@@ -836,3 +836,60 @@ written directly by the endpoint — is fewer moving parts but reopens a
 boundary that has held since 0007 for the sake of one UI round; if that
 trade is ever preferred it should be a deliberate re-litigation of this
 entry, not an incidental choice made while building the deck.
+
+---
+
+## 0025 — Estate visibility is scoped by *surface*, not by estate; a solo box may read its own estate on loopback
+
+**Date:** 2026-07-27 · **Status:** accepted · **Amends:** 0023 (does not supersede
+it) · **Builds on:** 0010; the solo playbook · **Source:** design thread, preparing
+the work-laptop walk
+
+**Context.** 0023 ruled work-estate data behind the TOTP gate **even to view**.
+Its stated context is specific: *"the mesh-wide view co-renders personal and work
+on the knight, and work carries MCF / PII-adjacent material … the deck is the
+first surface to show both estates together, to any tailnet device, with no
+code."* The rule protects against a **co-rendered, network-reachable** surface.
+
+The Command Deck prototype implemented it as written — a deny-by-default
+`account LIKE '%-personal'` allowlist in both read paths, with no flag to flip.
+Correct for the knight. But it makes the deck structurally incapable of showing
+work data anywhere, including on a **solo work laptop, holding only its own work
+estate, bound to loopback, read by the operator sitting in front of it**. That
+machine has no personal estate to co-render, no tailnet exposure, and no reader
+other than the person whose material it already is. Gating it protects nobody and
+blocks the one dataset with the cleanest project definitions in the estate.
+
+**Decision.** Visibility is gated by the **surface**, not by the estate label:
+
+1. A surface that **co-renders more than one estate** requires the TOTP gate to
+   reveal the work side. 0023 stands, unchanged, for the knight.
+2. A surface **reachable beyond the machine it runs on** requires the gate to
+   show work data at all.
+3. A surface rendering **only the local machine's own estate**, bound to
+   **loopback only**, is the operator reading their own files, and is not gated.
+
+The deck therefore shows the estate declared for the machine it is running on —
+`personal` on the personal rig, `work` on the work laptop — and never both,
+unless the gate exists and has been satisfied. The wall of 0010 is untouched:
+this governs *display*, never deposits, never merging.
+
+**Consequences.** The wall's enforcement moves from a hardcoded
+`'%-personal'` string to the machine's declared estate, which means it is now
+config-derived rather than constant — a real weakening of "there is no knob
+here", accepted deliberately and bounded by the loopback condition, which is
+**not** config-derived and must be enforced structurally: a work-estate surface
+that is asked to bind beyond loopback must refuse to start, not warn.
+
+Two things follow that this entry commits us to:
+
+- The default bind (`0.0.0.0`, right for the knight's tailnet) must not apply on
+  a work-estate machine.
+- A work box should carry a **registry scoped to its own estate** — an MCF-only
+  `project_registry.json` rather than the full curated file. Nothing about the
+  personal estate needs to exist on that machine, and the smallest correct
+  registry is also the smallest disclosure. This is a shipping practice, not a
+  code change, but it belongs with this ruling.
+
+The TOTP gate (0023) remains unbuilt and remains required for every case in (1)
+and (2). This entry narrows *where* it is required; it does not remove it.
