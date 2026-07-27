@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=699b480 -->
+
 # Cowork report — estate restructure
 
 Pair: `docs/COWORK_BRIEF_estate_restructure.md`. Sessions 2026-07-24. **Nothing was

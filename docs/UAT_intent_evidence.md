@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # UAT — intent evidence
 
 **Brief:** `docs/COWORK_BRIEF_intent_evidence.md`

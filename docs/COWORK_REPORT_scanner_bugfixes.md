@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=6d09eb3 -->
+
 # Cowork report — scanner bug fixes
 
 Pair: `docs/COWORK_BRIEF_scanner_bugfixes.md`. Session 2026-07-24, on top of

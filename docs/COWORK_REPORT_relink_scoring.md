@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # Cowork report — relink scoring: evidence made independent before it compounds
 
 **Pair:** `docs/COWORK_BRIEF_relink_scoring.md`. Session 2026-07-25, gaming rig.

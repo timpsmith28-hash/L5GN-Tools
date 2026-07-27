@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=bb257fd -->
+
 # UAT walk-sheet — blast-radius scanner + uncommitted-critical alarm
 
 Pair: `docs/COWORK_BRIEF_blast_radius.md` → `docs/COWORK_REPORT_blast_radius.md`.

@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # COWORK REPORT — intent evidence: connecting the file inventory to the chat vault
 
 **Brief:** `docs/COWORK_BRIEF_intent_evidence.md`

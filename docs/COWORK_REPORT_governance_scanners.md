@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=25ede96 -->
+
 # Cowork report — governance scanners + scope-in-UI
 
 Pair: `docs/COWORK_BRIEF_governance_scanners.md`. Session 2026-07-24, on top of

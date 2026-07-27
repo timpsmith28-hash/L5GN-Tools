@@ -117,6 +117,34 @@ version of this tree — a stale number recovered from a retired doc in `archive
 and laundered into a live one. With no commit on the document, "the walking
 machine was on an old tree" and "the number was invented" were indistinguishable.
 
+### The gate-frozen marker
+
+A live doc's "N auditors + M testers" claim is checked against `verify.py`'s
+live counts by `auditor_doc_claims`. That claim goes stale the moment a later
+round legitimately adds a tester — the doc is not wrong, it is just
+*finished*: a frozen record of the gate as it stood when the doc was written.
+A doc that has earned that status may say so explicitly, in its first ~15
+lines:
+
+```
+<!-- gate-frozen: commit=<sha> -->
+```
+
+The marker exempts that file's compound-count claims from the live-count
+diff. It must earn the exemption: `commit=` is required and must resolve to
+a real commit in this repository; a missing or unresolvable sha is itself a
+violation, not a silent pass — you cannot fake-freeze a doc. This is checked
+by `auditor_doc_claims`, mirroring `auditor_uat_stamp`'s SHA-resolver shape
+above.
+
+The marker is for **finished docs only**. A handful of docs are maintained,
+not finished, and may never carry it — `README.md` (root), `docs/README.md`,
+`docs/INTENT.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`,
+`docs/KNIGHT_PLAYBOOK.md`, `docs/PRODUCER_PLAYBOOK.md`. A marker found in any
+of those is a violation. This is the same list §1 already treats as
+maintained and the docs-archivist skill already refuses to archive — keep
+the two in sync.
+
 ### Why the auditor stops at the archive door
 
 `auditor_doc_claims` scans `README.md` and `docs/*.md` — **non-recursive**, so

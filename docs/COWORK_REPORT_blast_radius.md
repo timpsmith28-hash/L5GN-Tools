@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=bb257fd -->
+
 # Cowork report — blast-radius scanner + the uncommitted-critical alarm
 
 Pair: `docs/COWORK_BRIEF_blast_radius.md`. Session 2026-07-24, on top of `23b5ffa`,

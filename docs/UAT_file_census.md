@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # UAT walk-sheet — file census
 
 Pair: `docs/COWORK_BRIEF_file_census.md` + `docs/COWORK_REPORT_file_census.md`.

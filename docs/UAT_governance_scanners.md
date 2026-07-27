@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=25ede96 -->
+
 # UAT walk-sheet — governance scanners + scope-in-UI
 
 Pair: `docs/COWORK_BRIEF_governance_scanners.md` → `docs/COWORK_REPORT_governance_scanners.md`.

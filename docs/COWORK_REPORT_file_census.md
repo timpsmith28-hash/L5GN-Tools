@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # Cowork report — file census
 
 Pair: `docs/COWORK_BRIEF_file_census.md`. Session 2026-07-21, on top of `03bac5d`.

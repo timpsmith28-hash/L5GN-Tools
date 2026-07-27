@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # Consolidated UAT list — Cowork run 2026-07-24
 
 One walk-list across the four briefs run this session, appended after each brief.

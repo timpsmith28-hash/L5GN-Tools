@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=6d09eb3 -->
+
 # UAT walk-sheet — scanner bug fixes
 
 Pair: `docs/COWORK_BRIEF_scanner_bugfixes.md` → `docs/COWORK_REPORT_scanner_bugfixes.md`.

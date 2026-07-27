@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=699b480 -->
+
 # UAT walk-sheet — estate restructure
 
 Pair: `docs/COWORK_BRIEF_estate_restructure.md` → `docs/COWORK_REPORT_estate_restructure.md`.

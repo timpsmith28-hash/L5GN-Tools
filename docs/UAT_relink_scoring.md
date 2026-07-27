@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=d1a1b76 -->
+
 # UAT walk-sheet — relink scoring
 
 **Brief:** `docs/COWORK_BRIEF_relink_scoring.md`
