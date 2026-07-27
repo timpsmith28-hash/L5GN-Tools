@@ -40,6 +40,11 @@ Standing rules honoured (spec §"Standing rules"):
   * whole-file write (never a half-updated registry); tmp-file + os.replace.
   * loud failure: any problem raises and writes nothing.
   * all file I/O UTF-8 explicit; all timestamps UTC ISO-8601.
+  * a curated repo may carry `seed_suppress: [alias, ...]` -- short-name aliases
+    `seed_aliases()` would otherwise re-derive from the canonical name every run
+    (e.g. 'Castle' off 'L5GN-Castle') but that the human has deliberately ruled
+    out (2026-07-27: matches the knight's own hostname in shell transcripts). A
+    prose note alone does not stop the regeneration; `seed_suppress` does.
 
 This is a *generator*, safe to re-run. On re-run it MERGES: existing manual
 aliases, alias_sources, first_seen, and any downstream-added keys
@@ -428,9 +433,11 @@ def assemble_tiers(entries: list, groups: dict) -> tuple[dict, list]:
                     "last_activity": deposited["last_activity"],
                     "commit_count": deposited["commit_count"],
                     "estates": deposited["estates"],
-                    # union the seeded aliases under the curated ones
+                    # union the seeded aliases under the curated ones, honouring
+                    # any deliberate curated suppression of a short-name reseed
                     "aliases": _merge_alias_lists(repo.get("aliases", []),
-                                                  deposited["aliases"]),
+                                                  deposited["aliases"],
+                                                  repo.get("seed_suppress", [])),
                 })
             else:
                 repo["present"] = False
@@ -486,11 +493,25 @@ def assemble_tiers(entries: list, groups: dict) -> tuple[dict, list]:
     return {"programs": programs, "projects": projects}, notes
 
 
-def _merge_alias_lists(curated: list, seeded: list) -> list:
+def _merge_alias_lists(curated: list, seeded: list, suppress: list | None = None) -> list:
     """Curated aliases first (they are the human's words), then any seeded alias
-    that is not already present case-insensitively."""
+    that is not already present case-insensitively and not explicitly suppressed.
+
+    ``suppress`` closes a real hole found in the 2026-07-27 golden-apply round:
+    a curated author can *deliberately remove* a bare short-name alias from the
+    curated list (e.g. 'Castle' off L5GN-Castle, because it matches the knight's
+    own hostname 'l5gn-castle-worker' in shell transcripts) and document why in a
+    note -- but `seed_aliases()` regenerates that exact short name from the
+    canonical name on every run, silently re-adding it underneath the note. A
+    prose note documents intent; it does not enforce it. `seed_suppress` on the
+    curated repo/project entry is the enforcement: any seeded alias whose
+    normalised form appears there is dropped, not merged back in, no matter how
+    many times the generator re-derives it."""
     out = list(curated)
+    suppressed = {norm(s) for s in (suppress or [])}
     for a in seeded:
+        if norm(a) in suppressed:
+            continue
         if not any(norm(a) == norm(x) for x in out):
             out.append(a)
     return out

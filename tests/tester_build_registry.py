@@ -162,4 +162,28 @@ def run() -> list[str]:
             v.append("build_registry: --estate could not restrict to one deposit "
                      "(needed while the work rig has not deployed yet)")
 
+    # --- seed_suppress: a curated author's deliberate alias removal must stick
+    # (2026-07-27 golden-apply finding: seed_aliases() regenerated a bare
+    # 'Castle' short-name alias every run even though the curated file had
+    # removed it, false-auto-linking 6 threads on zero real evidence) ---
+    merged_no_suppress = br._merge_alias_lists(["L5GN-Castle"], ["L5GN-Castle", "Castle"])
+    if "Castle" not in merged_no_suppress:
+        v.append("build_registry: _merge_alias_lists sanity check itself regressed "
+                 "-- a seeded alias not curated should normally be added")
+    merged_suppressed = br._merge_alias_lists(
+        ["L5GN-Castle"], ["L5GN-Castle", "Castle"], ["Castle"])
+    if "Castle" in merged_suppressed:
+        v.append("build_registry: seed_suppress did not stop a seeded short-name "
+                 "alias from being re-added -- this is the exact false-positive "
+                 "class that put bad evidence on 6 real threads")
+    if "L5GN-Castle" not in merged_suppressed:
+        v.append("build_registry: seed_suppress must only drop the suppressed "
+                 "alias, not the curated one it sits alongside")
+    # case/separator-insensitive: suppressing 'castle' must catch 'Castle'
+    merged_norm = br._merge_alias_lists(["L5GN-Castle"], ["Castle"], ["castle"])
+    if "Castle" in merged_norm:
+        v.append("build_registry: seed_suppress comparison must be "
+                 "normalised (case/separator-insensitive), matching how "
+                 "every other alias comparison in this file works")
+
     return v
