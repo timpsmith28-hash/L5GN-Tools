@@ -1,9 +1,19 @@
-<!-- uat: commit=5e5fee2 dirty=false host=LucasGoonPC walked=2026-07-27 gate=6a/45t -->
-<!-- gate count updated 2026-07-27: command deck prototype (Task 1) registered
-     tester_relink_apply + tester_backfill_candidate_project, 43t -> 45t. The
-     walk itself is unaffected; auditor_uat_stamp checks the live tree's
-     registered count, not the commit's, so this line drifts whenever a
-     tester is added after the fact and must be bumped to keep the gate green. -->
+<!-- uat: commit=5e5fee2 dirty=false host=LucasGoonPC walked=2026-07-27 -->
+<!-- gate= deliberately omitted. This walk happened at 5e5fee2, where the gate
+     registered 43 testers. auditor_uat_stamp checks gate= against the LIVE
+     tree's count rather than the stamped commit's, so a truthful historical
+     figure turns red the moment anyone registers a tester -- and the cheapest
+     way back to green is to edit the record. That happened three times in one
+     day here (43t -> 45t -> 46t) before anyone stopped.
+     docs/README.md already prescribes the answer: gate= is optional, so
+     "omit it rather than assert a count you didn't observe". commit, host and
+     walked carry the provenance that matters; the count is recoverable from
+     the commit itself. Same disposition as docs/archive/UAT_round_3_results.md,
+     which reached this conclusion first. -->
+
+<!-- Open question, not fixed here: whether auditor_uat_stamp should resolve
+     gate= against the stamped commit's verify.py (making the field meaningful
+     and permanent), or refuse the field outright. Until then, do not write it. -->
 
 # Results log — solo playbook (walked 2026-07-27)
 

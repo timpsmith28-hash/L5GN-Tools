@@ -13,10 +13,20 @@
   #status { margin-bottom: .7rem; font-size: .85rem; min-height: 1.2em; }
   .layout { display: grid; grid-template-columns: 17rem 1fr; gap: 1rem;
             align-items: start; max-width: 68rem; margin-inline: auto; }
-  @media (max-width: 45rem) { .layout { grid-template-columns: 1fr; } }
+  @media (max-width: 45rem) {
+    .layout { grid-template-columns: 1fr; }
+    /* Single column: the nav is above the batch, so pinning it would eat the
+       viewport. Let it scroll with the page instead. */
+    #nav { position: static; max-height: none; }
+  }
 
   /* -------- left: programs > projects > repos, pending counts -------- */
-  #nav { border: 1px solid #8884; border-radius: 8px; overflow: hidden; }
+  /* Sticky + independently scrollable: a long project list must not force you
+     to scroll the whole page down to reach a project and back up to read its
+     batch. overflow-x stays hidden so the rounded corners still clip. */
+  #nav { border: 1px solid #8884; border-radius: 8px;
+         overflow-x: hidden; overflow-y: auto;
+         position: sticky; top: 1rem; max-height: calc(100vh - 2rem); }
   .nav-item { display: flex; justify-content: space-between; gap: .5rem;
               padding: .5rem .7rem; cursor: pointer; border-bottom: 1px solid #8882;
               font-size: .85rem; }
@@ -53,7 +63,12 @@
   .note { font-size: .8rem; opacity: .85; margin: .35rem 0; white-space: pre-wrap; }
   .snippet { font-size: .8rem; opacity: .7; font-style: italic;
              border-left: 3px solid #8884; padding-left: .6rem; margin: .35rem 0; }
-  .item-actions { display: flex; gap: .4rem; margin-top: .4rem; align-items: center; }
+  .item-actions { display: flex; gap: .4rem; margin-top: .4rem; align-items: center;
+                  flex-wrap: wrap; }
+  /* "It's actually the other one." Only rendered for a row that genuinely has a
+     second candidate (link_ambiguous), so it can never be a blind reassignment:
+     the target is one relink already scored and named in the note beside it. */
+  .btn-other { border-color: #d98a2b88; }
   .ok { color: #1a7f37; } .err { color: #c0392b; }
   .empty { opacity: .7; padding: 2.5rem 0; text-align: center; }
 </style>
@@ -118,8 +133,27 @@ async function loadProjects(preserveSelection){
   }
 }
 
+// The row's OTHER scored candidate, if it has one. Viewing a project as the
+// rival, the other side is the primary candidate, and vice versa. Null for
+// project_link / link_downgrade rows, which only ever carry one candidate --
+// so this button never offers a target relink didn't actually score.
+function otherCandidate(it){
+  const other = it.is_rival ? it.candidate_project : it.rival_project;
+  if (!other || other === CURRENT) return null;
+  const crumb = it.is_rival ? it.candidate_hierarchy : it.rival_hierarchy;
+  const known = PROJECTS.find(p => p.project_id === other);
+  const name = known ? known.canonical_name
+    : (crumb ? crumb.split(">").pop().trim() : other);
+  return {id: other, name, crumb: crumb || other};
+}
+
 function itemHtml(it){
   const created = it.thread_created_at ? esc(it.thread_created_at) : "undated";
+  const other = otherCandidate(it);
+  const otherBtn = other
+    ? `<button class="small btn-other" title="Rule this thread to ${esc(other.crumb)}"
+         onclick="assignOther(this,'${esc(other.id)}')">→ ${esc(other.name)}</button>`
+    : "";
   return `<div class="item${it.is_rival?' rival':''}" data-thread="${esc(it.thread_id)}">
     <input type="checkbox" class="pick" ${it.is_rival?'':'checked'}>
     <div class="item-body">
@@ -135,6 +169,7 @@ function itemHtml(it){
       ${it.snippet?`<div class="snippet">${esc(it.snippet)}</div>`:""}
       <div class="item-actions">
         <button class="small" onclick="rejectOne(this)">Not this project</button>
+        ${otherBtn}
         <span class="result"></span>
       </div>
     </div>
@@ -203,6 +238,35 @@ async function confirmBatch(btn){
   } catch(e){
     s.innerHTML = `<span class="err">Batch accept failed: ${esc(String(e.message||e))}</span>`;
   } finally {
+    btn.disabled = false;
+  }
+}
+
+// Accept the thread against its OTHER candidate, from inside this batch.
+// Uses the existing single-thread /api/rule -- same validated write, same
+// project_confidence='manual', so the thread drops out of BOTH candidates'
+// batches at once rather than needing a second visit to the other project.
+async function assignOther(btn, pid){
+  const item = btn.closest(".item");
+  const thread_id = item.dataset.thread;
+  const out = item.querySelector(".result");
+  btn.disabled = true; out.textContent = "…";
+  try {
+    const res = await fetch("/api/rule", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({thread_id, project_id: pid}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.status);
+    item.remove();
+    document.getElementById("status").textContent = `Ruled to ${pid}.`;
+    await loadProjects(true);
+    if (!document.querySelectorAll("#batch .item").length){
+      document.getElementById("batch").innerHTML =
+        `<div class="empty">Nothing left in this batch. 🎉</div>`;
+    }
+  } catch(e){
+    out.innerHTML = `<span class="err">✗ ${esc(String(e.message||e))}</span>`;
     btn.disabled = false;
   }
 }

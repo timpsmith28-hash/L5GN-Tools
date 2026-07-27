@@ -338,6 +338,14 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
               "extra, kept out of the stdlib-only core:\n"
               "         pip install -e .[review]", file=sys.stderr)
         return 2
+    try:
+        # Pre-flight only -- core.connect() re-checks on every request too, but
+        # failing fast here means an unmigrated vault never gets as far as
+        # binding a port.
+        core.connect(db).close()
+    except core.DeckSchemaNotMigratedError as exc:
+        print(f"review: {exc}", file=sys.stderr)
+        return 2
     port = args.port if "--port" in argv else REVIEW_DEFAULT_PORT
     print(f"review: DB={db}")
     print(f"review: registry={reg_path} ({len(registry)} link-target ids)")

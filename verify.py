@@ -62,6 +62,7 @@ TESTERS: list[str] = [
     "tests.tester_relink_scoring",
     "tests.tester_relink_apply",
     "tests.tester_backfill_candidate_project",
+    "tests.tester_deck_migration",
     "tests.tester_registry_path",
     "tests.tester_finalize_db",
     "tests.tester_first_seen",

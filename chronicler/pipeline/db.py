@@ -127,6 +127,55 @@ def ensure_origin_column(conn) -> bool:
     return True
 
 
+def ensure_deck_schema(conn) -> bool:
+    """Idempotently migrate an existing DB to the Command Deck prototype schema
+    (COWORK_BRIEF_command_deck_proto.md Task 1; follow-up
+    "migrate an existing vault to the deck schema").
+
+    A `CREATE TABLE IF NOT EXISTS review_queue (...)` in schema.sql is a no-op on
+    any DB where review_queue already exists -- the two new columns
+    (candidate_project, rival_project) declared there never actually land on a
+    pre-existing vault, only on a from-scratch build. Every gate tester builds its
+    DB fresh from schema.sql, so this class of defect is invisible to the suite by
+    construction (tests/tester_deck_migration.py is the fix for that blind spot,
+    not this function). Same shape as `ensure_origin_column` above -- ALTER TABLE
+    for existing tables' new columns, CREATE TABLE IF NOT EXISTS for genuinely new
+    ones (review_rulings, which DOES get created correctly by schema.sql on an old
+    DB, since it never existed there before).
+
+    Returns True if the deck schema is present afterwards, False if
+    `review_queue` doesn't exist yet (nothing to migrate -- a fresh build via
+    schema.sql will create everything correctly on its own).
+
+    DRIFT RISK, stated plainly: this DDL now lives in two places (schema.sql and
+    here) and nothing forces them to agree except tests/tester_deck_migration.py's
+    anti-drift check, which compares a migrated DB's shape against a
+    freshly-built one. If a future schema change touches review_queue or
+    review_rulings, both places need it, and that tester is what catches a
+    divergence -- it is not optional decoration.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(review_queue)")}
+    if not cols:
+        return False
+    if "candidate_project" not in cols:
+        conn.execute("ALTER TABLE review_queue ADD COLUMN candidate_project TEXT")
+    if "rival_project" not in cols:
+        conn.execute("ALTER TABLE review_queue ADD COLUMN rival_project TEXT")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS review_rulings (
+            item_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            thread_id           TEXT NOT NULL,
+            candidate_project   TEXT NOT NULL,
+            verdict             TEXT NOT NULL,
+            ruled_at            TEXT NOT NULL
+        )""")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_review_rulings_thread_project "
+        "ON review_rulings(thread_id, candidate_project)")
+    conn.commit()
+    return True
+
+
 def iter_folder_backed_entries(registry: dict):
     """Yield every folder-backed registry entry: each project, then each of its
     repos, in that order.

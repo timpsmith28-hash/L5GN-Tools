@@ -7,8 +7,9 @@ Pair: `docs/COWORK_BRIEF_command_deck_proto.md`. Session 2026-07-27, on top of
 from this round is committed yet** (see "Not yet done" below); all six tasks
 landed and the gate is GREEN.
 
-`python verify.py` — **GREEN**, 6 auditors + **45** testers at this build (two
-testers added this session: `tester_relink_apply`, `tester_backfill_candidate_project`).
+`python verify.py` — **GREEN**, 6 auditors + **46** testers at this build
+(three testers added this session: `tester_relink_apply`,
+`tester_backfill_candidate_project`, `tester_deck_migration`).
 *(Frozen build-time count — the estate's convention for historical gate figures.)*
 
 | Task | State | What landed |
@@ -19,6 +20,7 @@ testers added this session: `tester_relink_apply`, `tester_backfill_candidate_pr
 | 4 — write path (accept) | **green** | `core.apply_ruling_batch`, `POST /api/rule/batch`, per-thread partial-failure results |
 | 5 — deck UI | **green** | `static/index.html` rebuilt: left nav + right batch, check-off, Confirm, per-row "Not this project" |
 | 6 — the wall, stubbed | **green** | deny-by-default `*-personal` account filter in both read functions, named to 0023 |
+| follow-up — existing-vault migration | **green** | `db.ensure_deck_schema`, wired into the backfill + relink, `core.py` refuse-and-name-remedy, `tester_deck_migration` |
 
 ---
 
@@ -239,20 +241,89 @@ Also confirmed live in the `TestClient` smoke test.
 
 ---
 
+## Follow-up — migrate an existing vault to the deck schema
+
+Reported by Tim from a real `backfill_candidate_project.py` run against the
+dev vault: `sqlite3.OperationalError: no such column: candidate_project`.
+
+**Root cause, confirmed exactly as diagnosed in the task.** `schema.sql`
+declares the new columns inside `CREATE TABLE IF NOT EXISTS review_queue`,
+which is a no-op once that table already exists — so a vault built before
+this brief never gained `candidate_project`/`rival_project`. `review_rulings`
+*did* get created correctly (it's a genuinely new table, so the same
+`IF NOT EXISTS` fires as intended there) — the columns were the whole gap.
+Every tester in the suite builds its DB fresh from `schema.sql`, so this
+class of defect was structurally invisible to the gate; `tests/tester_deck_migration.py`
+(below) is built specifically to close that blind spot, and is worth reusing
+verbatim as a template for any future schema change on an existing table.
+
+**Built**, following `db.ensure_origin_column`'s shape exactly:
+
+- `db.ensure_deck_schema(conn)` — `ALTER TABLE review_queue ADD COLUMN` for
+  each of the two new columns if absent, `CREATE TABLE IF NOT EXISTS
+  review_rulings` + its index, idempotent (a second call is a no-op), returns
+  `False` on a DB with no `review_queue` at all (nothing to migrate — a fresh
+  build handles itself). Docstring states the drift risk plainly: the DDL now
+  lives in two places and only the new tester keeps them honest.
+- Called from `backfill_candidate_project.run()` — **unconditionally, even on
+  a dry-run.** This is a deliberate reading of "dry-run writes nothing":
+  adding columns/a table is schema repair, not ruling data, and the dry-run
+  report is structurally unreadable without it (the query that lists
+  backfillable rows needs the column to exist to run at all). Also called
+  from `relink.py`, gated the same way `ensure_origin_column` already is
+  (`if apply:`), right next to it.
+- `review/core.py` does **not** migrate — per the brief's reasoning: it's an
+  HTTP endpoint, a web process silently altering the live vault on first
+  request is the wrong shape, and `review/` deliberately doesn't import
+  `pipeline.db`. Instead `core.connect()` now calls `_check_deck_schema` on
+  every connect, raising `DeckSchemaNotMigratedError` naming the exact
+  remedy (`run chronicler/pipeline/backfill_candidate_project.py first`) if
+  the columns or `review_rulings` are missing. `run.py`'s `_cmd_review` does
+  a preflight `core.connect(db).close()` before printing the bind banner, so
+  an unmigrated vault fails fast and clean (exit 2) rather than reaching
+  uvicorn and dying on the first request.
+
+**`tests/tester_deck_migration.py`** (registered in `verify.py`, 46th
+tester): builds a DB in the pre-deck shape **by hand**, not from current
+`schema.sql` (sourcing it from the current schema would silently re-create
+the exact mistake this tester exists to catch). Proves: migration adds both
+columns + the table; a second call is a byte-for-byte no-op; an empty DB (no
+`review_queue`) returns `False` and creates nothing; a migrated DB's
+`review_queue`/`review_rulings` column sets match a fresh `schema.sql`
+build's, column-by-column (the anti-drift check); `core.connect` refuses an
+unmigrated DB naming the remedy and accepts a migrated one clean.
+
+**Verified beyond the hermetic tester**, reproducing the reported bug and its
+fix directly: built a synthetic pre-deck DB, ran
+`backfill_candidate_project.py` as a real subprocess against it — it now
+migrates and reports `pending rows missing candidate_project: 0` instead of
+throwing (the exact failure mode Tim hit, at the exact line number, now
+closed). Then drove `run.py`'s `_cmd_review` directly (with `app.run` stubbed
+so it doesn't bind a real port): against the unmigrated copy it printed the
+remedy and exited 2; against the same vault after the backfill's `--apply` it
+passed the preflight and reached the bind banner clean.
+
+`docs/UAT_command_deck_proto.md` updated: item 1.1's "not yet run" caveat
+removed now that the blocker is fixed — dry-run against the real dev vault is
+still Tim's to walk, but nothing should throw when he does.
+
+---
+
 ## Not yet done / carried open
 
-- **Nothing from this round is committed.** Tasks 1–2 were staged for commit
-  this session; the commit itself failed (`git commit` in this sandbox hit a
-  `.git/index.lock` held by something outside the sandbox — plausibly a
-  Windows-side tool watching the repo). Tasks 3–6's changes are staged on top,
-  uncommitted, same reason. A commit message for Tasks 1–2 is ready
-  (`commit_msg_task1_2.txt` in the session's temp output); Tasks 3–6 will need
-  their own message(s). Recommend committing from your side once the lock
-  clears, or clearing it and asking me to retry.
-- **The backfill has not been run against the real dev vault** — only against
-  synthetic fixtures. Walking `backfill_candidate_project.py` (dry-run, then
-  `--apply`) on `chronicler_dev` and recording the real resolved/unresolved
-  split is the first item on `UAT_command_deck_proto.md`.
+- **Nothing from this round (or the migration follow-up) is committed.**
+  `git commit` in this sandbox keeps hitting a `.git/index.lock` held by
+  something outside the sandbox — plausibly a Windows-side tool watching the
+  repo. Recommend committing from your side once the lock clears, or clearing
+  it and asking me to retry. The brief asked for "one commit" for the
+  follow-up specifically — everything for it is together and ready to go as
+  such once the lock is clear.
+- **The backfill still hasn't been run against the REAL dev vault** — the
+  migration bug that blocked it is fixed and verified (synthetic pre-deck DB,
+  hermetic tester, and a real subprocess run reproducing the exact reported
+  failure and its fix), but walking `backfill_candidate_project.py` (dry-run,
+  then `--apply`) on `chronicler_dev` and recording the real resolved/
+  unresolved split is still the first item on `UAT_command_deck_proto.md`.
 - **The deck has not been opened in a real browser against the real vault.**
   Everything below the hermetic tests is smoke-tested against synthetic data
   only.

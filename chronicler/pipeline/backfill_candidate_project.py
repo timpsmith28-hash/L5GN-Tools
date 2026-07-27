@@ -46,7 +46,7 @@ import re
 import sys
 from pathlib import Path
 
-from db import get_connection, resolve_registry_path
+from db import ensure_deck_schema, get_connection, resolve_registry_path
 
 _PIPE = Path(__file__).resolve().parent
 if str(_PIPE) not in sys.path:
@@ -106,6 +106,16 @@ def find_backfillable(conn) -> list:
 def run(apply: bool) -> int:
     conn = get_connection()
     try:
+        # Migrate an existing (pre-deck-schema) vault in place -- schema.sql's
+        # `CREATE TABLE IF NOT EXISTS review_queue` is a no-op once that table
+        # already exists, so a vault built before this brief never gained
+        # candidate_project/rival_project/review_rulings on its own. Run
+        # unconditionally, even on a dry-run: this adds columns/a table, it
+        # never writes ruling DATA, so it doesn't break the "--apply gates
+        # writes" contract -- and the dry-run report is unreadable without it
+        # (find_backfillable's query needs the column to exist to run at all).
+        ensure_deck_schema(conn)
+
         # relink.load_registry() reads the module-level relink.REGISTRY_PATH;
         # point it at the same path db.resolve_registry_path() resolves so this
         # backfill validates against the same registry relink used.

@@ -77,7 +77,7 @@ except (AttributeError, ValueError):
     pass
 
 from db import (get_connection, CHRONICLER_ROOT, DB_PATH, resolve_registry_path,
-                origin_for, ensure_origin_column)
+                origin_for, ensure_origin_column, ensure_deck_schema)
 # S3 time signal (replaces the old 1.0 stub): live plausibility + date parsing.
 from build_activity import time_plausibility, parse_thread_date
 
@@ -805,6 +805,12 @@ def run(apply, no_content_scan, limit, out=None):
     try:
         if apply:
             ensure_origin_column(conn)   # Task A: column present before we persist inline rows
+            # Command Deck migration follow-up: candidate_project/rival_project
+            # present before apply_decision writes them (same reasoning as the
+            # origin column above -- an existing vault's review_queue predates
+            # both columns; schema.sql's CREATE TABLE IF NOT EXISTS never adds
+            # them after the fact).
+            ensure_deck_schema(conn)
         persisted = load_persisted_evidence(conn)
         ruled = human_ruled_threads(conn)
         threads = conn.execute(

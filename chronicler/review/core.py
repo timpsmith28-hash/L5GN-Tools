@@ -47,6 +47,50 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Remedy text for an unmigrated vault -- named in both the raised error and
+# run.py's clean-exit message, so a person sees the same instruction either way.
+DECK_SCHEMA_REMEDY = (
+    "vault has not been migrated for the deck schema -- run "
+    "`python chronicler/pipeline/backfill_candidate_project.py` first")
+
+
+class DeckSchemaNotMigratedError(RuntimeError):
+    """Raised when the connected vault predates the Command Deck prototype's
+    schema (review_queue.candidate_project/.rival_project, review_rulings) and
+    has not yet been migrated. review/core.py deliberately does NOT run that
+    migration itself -- see `_check_deck_schema`'s docstring."""
+
+
+def _check_deck_schema(conn: sqlite3.Connection) -> None:
+    """Detect-and-refuse, never migrate (follow-up to Command Deck Task 1,
+    "migrate an existing vault to the deck schema").
+
+    `review/core.py` is a read/write HTTP endpoint reached by any tailnet
+    device; a web process silently running `ALTER TABLE` against the live
+    vault on first request is the wrong shape for that surface, and it would
+    also cross a package boundary this codebase keeps deliberately --
+    `review/` is stdlib-only and does not import `pipeline.db` (where the real
+    migration, `db.ensure_deck_schema`, lives). Schema migration is the
+    pipeline's job, run explicitly and visibly
+    (`backfill_candidate_project.py`, `relink.py --apply`); this endpoint's
+    only job is to notice the gap and say exactly what closes it, rather than
+    surfacing a bare `sqlite3.OperationalError: no such column` stack trace.
+
+    If `review_queue` itself doesn't exist, that's a different problem (an
+    uninitialized vault) and not this check's job -- it's left for whatever
+    else in the connect/query path notices first.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(review_queue)")}
+    if not cols:
+        return
+    missing_cols = {"candidate_project", "rival_project"} - cols
+    has_rulings = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='review_rulings'"
+    ).fetchone()
+    if missing_cols or not has_rulings:
+        raise DeckSchemaNotMigratedError(DECK_SCHEMA_REMEDY)
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     """The endpoint's connection to the LIVE vault (DECISIONS 0014).
 
@@ -56,9 +100,25 @@ def connect(db_path: Path) -> sqlite3.Connection:
     torn state. Deliberately the live DB, not a snapshot: `serve` moved to a
     snapshot under 0013, but review must see live state or it would re-serve
     threads that have already been ruled.
+
+    Checks (never migrates) the deck schema on every connect -- see
+    `_check_deck_schema`. The check runs under try/except so a refusal CLOSES
+    the connection before raising: `app._connect` delegates here from every
+    route handler, so leaking the handle would leak one open sqlite connection
+    per HTTP request against an unmigrated vault. It also made the file
+    undeletable on Windows, which is how this was found -- `tester_deck_migration`
+    passed on Linux (an open file can be unlinked) and failed on Windows with
+    WinError 32 when the temp dir was cleaned up. The gate caught a real
+    resource leak by being run on both platforms.
     """
     from l5gntools.dbsafe import connect as _connect
-    return _connect(db_path)
+    conn = _connect(db_path)
+    try:
+        _check_deck_schema(conn)
+    except Exception:
+        conn.close()
+        raise
+    return conn
 
 
 # ---------------------------------------------------------------------------
