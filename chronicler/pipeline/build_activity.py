@@ -49,7 +49,7 @@ import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from db import CHRONICLER_ROOT
+from db import CHRONICLER_ROOT, iter_folder_backed_entries
 # Reuse the single harvest walk (never re-walk what build_inventory already does).
 from build_inventory import (
     walk_paths, NONGIT_MAX_DEPTH, git_head, nongit_signature,
@@ -296,14 +296,26 @@ def build_activity_from_deposit(dep: dict) -> dict:
     }
 
 
-def resolve_fs(entry: dict) -> Path:
+def resolve_fs(entry: dict) -> Path | None:
     """Local-disk path from the deposit's recorded path -- the fallback only.
+    None when the entry carries no path at all.
 
     It deliberately does NOT reconstruct ``<root>/<scope>/<canonical_name>``:
     that layout exists on no machine in the estate and was the defect that kept
     every project resolving missing here.
+
+    Returning ``None`` (rather than ``Path("")``) matters: ``Path("")`` is
+    ``Path(".")``, which IS a directory -- the current working one, wherever
+    this producer happens to run. A concept project (DECISIONS 0012) carries
+    no `path` of its own, so the old ``Path(entry.get("path") or "")`` quietly
+    resolved to cwd and `mtime_dates` walked whatever files were sitting there,
+    fabricating an activity window out of today's scan/build dates
+    (`2026-07-17..27`) instead of reporting "no window". `run()` must treat a
+    missing path as "nothing to build from here", never as "the current
+    directory".
     """
-    return Path(entry.get("path") or "")
+    p = entry.get("path")
+    return Path(p) if p else None
 
 
 def load_curated_first_seen(groups_path=GROUPS_PATH) -> dict:
@@ -376,8 +388,12 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
             "local build output. Run `run.py build` on a producer and "
             "`run.py deposit --push`, or pass --estates-dir.")
 
-    built, skipped, missing = [], [], []
-    for entry in registry["projects"]:
+    built, skipped, missing, container = [], [], [], []
+    # Round 3, repo-tier fix: descend into project AND repo tiers, same shape
+    # build_inventory uses. A concept project (DECISIONS 0012) has no deposit
+    # of its own when its files live in a differently-named repo, so it must be
+    # matched -- and its repos matched -- by each entry's OWN canonical_name.
+    for entry in iter_folder_backed_entries(registry):
         name = entry["canonical_name"]
         if entry.get("_orphaned"):
             missing.append(name)
@@ -394,10 +410,20 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
             act = build_activity_from_deposit(dep)
         else:
             # Fallback: producer running against its own tree, project not in
-            # any deposit. Deposits win wherever both exist.
+            # any deposit. Deposits win wherever both exist. `resolve_fs`
+            # returns None for an entry with no path -- NEVER fabricate a
+            # window from whatever directory this process happens to run in
+            # (see resolve_fs's docstring: that was the Path("") == cwd bug
+            # behind the 2026-07-17..27 fabricated window).
             fs_path = resolve_fs(entry)
-            if not fs_path.is_dir():
-                missing.append(name)
+            if fs_path is None or not fs_path.is_dir():
+                if entry.get("repos"):
+                    # A concept project's files live in its repos, not itself
+                    # -- normal shape, not a gap. Its repos are visited
+                    # separately and get their own real window, or None.
+                    container.append(name)
+                else:
+                    missing.append(name)
                 continue
             is_git = entry.get("vcs") == "git"
             sig = current_signature(fs_path, is_git)
@@ -431,10 +457,13 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
         print(f"  built   {name:26} {act['precision']:6} {nb:2} burst(s)  {span}")
     for name in skipped:
         print(f"  skip    {name:26} (unchanged)")
+    for name in container:
+        print(f"  --      {name:26} (concept project -- window carried by its repos)")
     for name in missing:
         print(f"  MISSING {name:26} (no folder / orphaned)")
     print("-" * 68)
-    print(f"{len(built)} built, {len(skipped)} unchanged, {len(missing)} missing.")
+    print(f"{len(built)} built, {len(skipped)} unchanged, {len(container)} concept "
+          f"project(s) with no window of their own, {len(missing)} missing.")
 
 
 if __name__ == "__main__":

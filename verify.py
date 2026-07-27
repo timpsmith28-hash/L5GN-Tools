@@ -53,6 +53,8 @@ TESTERS: list[str] = [
     "tests.tester_build_registry",
     "tests.tester_build_inventory",
     "tests.tester_build_activity",
+    "tests.tester_xref_filenames",
+    "tests.tester_extract_path_mentions",
     "tests.tester_registry_tiers",
     "tests.tester_backup",
     "tests.tester_serve",

@@ -76,7 +76,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import CHRONICLER_ROOT
+from db import CHRONICLER_ROOT, iter_folder_backed_entries
 
 # Deposit discovery is build_registry's, reused rather than re-implemented: one
 # estate-resolution path for the whole pipeline (round 3, Task C).
@@ -347,9 +347,15 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
             "local build output. Run `run.py build` on a producer and "
             "`run.py deposit --push`, or pass --estates-dir.")
 
-    built, skipped, missing, no_census = [], [], [], []
+    built, skipped, missing, no_census, container = [], [], [], [], []
 
-    for entry in registry["projects"]:
+    # Round 3, repo-tier fix: descend into project AND repo tiers. A concept
+    # project (DECISIONS 0012) whose files live in a repo named differently
+    # from the project (`crystal-spire` -> `L5GN-Crystal-Spire`) is matched by
+    # its OWN canonical_name at each tier, not just the project's -- otherwise
+    # the repo's deposit is never even looked up and its inventory is skipped
+    # silently, which is exactly the defect this fix removes.
+    for entry in iter_folder_backed_entries(registry):
         name = entry["canonical_name"]
         if entry.get("_orphaned"):
             missing.append(name)
@@ -370,9 +376,19 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
             # project no deposit describes. Deposits win wherever both exist.
             fs_path = Path(dep["path"]) if dep and dep.get("path") else None
             if fs_path is None or not fs_path.is_dir():
-                (no_census if dep else missing).append(name)
+                if dep:
+                    no_census.append(name)
+                elif entry.get("repos"):
+                    # A concept project with no deposit of its own is NORMAL
+                    # once its files live in a repo: its repos are iterated
+                    # separately (above) and carry their own inventories. This
+                    # is not a gap to report -- inventing one here would be the
+                    # synthetic inventory Task A explicitly forbids.
+                    container.append(name)
+                else:
+                    missing.append(name)
                 continue
-            is_git = entry["vcs"] == "git"
+            is_git = entry.get("vcs") == "git"
             commit = git_head(fs_path) if is_git else None
             signature = None if is_git else nongit_signature(
                 fs_path, walk_paths(fs_path, NONGIT_MAX_DEPTH))
@@ -412,11 +428,14 @@ def run(force: bool, dry_run: bool, estates_dir: str | None = None):
         print(f"  {name:32} (unchanged)")
     for name in no_census:
         print(f"  {name:32} DEPOSITED BUT NO CENSUS -- re-run `run.py census`")
+    for name in container:
+        print(f"  {name:32} (concept project -- files carried by its repos)")
     for name in missing:
         print(f"  {name:32} MISSING (no deposit, no folder / orphaned)")
     print("-" * 72)
     print(f"{len(built)} built, {len(skipped)} unchanged, "
-          f"{len(no_census)} without census, {len(missing)} missing.")
+          f"{len(no_census)} without census, {len(container)} concept "
+          f"project(s) with no deposit of their own, {len(missing)} missing.")
     if any(e for _, _, _, e, _ in built):
         print("'+names' = basenames carried past the census file cap. "
               "S4 must read them via basename_set().")

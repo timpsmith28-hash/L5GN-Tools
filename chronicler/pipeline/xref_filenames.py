@@ -1,17 +1,24 @@
 """
 S4 step 2 - Filename cross-reference (evidence producer).
 
-Joins Chronicler's `attachments` table against the per-project `file_inventory`
-blocks in the registry (built by build_inventory.py). An exact basename match
-is the strongest *automatic* link signal available.
+Joins Chronicler's `attachments` table against the `file_inventory` blocks in
+the registry (built by build_inventory.py) -- at BOTH the project and repo
+tier (round 3, repo-tier fix): a concept project (DECISIONS 0012) commonly
+carries no inventory of its own, only its repos do. An exact basename match is
+the strongest *automatic* link signal available.
 
 Vote rules (spec S4.2):
-  * unique hit  (exactly one project owns that basename)  -> weight 1.0
-  * multi-hit   (n projects share it), not stoplisted      -> weight 1/n each
+  * unique hit  (exactly one registry entry owns that basename) -> weight 1.0
+  * multi-hit   (n entries share it), not stoplisted      -> weight 1/n each
   * generic basename (main.py, README.md, ...)             -> no signal
   * no hit                                                  -> no signal
     (absence is NOT negative evidence - attachments legitimately include
      non-repo files)
+
+`link_evidence.project` is written as the registry **id**, not the
+canonical_name (Finding-3 fix): relink's scorer keys candidates by id, so
+canonical_name-keyed evidence pointed at a key the scorer could never
+resolve.
 
 This skill ONLY produces evidence rows in `link_evidence`; it never writes a
 link. S6 (relink.py) is the sole consumer that turns evidence into decisions.
@@ -41,7 +48,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from db import (get_connection, CHRONICLER_ROOT, resolve_registry_path,
-                origin_for, ensure_origin_column)
+                origin_for, ensure_origin_column, iter_folder_backed_entries)
 
 GITHUB_ROOT_FS = CHRONICLER_ROOT.parent.parent
 # Task F: one shared resolver (env-overridable, per host) -- no local literal.
@@ -95,7 +102,7 @@ LINK_EVIDENCE_DDL = """
 CREATE TABLE IF NOT EXISTS link_evidence (
     evidence_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     thread_id        TEXT,
-    project          TEXT,      -- canonical_name from the registry
+    project          TEXT,      -- registry id (DECISIONS 0012 / Finding-3), not canonical_name
     signal           TEXT,      -- name_alias|vocabulary|filename_xref|path_mention|time_window
     weight           REAL,      -- 0..1
     detail           TEXT,      -- e.g. the matched basename
@@ -113,7 +120,17 @@ def utc_now() -> str:
 
 
 def load_basename_index(registry_path: Path):
-    """basename(lower) -> set(canonical_name) from every entry's file_inventory."""
+    """basename(lower) -> set(registry id) from every folder-backed entry's
+    file_inventory -- projects AND repos (round 3, repo-tier fix).
+
+    Keyed by **id**, not canonical_name (Finding-3 fold-in): relink's scorer
+    (post-52193bd) keys candidates by id, so evidence keyed by canonical_name
+    pointed at a key the scorer could never resolve. `build_inventory` now
+    attaches `file_inventory` to whichever tier owns the files -- often the
+    repo, not the concept project -- so the index has to visit both tiers or
+    the strongest automatic link signal (a filename hit) would be silently
+    invisible for every project split this way.
+    """
     if not registry_path.is_file():
         raise SystemExit(f"[xref_filenames] registry missing: {registry_path}")
     with open(registry_path, "r", encoding="utf-8") as f:
@@ -122,12 +139,12 @@ def load_basename_index(registry_path: Path):
     index = defaultdict(set)
     have_inv = 0
     excluded = 0
-    for entry in registry["projects"]:
+    for entry in iter_folder_backed_entries(registry):
         inv = entry.get("file_inventory")
         if not inv:
             continue
         have_inv += 1
-        canon = entry["canonical_name"]
+        tid = entry["id"]
         for rel in inv.get("paths", []):
             base = rel.split("/")[-1].lower()
             if not base:
@@ -135,7 +152,7 @@ def load_basename_index(registry_path: Path):
             if is_export_artifact(base):
                 excluded += 1          # Fix C: not project-owned source
                 continue
-            index[base].add(canon)
+            index[base].add(tid)
     if have_inv == 0:
         raise SystemExit("[xref_filenames] no file_inventory in registry - "
                          "run build_inventory.py first.")

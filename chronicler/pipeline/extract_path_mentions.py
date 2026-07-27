@@ -50,7 +50,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from db import get_connection, origin_for, ensure_origin_column
+from db import (get_connection, origin_for, ensure_origin_column,
+                iter_folder_backed_entries)
 from build_inventory import REGISTRY_PATH
 
 PRODUCER_VERSION = "extract_path_mentions/1.0"
@@ -98,9 +99,17 @@ def compact(s: str) -> str:
 
 
 def load_project_keys(registry_path: Path):
-    """Build compact_key -> set(project). Keys come from every entry's
-    canonical_name + aliases. Returns (keymap, detail_of) where detail_of maps a
-    compact key to a human-readable source label for the evidence `detail`."""
+    """Build compact_key -> set(registry id). Keys come from every
+    folder-backed entry's canonical_name + aliases -- projects AND repos
+    (round 3, repo-tier fix): a path segment naming a repo folder
+    (`L5GN-Crystal-Spire`) must vote for that repo even when the concept
+    project it belongs to (`crystal-spire`) has a completely different name.
+
+    Keyed by **id**, not canonical_name (Finding-3 fold-in) -- same reasoning
+    as xref_filenames: relink's scorer resolves candidates by id.
+
+    Returns (keymap, detail_of) where detail_of maps a compact key to a
+    human-readable source label for the evidence `detail`."""
     if not registry_path.is_file():
         raise SystemExit(f"[extract_path_mentions] registry missing: {registry_path}")
     with open(registry_path, "r", encoding="utf-8") as f:
@@ -108,14 +117,15 @@ def load_project_keys(registry_path: Path):
 
     keymap = defaultdict(set)
     detail_of = {}
-    for entry in registry["projects"]:
+    for entry in iter_folder_backed_entries(registry):
+        tid = entry["id"]
         canon = entry["canonical_name"]
         sources = [canon] + list(entry.get("aliases", []))
         for src in sources:
             key = compact(src)
             if len(key) < MIN_KEY_LEN or key in PATH_NOISE:
                 continue
-            keymap[key].add(canon)
+            keymap[key].add(tid)
             detail_of.setdefault(key, src)   # first source label wins for display
     if not keymap:
         raise SystemExit("[extract_path_mentions] no usable project keys in registry.")
@@ -150,22 +160,48 @@ def match_path(path: str, keymap):
     return hits
 
 
+def origin_token(path: str) -> str:
+    """The most specific token a path mention is about: the path's own
+    trailing segment.
+
+    Task D (co-origin collapse, relink_scoring `52193bd`): a message naming
+    `L5GN-Crystal-Spire\\world_graph.json` votes for the Crystal Spire repo
+    because `L5GN-Crystal-Spire` matches a registry key, but the evidence is
+    fundamentally ABOUT `world_graph.json` -- the same file an attachment
+    would produce a `filename_xref` hit for. Stamping origin from the path's
+    trailing segment (rather than from the matched alias) means the two
+    signals collapse to one origin instead of double-counting as independent
+    corroboration. A path that ends AT the matched folder (no trailing file)
+    has nothing more specific, so the trailing segment is just the matched
+    name itself and this degrades to the same origin as before.
+    """
+    segs = [s for s in _SEG_SPLIT_RE.split(path) if s]
+    return segs[-1] if segs else path
+
+
 def scan_rows(rows, keymap, detail_of):
     """rows: iterable of (thread_id, content). Returns a list of unique
-    (thread_id, project, weight, detail) votes (one per thread/project/key)."""
+    (thread_id, project, weight, detail, origin_token) votes (one per
+    thread/project/key). `origin_token` is the path's trailing segment, used
+    by the caller to compute the stamped `origin` column -- kept separate from
+    `detail` (the matched alias/canonical_name, still shown for readability)."""
     seen = set()
     votes = []
     for thread_id, content in rows:
         if not content:
             continue
         for path in extract_paths(content):
-            for project, key in match_path(path, keymap):
+            hits = match_path(path, keymap)
+            if not hits:
+                continue
+            token = origin_token(path)
+            for project, key in hits:
                 triple = (thread_id, project, key)
                 if triple in seen:
                     continue
                 seen.add(triple)
                 votes.append((thread_id, project, EVIDENCE_WEIGHT,
-                              detail_of.get(key, key)))
+                              detail_of.get(key, key), token))
     return votes
 
 
@@ -176,7 +212,7 @@ LINK_EVIDENCE_DDL = """
 CREATE TABLE IF NOT EXISTS link_evidence (
     evidence_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     thread_id        TEXT,
-    project          TEXT,
+    project          TEXT,      -- registry id (DECISIONS 0012 / Finding-3), not canonical_name
     signal           TEXT,
     weight           REAL,
     detail           TEXT,
@@ -255,8 +291,10 @@ def write_evidence(conn, votes, rescan, new_watermark):
         "INSERT INTO link_evidence "
         "(thread_id, project, signal, weight, detail, origin, produced_at, producer_version) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [(t, p, SIGNAL, w, d, origin_for(SIGNAL, d), now, PRODUCER_VERSION)
-         for (t, p, w, d) in votes],
+        # origin is derived from the path's trailing segment (Task D), NOT
+        # from `detail` (the matched alias) -- see origin_token()'s docstring.
+        [(t, p, SIGNAL, w, d, origin_for(SIGNAL, o), now, PRODUCER_VERSION)
+         for (t, p, w, d, o) in votes],
     )
     set_watermark(conn, new_watermark)
     conn.commit()
@@ -264,9 +302,9 @@ def write_evidence(conn, votes, rescan, new_watermark):
 
 def report(votes, scanned, watermark, new_watermark, rescan):
     per_project = defaultdict(int)
-    for _, p, _, _ in votes:
+    for _, p, _, _, _ in votes:
         per_project[p] += 1
-    threads = len({t for t, _, _, _ in votes})
+    threads = len({t for t, _, _, _, _ in votes})
     print("=" * 66)
     print("path_mention evidence" + ("  (full rescan)" if rescan else "  (incremental)"))
     print("=" * 66)

@@ -127,6 +127,32 @@ def ensure_origin_column(conn) -> bool:
     return True
 
 
+def iter_folder_backed_entries(registry: dict):
+    """Yield every folder-backed registry entry: each project, then each of its
+    repos, in that order.
+
+    DECISIONS 0012 split a concept project's files across its repos -- a
+    project like `crystal-spire` may carry no deposit of its own at all, while
+    its repo `L5GN-Crystal-Spire` is the thing a deposit actually names. Before
+    round 3's repo-tier fix, every producer that joins deposit facts against
+    the registry did ``for entry in registry["projects"]`` and matched only the
+    project's own `canonical_name` -- so a concept project whose files live in a
+    differently-named repo got nothing, and neither did the repo, because the
+    repo tier was never visited.
+
+    One shared iteration order, used by build_inventory, build_activity,
+    xref_filenames and extract_path_mentions, so "walk projects and repos"
+    cannot drift into four subtly different shapes. A project entry with no
+    `repos` key (the flat, pre-0012 shape some fixtures and a bare concept
+    project still use) yields itself only -- backward compatible by
+    construction, not by a special case.
+    """
+    for project in registry.get("projects", []):
+        yield project
+        for repo in project.get("repos") or []:
+            yield repo
+
+
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     """The one read/write connection factory for the pipeline.
 

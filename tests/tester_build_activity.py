@@ -22,6 +22,17 @@ Assertions:
     dates lost are the earliest ones and the window silently narrows
   * skip-if-unchanged holds; `--force` overrides
   * no deposits at all is loud, never a silently empty activity set
+
+Round 3 (repo-tier fix, DECISIONS 0012): `_check_repo_tier` guards the fix's
+second half. A concept project with no deposit of its own (files live in its
+repo) must get **no** activity block at all -- specifically NOT the
+`Path(entry.get("path") or "")` fallback, which is `Path(".")` and IS a
+directory, so the old code silently walked whatever cwd this process happened
+to run in and fabricated a `2026-07-17..27` window from today's scan/build
+mtimes. `resolve_fs` now returns None for a path-less entry so that can't
+happen, whether the entry is a container (has repos) or a genuinely orphaned
+project (no repos, no path, no deposit). The repo carries the real window, and
+a curated `first_seen` still reaches it.
 """
 from __future__ import annotations
 
@@ -71,9 +82,106 @@ def _project(name, *, is_git, commits=None, head=None, mtimes=None,
             "file_census": census, "git_summary": gs, "git_deep_history": deep}
 
 
+def _check_repo_tier(ba) -> list[str]:
+    # build_activity is a cached module (importlib/sys.modules), shared with
+    # every other tester in this process -- load_curated_first_seen must be
+    # restored, or tester_first_seen (which calls the REAL function directly)
+    # gets this fixture's canned lambda instead and fails for a reason that
+    # has nothing to do with its own gate.
+    orig_load_curated_first_seen = ba.load_curated_first_seen
+    try:
+        return _check_repo_tier_body(ba)
+    finally:
+        ba.load_curated_first_seen = orig_load_curated_first_seen
+
+
+def _check_repo_tier_body(ba) -> list[str]:
+    v: list[str] = []
+    REPO_COMMITS = ["2026-02-01T09:00:00+01:00", "2026-02-02T09:00:00+01:00"]
+
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        estates = td / "estates" / "personal"
+        estates.mkdir(parents=True)
+        registry_path = td / "project_registry.json"
+
+        repo_dep = _project("L5GN-Crystal-Spire", is_git=True,
+                            commits=REPO_COMMITS, head="cafe123")
+        (estates / "estate.json").write_text(json.dumps({
+            "generated_at": "2026-07-26T09:00:00+01:00", "estate_name": "personal",
+            "roots": [], "projects": [repo_dep]}), encoding="utf-8")
+
+        registry = {
+            "schema_version": 2, "generated_at": "2026-07-26T09:00:00+01:00",
+            "programs": [], "projects": [
+                {  # concept project: no deposit of its own, files live in the repo
+                    "id": "crystal-spire", "canonical_name": "Crystal Spire",
+                    "program": None, "scope": "l5gn", "aliases": [],
+                    "status": "active",
+                    "repos": [
+                        {"id": "l5gn-crystal-spire",
+                         "canonical_name": "L5GN-Crystal-Spire",
+                         "aliases": [], "scope": "l5gn", "vcs": "git",
+                         "present": True},
+                    ],
+                },
+                {  # a genuinely orphaned project: no repos, no path, no deposit
+                    "id": "nowhere-project", "canonical_name": "L5GN-Nowhere",
+                    "program": None, "scope": "l5gn", "aliases": [],
+                    "status": "active", "repos": [],
+                },
+            ],
+        }
+        registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+        ba.REGISTRY_PATH = registry_path
+        ba.resolve_estates_dir = lambda explicit=None: estates.parent
+        # Simulate a curated first_seen that has already cascaded from a
+        # project to its repo (load_curated_first_seen's own cascade is
+        # covered by tester_first_seen; here we check run() actually APPLIES
+        # it at repo tier via entry["id"]).
+        ba.load_curated_first_seen = lambda groups_path=None: {
+            "l5gn-crystal-spire": "2026-01-01"}
+
+        ba.run(force=False, dry_run=False)
+
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+        projects = {p["canonical_name"]: p for p in data["projects"]}
+
+        concept_act = projects["Crystal Spire"].get("activity")
+        if concept_act:
+            v.append(f"build_activity: the concept project (no deposit of its "
+                     f"own) got an activity block {concept_act!r} -- this is "
+                     "the fabricated-window regression: Path(\"\") resolves to "
+                     "cwd, which IS a directory, so a path-less entry must "
+                     "never reach the local-disk fallback")
+
+        orphan_act = projects["L5GN-Nowhere"].get("activity")
+        if orphan_act:
+            v.append(f"build_activity: a project with no repos, no path and no "
+                     f"deposit got an activity block {orphan_act!r} instead of "
+                     "being reported missing")
+
+        repo = projects["Crystal Spire"]["repos"][0]
+        repo_act = repo.get("activity")
+        if not repo_act:
+            v.append("build_activity: the repo entry got no activity block -- "
+                     "repo-tier descent regressed")
+        else:
+            if repo_act.get("first_commit") != "2026-02-01":
+                v.append(f"build_activity: repo first_commit is "
+                         f"{repo_act.get('first_commit')!r}, expected "
+                         "2026-02-01 from its own deposit")
+            if repo_act.get("first_seen") != "2026-01-01":
+                v.append("build_activity: a curated first_seen keyed by the "
+                         "repo id was not applied at repo tier")
+    return v
+
+
 def run() -> list[str]:
     v: list[str] = []
     ba = _load_module()
+    v.extend(_check_repo_tier(ba))
 
     # Two clusters 30 days apart -> must produce TWO bursts (gap > 7 days).
     TWO_BURSTS = ["2026-05-01T10:00:00+01:00", "2026-05-02T10:00:00+01:00",

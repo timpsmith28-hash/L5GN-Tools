@@ -27,6 +27,14 @@ The assertions are about the contract with the deposit:
   * a changed deposit is NOT skipped -- including a change only beyond the cap
   * a project in the registry but in no deposit is reported, never invented
   * no deposits at all is a loud failure, never a silently empty inventory
+
+Round 3 (repo-tier fix, DECISIONS 0012): a concept project's files commonly
+live in a repo named differently from the project (`crystal-spire` carries no
+deposit of its own; its repo `L5GN-Crystal-Spire` is the thing a deposit
+actually names). `_check_repo_tier` asserts the **repo** entry gains the
+inventory, the concept entry gets none (not a fabricated/synthetic one), and
+neither entry errors -- the third instance of the original folder-walk defect,
+this time at the tier join rather than at path resolution.
 """
 from __future__ import annotations
 
@@ -96,9 +104,71 @@ def _registry(names: list[str]) -> dict:
                          for n in names]}
 
 
+def _tiered_registry(project_id: str, project_canon: str, repos: list[dict]) -> dict:
+    return {"schema_version": 2, "generated_at": "2026-07-26T09:00:00+01:00",
+            "programs": [], "projects": [{
+                "id": project_id, "canonical_name": project_canon,
+                "program": None, "scope": "l5gn", "aliases": [],
+                "status": "active", "repos": repos,
+            }]}
+
+
+def _check_repo_tier(bi) -> list[str]:
+    v: list[str] = []
+    WORLD_GRAPH_PATHS = ["world_graph.json", "src/loader.py"]
+
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        estates = td / "estates"
+        registry_path = td / "project_registry.json"
+
+        _write_deposit(estates, "personal", [
+            _project("L5GN-Crystal-Spire",
+                     _census("L5GN-Crystal-Spire", WORLD_GRAPH_PATHS, is_git=True),
+                     head="cafe123"),
+        ])
+        registry_path.write_text(json.dumps(_tiered_registry(
+            "crystal-spire", "Crystal Spire",
+            [{"id": "l5gn-crystal-spire", "canonical_name": "L5GN-Crystal-Spire",
+              "aliases": [], "scope": "l5gn", "vcs": "git", "present": True}],
+        )), encoding="utf-8")
+
+        bi.REGISTRY_PATH = registry_path
+        bi.resolve_estates_dir = lambda explicit=None: estates
+
+        bi.run(force=False, dry_run=False)
+
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+        proj = data["projects"][0]
+        repo = proj["repos"][0]
+
+        if proj.get("file_inventory"):
+            v.append("build_inventory: the concept project (no deposit of its "
+                     "own) was given a file_inventory -- Task A forbids a "
+                     "synthetic inventory here; its repo should carry it "
+                     "instead")
+
+        repo_inv = repo.get("file_inventory")
+        if not repo_inv:
+            v.append("build_inventory: the repo entry got no file_inventory -- "
+                     "repo-tier descent regressed and world_graph.json is "
+                     "indexed nowhere")
+        else:
+            if "world_graph.json" not in bi.basename_set(repo_inv):
+                v.append("build_inventory: repo inventory does not carry "
+                         "world_graph.json -- the file a deposit named for "
+                         "this repo actually reported")
+            if repo_inv.get("source") != "deposit":
+                v.append(f"build_inventory: repo inventory sourced from "
+                         f"{repo_inv.get('source')!r}, expected 'deposit' -- "
+                         "no local-disk reconstruction should have been tried")
+    return v
+
+
 def run() -> list[str]:
     v: list[str] = []
     bi = _load_module()
+    v.extend(_check_repo_tier(bi))
 
     GIT_PATHS = ["README.md", "core/event_bus.py", "core/handover_schema.py"]
     NONGIT_PATHS = ["notes.md", "raw_history_txt/L5GN_SAGA_STITCHED_VOLUME01.txt"]
