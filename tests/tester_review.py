@@ -8,6 +8,12 @@ sqlite DB, no FastAPI, no uvicorn, no server bind. Two load-bearing guarantees:
      byte-for-byte unchanged (this is the single-writer column-scope guarantee).
   2. project_link only accepts ids present in the shipped registry: an unknown id
      (or unknown thread) raises loudly and writes NOTHING.
+
+Also covers DECISIONS 0025 (estate-scoped visibility, not just personal-only):
+the wall mirrors correctly under a `work` account_clause, `account_clause_for_
+estate` refuses 'both'/absent/junk, and the loopback-bind condition `run.py
+review` enforces is exercised via its two primitives (`is_loopback_host` +
+declared estate) rather than the CLI itself.
 """
 from __future__ import annotations
 
@@ -140,7 +146,9 @@ def run() -> list[str]:
 
         # --- Task 6 / DECISIONS 0023: the wall. A work-account thread's pending
         #     suggestion must never surface, on either read path -- structurally,
-        #     not via a flag the caller could forget to set ---
+        #     not via a flag the caller could forget to set. `pending_rulings`/
+        #     `queue_by_project`'s default `account_clause` is the personal wall
+        #     (today's unfiltered-arg behaviour, unchanged) ---
         conn.execute(
             """INSERT INTO threads
                (thread_id, source, account, title, created_at, project_link,
@@ -163,6 +171,57 @@ def run() -> list[str]:
         # run -- confirm TWORK did not add a second one.
         if wall_by_proj.get("l5gn-os", {}).get("counts", {}).get("suggestion", 0) != 1:
             v.append("wall: queue_by_project counted the work-account thread's row")
+
+        # --- DECISIONS 0025: the mirror. A machine declaring estate 'work' must
+        #     see the '-work' thread and NOT the '-personal' ones -- proving the
+        #     filter is scoped by declared estate rather than disabled. This is
+        #     the same read paths, same rows, only `account_clause` changes. ---
+        work_clause = core.account_clause_for_estate("work")
+        if work_clause != core._WORK_ACCOUNT_CLAUSE:
+            v.append(f"account_clause_for_estate('work'): wrong clause {work_clause!r}")
+        if core.account_clause_for_estate("personal") != core._PERSONAL_ACCOUNT_CLAUSE:
+            v.append("account_clause_for_estate('personal'): wrong clause")
+
+        work_pend_ids = {p["thread_id"] for p in
+                         core.pending_rulings(conn, account_clause=work_clause)}
+        if "TWORK" not in work_pend_ids:
+            v.append("estate=work: work-account thread did NOT appear under the work clause")
+        if work_pend_ids & {"T1", "T2"}:
+            v.append(f"estate=work: personal-account thread(s) leaked through: "
+                     f"{work_pend_ids & {'T1', 'T2'}}")
+        work_by_proj = {e["project_id"]: e for e in
+                        core.queue_by_project(conn, registry, account_clause=work_clause)}
+        if work_by_proj.get("l5gn-os", {}).get("counts", {}).get("suggestion", 0) != 1:
+            v.append("estate=work: queue_by_project did not count the work-account row")
+
+        # --- DECISIONS 0025: 'both' / absent / junk refuses to construct, with a
+        #     message naming the reason -- never silently picks an estate ---
+        for bad_estate in ("both", None, "", "junk"):
+            try:
+                core.account_clause_for_estate(bad_estate)
+                v.append(f"account_clause_for_estate({bad_estate!r}): "
+                         "should have refused, did not raise")
+            except ValueError as exc:
+                if "0025" not in str(exc):
+                    v.append(f"account_clause_for_estate({bad_estate!r}): "
+                             f"refusal message does not name 0025: {exc}")
+
+        # --- DECISIONS 0025: loopback enforcement. This mirrors the exact
+        #     preflight condition in run.py's _cmd_review (estate != 'personal'
+        #     and not core.is_loopback_host(host) => refuse) without invoking
+        #     the CLI/subprocess -- the primitives it is built from are what
+        #     this hermetic gate can exercise directly. ---
+        def _would_refuse_bind(estate: str, host: str) -> bool:
+            return estate != "personal" and not core.is_loopback_host(host)
+
+        if not _would_refuse_bind("work", "0.0.0.0"):
+            v.append("loopback: work estate + 0.0.0.0 should refuse to bind")
+        if _would_refuse_bind("work", "127.0.0.1"):
+            v.append("loopback: work estate + 127.0.0.1 should proceed")
+        if _would_refuse_bind("work", "::1"):
+            v.append("loopback: work estate + ::1 should proceed")
+        if _would_refuse_bind("personal", "0.0.0.0"):
+            v.append("loopback: personal estate + 0.0.0.0 should proceed (knight default unchanged)")
 
         # --- Task 2: queue_by_project groups pending rows by candidate,
         #     counting a link_ambiguous row under BOTH candidate and rival ---

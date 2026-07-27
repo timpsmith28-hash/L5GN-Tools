@@ -21,6 +21,18 @@ if [ ! -f verify.py ]; then
     exit 0
 fi
 
+# git sets GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE / GIT_PREFIX in a hook's
+# environment, pointing at THIS repo mid-commit (index locked). verify.py runs
+# testers that spin up their OWN throwaway git repos in temp dirs (tester_
+# env_tracked, tester_blast_radius, tester_blast_uncommitted, tester_file_census
+# among them) -- if those vars leak into that subprocess's environment, its
+# nested `git init`/`git commit` calls collide with this repo's locked index
+# instead of using the temp repo's own .git, and fail with a confusing
+# CalledProcessError that has nothing to do with what's actually being
+# committed. Unset them here so the gate runs in a clean environment, exactly
+# as it does when invoked directly (`python verify.py`) outside any hook.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+
 echo "[pre-commit] running verify gate..."
 "$PY" verify.py || {
     echo "[pre-commit] BLOCKED: verify is RED. Fix it, then commit."

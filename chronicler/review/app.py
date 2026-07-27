@@ -69,9 +69,13 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return core.connect(db_path)
 
 
-def create_app(db_path: Path, registry: dict):
+def create_app(db_path: Path, registry: dict, account_clause: str):
     """Build the FastAPI app. `registry` is the pre-loaded id->entry map so id
-    validation never depends on a file read mid-request."""
+    validation never depends on a file read mid-request. `account_clause` is
+    the estate wall's SQL clause (DECISIONS 0025), resolved ONCE by the caller
+    from the running machine's declared estate (`core.account_clause_for_estate`)
+    and closed over here -- every read route passes it straight through to
+    core.py, which never re-derives it from config itself."""
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
@@ -113,7 +117,8 @@ def create_app(db_path: Path, registry: dict):
         # RIVAL is this project is included too (is_rival=True), never dropped.
         conn = _connect(db_path)
         try:
-            return core.pending_rulings(conn, project_id=project, registry=registry)
+            return core.pending_rulings(conn, project_id=project, registry=registry,
+                                        account_clause=account_clause)
         finally:
             conn.close()
 
@@ -123,7 +128,8 @@ def create_app(db_path: Path, registry: dict):
         # Thin shell over core.queue_by_project -- no DB logic here.
         conn = _connect(db_path)
         try:
-            return core.queue_by_project(conn, registry=registry)
+            return core.queue_by_project(conn, registry=registry,
+                                         account_clause=account_clause)
         finally:
             conn.close()
 
@@ -171,9 +177,9 @@ def create_app(db_path: Path, registry: dict):
     return app
 
 
-def run(db_path: Path, registry: dict, host: str, port: int) -> int:
+def run(db_path: Path, registry: dict, host: str, port: int, account_clause: str) -> int:
     """Boot uvicorn. Returns a process return code."""
     import uvicorn
-    app = create_app(db_path, registry)
+    app = create_app(db_path, registry, account_clause)
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0

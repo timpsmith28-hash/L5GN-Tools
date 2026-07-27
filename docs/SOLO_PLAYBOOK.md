@@ -466,11 +466,26 @@ tested.
   completely hard, and a solo box gains no exception). If any step ever
   looks like it would put MCF-shaped data under a `personal` deposit path,
   stop.
-- **Work-estate data is behind the TOTP gate even to view** (DECISIONS
-  0023), on any surface that renders both estates. A solo work box's own
-  local `serve`/`review` only ever shows *that box's own* estate, so this
-  mainly matters once its deposit reaches the knight's mesh-wide view — but
-  state it here so it isn't rediscovered as a surprise later.
+- **Visibility is scoped by surface, not estate label** (DECISIONS 0025,
+  narrowing 0023). `run.py review` on a solo work box now renders only the
+  estate declared in its own `config[host]["estate"]` — `work` shows only
+  `*-work` threads, never `*-personal` — and refuses to bind anything but
+  loopback while doing so. `run.py review --host 0.0.0.0` on a work-estate
+  machine exits non-zero, naming 0025; the documented default for this
+  profile is therefore **`--host 127.0.0.1`**, not the knight's `0.0.0.0`.
+  An undeclared or ambiguous estate (`both`, missing, junk) refuses to serve
+  at all rather than guessing. This is display-only — 0010's deposit wall is
+  untouched — and the TOTP gate (0023) still stands, unbuilt, for any surface
+  that would co-render more than one estate or be reachable beyond loopback;
+  a solo work box on its own loopback is neither of those.
+- **A work box's registry should carry only its own estate.**
+  `chronicler/pipeline/build_registry.py --estate work` already scopes the
+  build to just the work-estate deposit snapshot — nothing about the
+  personal estate needs to exist on that machine, and the smallest correct
+  registry is also the smallest disclosure (DECISIONS 0025). No filtering
+  code was needed for this: point `REGISTRY_PATH` (or
+  `CHRONICLER_REGISTRY_PATH`) at the output of that command on the work rig,
+  same as any other registry build, just with `--estate work` added.
 - **The registry-shipping problem (sharp edge 3) is sharper here.**
   `config/project_registry.json` carries employer codenames — it must never
   be committed, and a solo work box building its own registry from scratch

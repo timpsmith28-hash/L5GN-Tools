@@ -29,15 +29,49 @@ MANUAL_CONFIDENCE = "manual"
 # review_queue row types this round's endpoint surfaces (round-2 brief, Task C).
 QUEUE_TYPES = ("project_link", "link_ambiguous", "link_downgrade")
 
-# Command Deck prototype, Task 6 (the wall, stubbed). DECISIONS 0023: work-estate
-# data is behind the TOTP gate EVEN TO VIEW, and that gate does not exist yet in
-# this round -- so until it does, the grouped read surface is structurally
-# incapable of returning a work-account thread at all. This is a deny-by-default
-# allowlist (only known *-personal accounts pass), not an allowlist of "-work"
-# strings to exclude -- a new account label that isn't explicitly "-personal"
-# stays walled out by construction, never by an operator remembering to update a
-# blocklist. Not a config flag: there is no knob here to flip.
+# Command Deck prototype, Task 6 (the wall). DECISIONS 0023: work-estate data is
+# behind the TOTP gate EVEN TO VIEW on a surface that co-renders more than one
+# estate, or that is reachable beyond the machine it runs on -- and that gate
+# does not exist yet, so until it does, the grouped read surface is
+# structurally incapable of returning a thread outside the ONE estate the
+# running machine has declared.
+#
+# DECISIONS 0025 narrows this from a hardcoded '-personal' constant to a
+# clause DERIVED FROM the machine's declared estate (`config.machine()
+# ["estate"]`), resolved once at app construction and passed in -- never read
+# per-request, and never read inside this module's query builders, the same
+# way this module stays independent of `pipeline.db`. It is still a
+# deny-by-default allowlist (only the one declared estate's accounts pass),
+# never a blocklist of labels to exclude -- a new account label that isn't
+# explicitly tagged for the declared estate stays walled out by construction,
+# never by an operator remembering to update a blocklist. `both`, a missing
+# estate, or an unrecognised value is exactly the co-rendering case 0023
+# gates, and there is no gate yet -- so `account_clause_for_estate` refuses
+# loudly rather than picking one silently. Still not a config flag in the
+# sense of a knob that widens the wall: config only selects WHICH single-estate
+# clause applies, and the loopback rule that goes with a work estate (0025) is
+# enforced structurally in `run.py`, not derived from config at all.
 _PERSONAL_ACCOUNT_CLAUSE = "t.account LIKE '%-personal'"
+_WORK_ACCOUNT_CLAUSE = "t.account LIKE '%-work'"
+
+
+def account_clause_for_estate(estate: str | None) -> str:
+    """Resolve a machine's declared estate to the wall's SQL allowlist clause
+    (DECISIONS 0025). The only two accepted values are `personal` and `work`;
+    anything else (`both`, `None`, empty, or unrecognised) raises loudly --
+    the deck must be told a single estate to render, and refusing to guess is
+    the point: a machine that cannot say which one estate it is showing is
+    exactly the co-rendered case 0023 gates, and there is no gate yet."""
+    if estate == "personal":
+        return _PERSONAL_ACCOUNT_CLAUSE
+    if estate == "work":
+        return _WORK_ACCOUNT_CLAUSE
+    raise ValueError(
+        f"unrecognised estate {estate!r}: review must be told a single "
+        "declared estate ('personal' or 'work') to render. 'both', a missing "
+        "estate, or any other value refuses to serve -- set "
+        "config/machines.json (or config/local.json) [<hostname>]['estate'] "
+        "(DECISIONS 0025).")
 
 _PIPELINE_DIR = Path(__file__).resolve().parent.parent / "pipeline"
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -45,6 +79,21 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# The set of host strings this codebase accepts as "this machine only". Kept
+# tiny and literal on purpose -- no DNS resolution, no wildcard matching. A
+# work-estate surface's bind check (DECISIONS 0025) must be trivially auditable
+# at a glance, not a place a resolver quirk could silently widen the rule.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def is_loopback_host(host: str) -> bool:
+    """True iff `host` is one of the literal loopback spellings this codebase
+    accepts. Used by `run.py review`'s preflight to enforce DECISIONS 0025's
+    load-bearing half: a work-estate surface asked to bind beyond loopback must
+    refuse to start, structurally -- not a warning, not a config flag."""
+    return host in _LOOPBACK_HOSTS
 
 
 # Remedy text for an unmigrated vault -- named in both the raised error and
@@ -269,11 +318,16 @@ def _breadcrumb(registry: dict | None, project_id: str | None) -> str | None:
 
 
 def pending_rulings(conn: sqlite3.Connection, project_id: str | None = None,
-                    registry: dict | None = None) -> list[dict]:
+                    registry: dict | None = None,
+                    account_clause: str = _PERSONAL_ACCOUNT_CLAUSE) -> list[dict]:
     """Pending project-link queue rows joined with thread context.
 
-    Estate/account-agnostic (DECISIONS 0010): no filtering or grouping by estate
-    or account -- but the thread's `account` IS surfaced per row, informationally.
+    Estate/account-agnostic in the sense of DECISIONS 0010 (deposits, never
+    display): no MERGING by estate or account -- but the thread's `account` IS
+    surfaced per row, informationally, and the read itself is walled to the ONE
+    estate `account_clause` names (DECISIONS 0025; see the comment above
+    `_PERSONAL_ACCOUNT_CLAUSE`). The caller resolves `account_clause` once, from
+    the running machine's declared estate -- this function never reads config.
     Rows whose thread is already `project_confidence='manual'` are excluded, so a
     completed ruling drops off the list WITHOUT the endpoint ever writing
     review_queue -- the queue row stays pending (pipeline-owned) and the manual
@@ -290,7 +344,7 @@ def pending_rulings(conn: sqlite3.Connection, project_id: str | None = None,
     where = ["q.status = 'pending'",
              "q.type IN ('project_link', 'link_ambiguous', 'link_downgrade')",
              "COALESCE(t.project_confidence, '') <> 'manual'",
-             _PERSONAL_ACCOUNT_CLAUSE]  # Task 6 / DECISIONS 0023: wall, hard
+             account_clause]  # Task 6 / DECISIONS 0023+0025: wall, hard
     params: list = []
     if project_id:
         where.append("(q.candidate_project = ? OR q.rival_project = ?)")
@@ -362,7 +416,8 @@ def pending_rulings(conn: sqlite3.Connection, project_id: str | None = None,
     return out
 
 
-def queue_by_project(conn: sqlite3.Connection, registry: dict | None = None) -> list[dict]:
+def queue_by_project(conn: sqlite3.Connection, registry: dict | None = None,
+                     account_clause: str = _PERSONAL_ACCOUNT_CLAUSE) -> list[dict]:
     """Per-candidate-project counts of the pending queue, for the deck's
     left-hand navigation (Task 2).
 
@@ -373,7 +428,9 @@ def queue_by_project(conn: sqlite3.Connection, registry: dict | None = None) -> 
     appear -- there is no zero-count entry to hide, matching Task 5's "zero-count
     entries collapse or hide" (nothing to collapse: they're simply absent).
     Same exclusion rule as `pending_rulings`: a thread already `manual` drops out
-    without review_queue ever being written.
+    without review_queue ever being written. `account_clause` is the same
+    caller-resolved wall as `pending_rulings` (DECISIONS 0025) -- resolved once
+    from the machine's declared estate, never read here from config.
     """
     rows = conn.execute(
         f"""
@@ -383,7 +440,7 @@ def queue_by_project(conn: sqlite3.Connection, registry: dict | None = None) -> 
          WHERE q.status = 'pending'
            AND q.type IN ('project_link', 'link_ambiguous', 'link_downgrade')
            AND COALESCE(t.project_confidence, '') <> 'manual'
-           AND {_PERSONAL_ACCOUNT_CLAUSE}
+           AND {account_clause}
         """
     ).fetchall()
 

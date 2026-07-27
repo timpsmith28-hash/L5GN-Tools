@@ -308,8 +308,11 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     Writes ONLY threads.project_link + project_confidence='manual' -- the pipeline
     owns every other column, so the two writers touch disjoint column sets and
     cannot collide (single-writer by column-scope, not by lock). Config-driven
-    paths, bound 0.0.0.0 for tailnet + LAN. FastAPI/uvicorn are an OPTIONAL extra;
-    if absent this skips cleanly and loudly with the install hint."""
+    paths, bound 0.0.0.0 by default for tailnet + LAN on a `personal` estate.
+    DECISIONS 0025: the deck renders only the running machine's declared
+    estate, and a `work`-estate machine must bind loopback only -- enforced
+    structurally below, not by the default. FastAPI/uvicorn are an OPTIONAL
+    extra; if absent this skips cleanly and loudly with the install hint."""
     from l5gntools import config
     from chronicler.review import app, core
     m = config.machine()
@@ -338,6 +341,30 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
               "extra, kept out of the stdlib-only core:\n"
               "         pip install -e .[review]", file=sys.stderr)
         return 2
+
+    # DECISIONS 0025: the estate wall is config-derived, resolved ONCE here and
+    # passed down -- app.py/core.py never read config themselves. An
+    # unrecognised estate ('both', missing, junk) is exactly the co-rendering
+    # case 0023 gates, and there is no gate yet, so this refuses loudly rather
+    # than picking a default.
+    estate = m.get("estate")
+    try:
+        account_clause = core.account_clause_for_estate(estate)
+    except ValueError as exc:
+        print(f"review: {exc}", file=sys.stderr)
+        return 2
+
+    # DECISIONS 0025's load-bearing half: the loopback rule is NOT config-derived
+    # and must not be bypassable by it. A work-estate surface asked to bind
+    # beyond loopback refuses to start -- not a warning, not a flag.
+    if estate != "personal" and not core.is_loopback_host(args.host):
+        print(
+            f"review: refusing to bind {args.host!r} -- this machine's declared "
+            f"estate is {estate!r}, and DECISIONS 0025 requires a work-estate "
+            "surface to bind loopback only (127.0.0.1 / ::1 / localhost). "
+            "Run with --host 127.0.0.1.", file=sys.stderr)
+        return 2
+
     try:
         # Pre-flight only -- core.connect() re-checks on every request too, but
         # failing fast here means an unmigrated vault never gets as far as
@@ -349,12 +376,15 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     port = args.port if "--port" in argv else REVIEW_DEFAULT_PORT
     print(f"review: DB={db}")
     print(f"review: registry={reg_path} ({len(registry)} link-target ids)")
+    print(f"review: estate={estate!r} -- rendering only that estate's threads "
+          "(DECISIONS 0025)")
     print(f"review: binding {args.host}:{port} -- writes ONLY project_link + "
           "project_confidence='manual'")
     print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
           f"on the LAN: http://<knight-192.168.x>:{port}/")
     try:
-        return app.run(db, registry, host=args.host, port=port)
+        return app.run(db, registry, host=args.host, port=port,
+                       account_clause=account_clause)
     except KeyboardInterrupt:
         return 0
 
