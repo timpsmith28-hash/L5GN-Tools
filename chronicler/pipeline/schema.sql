@@ -90,8 +90,34 @@ CREATE TABLE IF NOT EXISTS review_queue (
     status              TEXT DEFAULT 'pending',  -- pending / confirmed / rejected / reassigned
     note                TEXT,
     created_at          TEXT,
-    resolved_at         TEXT
+    resolved_at         TEXT,
+    -- Command Deck prototype (COWORK_BRIEF_command_deck_proto Task 1): a
+    -- structured registry id for the candidate project this row suggests, so the
+    -- deck can GROUP BY it instead of parsing `note` prose. candidate_project is
+    -- the best candidate for every row type that carries one (project_link,
+    -- link_ambiguous, link_downgrade); rival_project is the second candidate,
+    -- populated only for link_ambiguous rows (two real rivals) so a thread never
+    -- silently drops out of the batch of the project it might actually belong to.
+    candidate_project   TEXT,              -- registry id, nullable
+    rival_project       TEXT               -- registry id, nullable (link_ambiguous only)
 );
+
+-- DECISIONS 0024: project-link rejections are an endpoint-owned, append-only
+-- log, deliberately separate from review_queue (pipeline-owned, single-writer
+-- since 0007). "Not this project" inserts a row here; review_queue is never
+-- touched by the review endpoint. A (thread_id, candidate_project) pair with
+-- verdict='rejected' is excluded from that project's batch by the read side
+-- (core.pending_rulings / core.queue_by_project), the same join-based
+-- exclusion pattern as the existing project_confidence='manual' rule.
+CREATE TABLE IF NOT EXISTS review_rulings (
+    item_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id           TEXT NOT NULL,
+    candidate_project   TEXT NOT NULL,
+    verdict             TEXT NOT NULL,     -- 'rejected' (only verdict this round writes)
+    ruled_at            TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_rulings_thread_project
+    ON review_rulings(thread_id, candidate_project);
 
 -- S6 evidence model. One row per (thread, project, signal) contribution. S4/S5
 -- write rows here (filename_xref, path_mention); relink.py additionally persists

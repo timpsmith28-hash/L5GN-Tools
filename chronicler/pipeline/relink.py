@@ -667,11 +667,12 @@ def apply_decision(conn, thread, dec, registry, now):
         clear_pending_relink_rows(conn, tid)
         best = dec["best"]
         conn.execute(
-            """INSERT INTO review_queue (type, thread_id, confidence, status, note, created_at)
-               VALUES ('project_link', ?, ?, 'pending', ?, ?)""",
+            """INSERT INTO review_queue
+               (type, thread_id, confidence, status, note, created_at, candidate_project)
+               VALUES ('project_link', ?, ?, 'pending', ?, ?, ?)""",
             (tid, best["adjusted"],
              f"suggest -> {lbl(best['project'])} (adjusted={best['adjusted']:.3f}); "
-             f"evidence: {best['summary']}", now),
+             f"evidence: {best['summary']}", now, best["project"]),
         )
         conn.execute("UPDATE threads SET review_status='pending' WHERE thread_id=?", (tid,))
 
@@ -679,11 +680,14 @@ def apply_decision(conn, thread, dec, registry, now):
         clear_pending_relink_rows(conn, tid)
         b, s = dec["best"], dec["second"]
         conn.execute(
-            """INSERT INTO review_queue (type, thread_id, confidence, status, note, created_at)
-               VALUES ('link_ambiguous', ?, ?, 'pending', ?, ?)""",
+            """INSERT INTO review_queue
+               (type, thread_id, confidence, status, note, created_at,
+                candidate_project, rival_project)
+               VALUES ('link_ambiguous', ?, ?, 'pending', ?, ?, ?, ?)""",
             (tid, b["adjusted"],
              f"ambiguous: {lbl(b['project'])} (adjusted={b['adjusted']:.3f}; {b['summary']}) "
-             f"VS {lbl(s['project'])} (adjusted={s['adjusted']:.3f}; {s['summary']})", now),
+             f"VS {lbl(s['project'])} (adjusted={s['adjusted']:.3f}; {s['summary']})", now,
+             b["project"], s["project"]),
         )
         conn.execute("UPDATE threads SET review_status='pending' WHERE thread_id=?", (tid,))
 
@@ -691,12 +695,14 @@ def apply_decision(conn, thread, dec, registry, now):
         clear_pending_relink_rows(conn, tid)
         best = dec["best"]
         conn.execute(
-            """INSERT INTO review_queue (type, thread_id, confidence, status, note, created_at)
-               VALUES ('link_downgrade', ?, ?, 'pending', ?, ?)""",
+            """INSERT INTO review_queue
+               (type, thread_id, confidence, status, note, created_at, candidate_project)
+               VALUES ('link_downgrade', ?, ?, 'pending', ?, ?, ?)""",
             (tid, best["adjusted"],
              f"downgrade: existing fuzzy link -> {dec.get('cur_name')!r} now contradicted; "
              f"new evidence points to {lbl(best['project'])} "
-             f"(adjusted={best['adjusted']:.3f}); evidence: {best['summary']}", now),
+             f"(adjusted={best['adjusted']:.3f}); evidence: {best['summary']}", now,
+             best["project"]),
         )
         conn.execute("UPDATE threads SET review_status='pending' WHERE thread_id=?", (tid,))
     # 'none' / 'skip_*' -> nothing written.

@@ -97,8 +97,28 @@ CREATE TABLE IF NOT EXISTS review_queue (
     status              TEXT DEFAULT 'pending',  -- pending / confirmed / rejected / reassigned
     note                TEXT,
     created_at          TEXT,
-    resolved_at         TEXT
+    resolved_at         TEXT,
+    -- Command Deck prototype (COWORK_BRIEF_command_deck_proto Task 1, 2026-07-27):
+    -- structured registry ids so the review deck can GROUP BY candidate project
+    -- instead of parsing `note` prose. candidate_project is the best candidate;
+    -- rival_project is the second candidate, populated only for link_ambiguous
+    -- rows. Both nullable; backfilled on pre-existing rows by
+    -- pipeline/backfill_candidate_project.py.
+    candidate_project   TEXT,
+    rival_project       TEXT
 );
+
+-- DECISIONS 0024: project-link rejections are an endpoint-owned, append-only
+-- log, separate from review_queue (pipeline-owned, single-writer since 0007).
+CREATE TABLE IF NOT EXISTS review_rulings (
+    item_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id           TEXT NOT NULL,
+    candidate_project   TEXT NOT NULL,
+    verdict             TEXT NOT NULL,     -- 'rejected' (only verdict this round writes)
+    ruled_at            TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_rulings_thread_project
+    ON review_rulings(thread_id, candidate_project);
 
 -- Evidence model. One row per (thread, project, signal) contribution.
 -- NOTE: the 'vocabulary' signal was evaluated and DROPPED (it degraded linking);

@@ -1,4 +1,9 @@
-<!-- uat: commit=5e5fee2 dirty=false host=LucasGoonPC walked=2026-07-27 gate=6a/43t -->
+<!-- uat: commit=5e5fee2 dirty=false host=LucasGoonPC walked=2026-07-27 gate=6a/45t -->
+<!-- gate count updated 2026-07-27: command deck prototype (Task 1) registered
+     tester_relink_apply + tester_backfill_candidate_project, 43t -> 45t. The
+     walk itself is unaffected; auditor_uat_stamp checks the live tree's
+     registered count, not the commit's, so this line drifts whenever a
+     tester is added after the fact and must be bumped to keep the gate green. -->
 
 # Results log — solo playbook (walked 2026-07-27)
 

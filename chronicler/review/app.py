@@ -35,8 +35,20 @@ try:
     class Ruling(BaseModel):
         thread_id: str
         project_id: str
+
+    class RulingBatch(BaseModel):
+        # Task 4: bulk accept. A flat list, not a dict, so batch order is the
+        # UI's check-off order and per-thread results (below) line up with it.
+        rulings: list[Ruling]
+
+    class Rejection(BaseModel):
+        # DECISIONS 0024: "not this project" for one (thread, candidate) pair.
+        thread_id: str
+        project_id: str
 except ImportError:  # pydantic ships with fastapi; absent == web stack not installed
     Ruling = None  # type: ignore
+    RulingBatch = None  # type: ignore
+    Rejection = None  # type: ignore
 
 
 def available() -> bool:
@@ -96,10 +108,22 @@ def create_app(db_path: Path, registry: dict):
         ]
 
     @app.get("/api/pending")
-    def get_pending():
+    def get_pending(project: str | None = None):
+        # `project` filters to one candidate's batch (Task 2) -- a thread whose
+        # RIVAL is this project is included too (is_rival=True), never dropped.
         conn = _connect(db_path)
         try:
-            return core.pending_rulings(conn)
+            return core.pending_rulings(conn, project_id=project, registry=registry)
+        finally:
+            conn.close()
+
+    @app.get("/api/queue/projects")
+    def get_queue_by_project():
+        # The deck's left-hand nav: per candidate project, counts split by type.
+        # Thin shell over core.queue_by_project -- no DB logic here.
+        conn = _connect(db_path)
+        try:
+            return core.queue_by_project(conn, registry=registry)
         finally:
             conn.close()
 
@@ -108,6 +132,30 @@ def create_app(db_path: Path, registry: dict):
         conn = _connect(db_path)
         try:
             return core.apply_ruling(conn, ruling.thread_id, ruling.project_id, registry)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        finally:
+            conn.close()
+
+    @app.post("/api/rule/batch")
+    def post_rule_batch(batch: RulingBatch):
+        # Task 4: bulk accept. One validated write per thread inside one
+        # transaction (core.apply_ruling_batch); per-thread results returned
+        # so a partial failure (one bad id) is visible, never swallowed.
+        conn = _connect(db_path)
+        try:
+            pairs = [(r.thread_id, r.project_id) for r in batch.rulings]
+            return core.apply_ruling_batch(conn, pairs, registry)
+        finally:
+            conn.close()
+
+    @app.post("/api/reject")
+    def post_reject(rejection: Rejection):
+        # DECISIONS 0024: "not this project". Writes ONLY review_rulings --
+        # review_queue is never touched by this endpoint.
+        conn = _connect(db_path)
+        try:
+            return core.apply_rejection(conn, rejection.thread_id, rejection.project_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         finally:
