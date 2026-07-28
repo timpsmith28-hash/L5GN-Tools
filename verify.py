@@ -20,7 +20,7 @@ AUDITORS: list[str] = [
     "auditors.auditor_tool_contract",
     "auditors.auditor_uat_stamp",
 ]
-
+ 
 TESTERS: list[str] = [
     "tests.tester_common",
     "tests.tester_scanners",
