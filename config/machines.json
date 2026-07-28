@@ -10,7 +10,9 @@
     "estate": "personal",
     "roots": [{"path": "C:/Users/you/Documents/GitHub", "scope": "l5gn"}],
     "push_target": "knight-host:vault/estates",
-    "push_transport": "scp"
+    "push_transport": "scp",
+    "cli_transcripts_home": "C:/Users/you/.claude/projects",
+    "cowork_transcripts_home": "C:/Users/you/AppData/Local/Packages/Claude_<packaged-app-id>/LocalCache/Roaming/Claude/local-agent-mode-sessions"
   },
   "RENAME-ME-WORK-LAPTOP": {
     "role": "producer",
@@ -20,6 +22,7 @@
       {"path": "C:/Users/you/Github/L5GN", "scope": "l5gn"}
     ]
   },
+  "_transcripts_comment": "'cli_transcripts_home' / 'cowork_transcripts_home' -- machine facts for chronicler/pipeline/local_transcripts.py (COWORK_BRIEF_local_transcript_intake.md Phase 1). Both are per-user, machine-specific paths (Claude Code's ~/.claude/projects, and the Cowork desktop app's MSIX-virtualised LocalCache session root -- NOT %APPDATA%\\Claude, which is a virtualised view a normal process can't see). Absent key -> that store is reported as 'not configured', not an error. The packaged-app id in the Cowork path is per-install; find it by browsing to %LOCALAPPDATA%/Packages and looking for the Claude_* folder.",
   "_census_comment": "'run.py census' is role-aware. A producer censuses its 'roots'. A consumer censuses two roots: the deployed toolkit ('code_root', optional -- it defaults to the toolkit the command is running from, which IS the deploy) and the vault ('chronicler_home'). Both resolved here, never hardcoded.",
   "RENAME-ME-KNIGHT": {
     "role": "consumer",

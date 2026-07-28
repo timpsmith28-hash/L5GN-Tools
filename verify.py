@@ -47,6 +47,7 @@ TESTERS: list[str] = [
     "tests.tester_intake",
     "tests.tester_set_substantive",
     "tests.tester_md_transcript",
+    "tests.tester_local_transcripts",
     "tests.tester_doc_claims",
     "tests.tester_uat_stamp",
     "tests.tester_dbsafe",
