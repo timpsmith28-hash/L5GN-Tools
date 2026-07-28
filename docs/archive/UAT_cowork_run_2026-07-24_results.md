@@ -1,6 +1,17 @@
 <!-- uat: commit=1951cfe dirty=false host=LucasGoonPC walked=2026-07-25 -->
 <!-- gate-frozen: commit=d1a1b76 -->
 
+> **ARCHIVED** 2026-07-28 · completed round record · walk-sheet + stamped results, with two addenda
+> Superseded by: nothing — terminal record of the 2026-07-24 Cowork run, walked 2026-07-25.
+> Accurate history: the walk of briefs 1–4 across three builds — the gaming rig, the re-walk after
+> the root was retargeted to `…/GitHub/L5GN`, and the work-rig (`10280L`) addendum. Finding 1 (the
+> `L5GN/` container scanned as one non-git project) colours the first build's numbers; the addenda
+> supersede them and say so in-body.
+> Note for a cold read: this log is the **evidence base for three pairs still live in core `docs/`**
+> — `scanner_bugfixes` (1.x), `governance_scanners` (2.x) and `blast_radius` (3.x). It records
+> `[EVIDENCE]` / `[FIXTURE]` / `[BLOCKED]` / `[DEFERRED]` per item and states plainly that it
+> captures evidence, not acceptance. It closes none of those pairs by itself.
+
 # Results log — Cowork run 2026-07-24 (walked 2026-07-25, gaming rig)
 
 Partner to `UAT_cowork_run_2026-07-24.md`. Records the evidence gathered walking

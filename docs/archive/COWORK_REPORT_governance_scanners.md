@@ -1,5 +1,31 @@
 <!-- gate-frozen: commit=25ede96 -->
 
+> **ARCHIVED** 2026-07-28 · completed pair · brief + report + walk-sheet; evidence in
+> `archive/UAT_cowork_run_2026-07-24_results.md` (items 2.x), closed 2026-07-28 against real
+> data from both estates
+> Superseded by: nothing — the governance scanners and `auditor_decision_records` are live.
+> Accurate history: scope honesty (2.A), open-questions → PENDING (2.B3, carried on both
+> estates — Crystal-Spire personally, SolConfig at work), tracked-secret labelling on a real
+> secret (2.C), and 15 shared-filename verdicts (2.D).
+> Three items closed after the fact, with the measurements that closed them:
+> · **2.B1 — RESOLVED, confirmed on real data.** The counter is correct. `doc_census` sees
+>   `ValidationAutomation/docs/DECISIONS.md` ("Decisions Log", 4 headings, 1,145 words) while
+>   `todo_adr_scanner` scores `decisions_count: 0`, because `_DECISION_ENTRY` matches only
+>   `^##\s+(\d+)`. A convention mismatch, not a defect.
+> · **2.B2 — upgraded from FIXTURE to real evidence.** CID reports `adr_files: 9` on the
+>   2026-07-28T21:09 personal build (`a1f9169`). It read 0 at walk time only because CID was
+>   collapsed inside the `L5GN/` container before the root retarget.
+> · **2.E1 — no carrier in either estate, measured not assumed.** No project reports "repo
+>   initialised but has no commits" on the personal build above or the work build
+>   (`10280L`, 2026-07-28T20:55). Only "not a git repository" appears. Closed as tester-proven
+>   with the gap recorded, rather than held open for an estate that may never contain one.
+> Stop trusting: `decisions_count` as a measure of whether an estate keeps decision records.
+> It scores 0 on **both** estates while real decision logs exist in each — the work estate
+> encodes decisions as extracted knowledge documents (`SolConfig_Knowledge.md`,
+> `LEGACY_BUNDLE_KNOWLEDGE.md`) rather than numbered entries. The scanner measures one
+> convention; the estates use two. Unresolved when this pair closed.
+> Also never ruled on: the data-sensitivity / PII flag this brief flagged as out of scope.
+
 # Cowork report — governance scanners + scope-in-UI
 
 Pair: `docs/COWORK_BRIEF_governance_scanners.md`. Session 2026-07-24, on top of

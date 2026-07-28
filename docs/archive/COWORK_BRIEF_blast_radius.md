@@ -1,3 +1,18 @@
+> **ARCHIVED** 2026-07-28 · completed pair · brief + report + walk-sheet; evidence in
+> `archive/UAT_cowork_run_2026-07-24_results.md` (items 3.x), ratified by Tim 2026-07-28
+> Superseded by: nothing — `l5gntools/scanners/blast_radius.py` is the living output.
+> Accurate history: the tiering design and the guardrail that no script body, alias or
+> credential is ever stored. That guardrail was re-confirmed independently on the work rig
+> (`10280L`, 2026-07-28), not just on the rig it was built against. The `db-writes`
+> false-positive tuning (bare `.commit()` / `.execute()`) held.
+> Ratification, 2026-07-28: Tim confirmed 3.C1/C3 — the estate list matches his sense of the
+> sharp edges. One genuine prod-write hit estate-wide (a Salesforce write from the work
+> laptop), everything else correctly not escalated. A discriminating result, not a thin one.
+> Stop trusting: any count in this body predates the root retarget to `…/GitHub/L5GN`. At the
+> time of writing, Finding 1 of the run log had the whole `L5GN/` tree scanning as one non-git
+> project, which inflated and distorted per-project figures; the run log's addenda supersede
+> them. Auto-blocking a commit on a critical finding is still explicitly out of scope.
+
 # Cowork brief — blast-radius scanner + the uncommitted-critical alarm
 
 **Origin:** design thread, 2026-07-24, after the work rig's SolConfig r141 pipeline

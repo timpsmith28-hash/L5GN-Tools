@@ -1,3 +1,17 @@
+> **ARCHIVED** 2026-07-28 · completed pair · brief + report; walked as Part 4 of
+> `UAT_work_rig_solo.md` rather than via a walk-sheet of its own
+> Superseded by: nothing — `chronicler/pipeline/{local_transcripts,ingest_local_transcripts}.py`
+> are the living output.
+> Accurate history: Phases 0–3 in full, including Phase 0's record-type schema read from real
+> files, and the rulings (source `claude-local`, account `<source>-<estate>` from machine config
+> only, conversation-text-only content).
+> Stop trusting: **the brief's own premise.** It assumed the personal export and the local store
+> describe the same conversations, so the local store could be checked against a known-good
+> answer. Phase 3 measured **zero overlap** — 71 local-only threads, 39 export-only, not one
+> match — so the two sources are empirically disjoint and no dedupe rule is needed anywhere.
+> Also: `local_transcripts.py` as described here could not see a Cowork store on Windows at all
+> past MAX_PATH; fixed later at `a1f9169`, after this round closed.
+
 # Cowork report — local transcript intake
 
 **Phase:** 0 — read one file and write down what is actually in it.

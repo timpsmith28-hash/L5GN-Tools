@@ -1,3 +1,14 @@
+> **ARCHIVED** 2026-07-28 · completed pair · brief + report + walk-sheet
+> Superseded by: DECISIONS **0017**, ratified 2026-07-27, which this round drafted.
+> Accurate history: the 2026-07-21 census — 25 `projects` rows across three generations, 226
+> links, five duplicate identity clusters, zero orphans — and the reasoning for resetting rather
+> than migrating. That ruling stands.
+> Stop trusting: the *mechanism*. The report's drafted 0017 prescribes clearing `project_link` on
+> 270 threads and re-keying 332 folder-name-keyed `link_evidence` rows. **None of that ran.** The
+> knight took the fresh-build path instead (`RUNBOOK_knight_fresh_build.md`), so both tables
+> started empty and the debt was paid by rebuild, not migration — see the ratified 0017 and
+> `archive/COWORK_REPORT_apply_alignment.md`. Do not run the reset runbook in this body.
+
 # Cowork report — projects reconciliation: one identity per project
 
 **Date:** 2026-07-21 · **Pairs with:** `COWORK_BRIEF_projects_reconciliation.md`

@@ -15,6 +15,17 @@
      gate= against the stamped commit's verify.py (making the field meaningful
      and permanent), or refuse the field outright. Until then, do not write it. -->
 
+> **ARCHIVED** 2026-07-28 · completed pair · brief + report + walk-sheet + stamped results
+> Superseded by: nothing — `docs/SOLO_PLAYBOOK.md` is the living output and stays in core.
+> Accurate history: the docs-first method, and the three dispositions it produced (CHRONICLER_HOME
+> and CHRONICLER_REGISTRY_PATH resolved as docs-only, schema_frozen.sql target routing as the one
+> code fix), are the real record of why a single code change landed from a full walk.
+> Stop trusting: §10's `[WORK]` profile is described throughout as "written, not walked". That is
+> no longer true — it was walked on 10280L 2026-07-28; see `UAT_work_rig_solo_results.md`, which
+> also corrects the shipped `config/local.json` CLI-store path (it carried the gaming rig's
+> `C:/Users/timps/.claude`). The results log's `gate=` field was bumped twice to keep the gate
+> green before being dropped; the in-file comment explains why. Do not reintroduce `gate=`.
+
 # Results log — solo playbook (walked 2026-07-27)
 
 Partner to `docs/COWORK_BRIEF_solo_playbook.md` / `docs/UAT_solo_playbook.md`

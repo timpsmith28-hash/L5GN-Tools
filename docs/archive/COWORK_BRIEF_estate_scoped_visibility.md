@@ -1,3 +1,12 @@
+> **ARCHIVED** 2026-07-28 · completed pair · no separate results log — walked as Parts 2/3 of
+> `UAT_work_rig_solo.md`, evidenced in `UAT_work_rig_solo_results.md`
+> Superseded by: nothing — DECISIONS 0025 is the standing rule; this pair is how it was built.
+> Accurate history: Task 4's finding (`build_registry.py --estate work` already scoped the
+> registry, so nothing needed building) held in practice — 18 link-target ids on 10280L. The
+> loopback refusal fired verbatim as designed.
+> Stop trusting: UAT item 2.3 (undeclared-estate refusal) reads as ready to walk and was NOT
+> walked; it is covered hermetically only. Read the walk evidence in the work-rig results log.
+
 # Cowork brief — estate-scoped visibility: let a solo box read its own estate
 
 **Origin:** design thread, 2026-07-27, preparing the work-laptop walk.
