@@ -968,3 +968,42 @@ still present on the 2026-07-28 build). Suspected backup and duplicated folders
 rather than a scanner fault; to be investigated as it is met, and it is the same
 open ruling as item 1.A2 — how a non-git folder's data directories get classified
 out when there is no `.gitignore` to do it.
+
+---
+
+## 0027 — Summary-only governs artefacts that travel; a local surface reads the source at render time
+
+**Date:** 2026-07-28 · **Status:** proposed · **Builds on:** 0010 (the wall),
+0013 (serve a snapshot), 0025 (gate the surface, not the data) ·
+**Source:** design thread
+
+**Context.** Scanners capture summaries and never contents — sizes, counts,
+titles, 120-character marker excerpts — and `blast_radius` explicitly stores no
+script body, alias or credential. The reason is that **the report is a deposit
+artefact**: it is pushed to the knight, consumed by other estates, and lands
+beside material it must never carry. That is why 1.A2 treats even leaked *paths*
+as a defect. The rule protects the artefact, not the operator.
+
+A local-only surface is not an artefact. It renders on the machine that owns
+the files, to the person who already owns them, and nothing it displays leaves
+the process. The constraint that makes summary-only necessary simply is not
+present.
+
+**Decision.** The summary-only rule is **unchanged for anything that is
+captured, written to `data/`, or deposited.** Separately, a **local-only
+surface may read a file from disk at render time** and display its contents,
+provided:
+1. it persists nothing — no cache, no copy under `data/`, nothing that could be
+   deposited;
+2. it is bound to loopback, enforced structurally as 0025 already requires; and
+3. it reads only within the configured estate roots and vault home — never an
+   arbitrary path supplied by the caller.
+
+**Consequences.** `blast_radius`' guardrail stays literally true: nothing is
+stored, so nothing can leak through a deposit. The deck gains full fidelity
+without a single scanner capturing more than it does today. The risk moves from
+*what the artefact contains* to *what the surface can reach*, which is why (3)
+is a hard requirement and not a nicety: a render-time reader with a path
+parameter is a file-disclosure bug waiting for the day someone binds it wrong.
+
+---
