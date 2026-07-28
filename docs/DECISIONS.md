@@ -893,3 +893,76 @@ Two things follow that this entry commits us to:
 
 The TOTP gate (0023) remains unbuilt and remains required for every case in (1)
 and (2). This entry narrows *where* it is required; it does not remove it.
+
+---
+
+## 0026 — Knowledge documents are a first-class governance artefact with their own shape, not malformed ADRs
+
+**Date:** 2026-07-28 · **Status:** accepted · **Source:** the 2026-07-28 work-rig
+walk and the archiving sweep that followed · **Relates to:**
+`archive/COWORK_BRIEF_governance_scanners.md` (2.B1/2.B2), INTENT §defensibility
+
+**Context.** `todo_adr_scanner.decisions_count` counts entries matching
+`^##\s+(\d+)` — the trinity's `## 0001 — title` form. Measured on real data from
+both estates on 2026-07-28, it returns **zero everywhere**:
+
+- **Work estate** (`10280L`, 9 MCF projects): 0 decision entries, 0 ADR files, and
+  0 TODO/FIXME markers. Yet `doc_census` sees
+  `ValidationAutomation/docs/DECISIONS.md` — title "Decisions Log", 4 headings,
+  1,145 words — plus 21 documents in SolConfig and 23 in TSsToAssets, including
+  `SolConfig_Knowledge.md` (15 headings, 3,562 words) and
+  `LEGACY_BUNDLE_KNOWLEDGE.md` ("Knowledge & Lessons Log").
+- **Personal estate** (8 scanned projects): 0 decision entries as well. CID carries
+  9 ADR files; this repo's own `docs/DECISIONS.md` counts correctly when pointed
+  at directly (16 entries at the time), but sits outside the scanned root.
+
+So a counter that has **never once returned non-zero on a real scan** reports both
+estates as keeping no decision records, while both demonstrably do. The counter is
+not defective — it is measuring one convention, and the estate uses two.
+
+The second convention is the substantive point. The MCF work has been about
+getting knowledge out of Tim's head and into a durable form, and — his framing —
+*a piece of known business information represents a decision that was made*. That
+is true, and it is the reason those documents matter. But a knowledge document is
+**not** an ADR wearing the wrong hat: it has no status, it does not supersede a
+predecessor, it is not append-only, and it is revised in place as understanding
+improves. Forcing it into ADR shape would destroy exactly the properties that make
+an ADR worth counting.
+
+**Decision.** Knowledge documents are recognised as a **distinct, first-class
+governance artefact**, counted separately from decision records. Specifically:
+
+1. **Do not reformat knowledge documents to satisfy the ADR counter.** Rewriting
+   `SolConfig_Knowledge.md` into numbered entries would be the tail wagging the
+   dog — the scanner exists to observe the estate, not to specify it.
+2. **Do not broaden `_DECISION_ENTRY`** to swallow other heading shapes. An ADR
+   count that also counts knowledge docs can distinguish neither, and the signal
+   an ADR carries (a ruling, with a status, that supersedes) is destroyed by
+   dilution. The regex stays narrow.
+3. **`doc_census` gains a knowledge census** beside `adr_files`, keyed on a
+   **cheap, explicit convention** rather than inference from prose. A classifier
+   guessing "is this knowledge?" from content is the large check that rots; a
+   filename or single-marker convention is the small one that always runs — the
+   same reasoning `auditor_doc_claims` was built on.
+4. **A zero `decisions_count` is not evidence of absent governance**, and must not
+   be read or reported as such. Anywhere the report presents it, it presents the
+   knowledge census alongside.
+
+**Consequences.** The two estates become comparable without the work estate
+looking ungoverned, which it plainly is not. Defensibility (INTENT) gains the
+artefact it actually needs: the work estate's evidence of considered practice is
+its knowledge base, not an ADR count it will never have.
+
+Left open, deliberately, as implementation for a brief rather than ruled here:
+the exact convention that marks a knowledge document (a `*_KNOWLEDGE.md` filename
+is the existing de-facto shape in MCF, and the cheapest candidate), and whether
+`ValidationAutomation/docs/DECISIONS.md` is realigned to `## <NNNN> — …` so it
+counts as the decision log it genuinely is, or is left as it stands. The first is
+a convention this entry endorses; the second is a one-file editorial choice with
+no bearing on the rule.
+
+Not decided here: the `L5GN-Castle` payload anomaly (a capped 1.1 MB `file_census`
+still present on the 2026-07-28 build). Suspected backup and duplicated folders
+rather than a scanner fault; to be investigated as it is met, and it is the same
+open ruling as item 1.A2 — how a non-git folder's data directories get classified
+out when there is no `.gitignore` to do it.
