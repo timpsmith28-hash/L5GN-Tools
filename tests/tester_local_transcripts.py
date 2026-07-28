@@ -184,6 +184,77 @@ def run() -> list[str]:
         if missing["stores"]["cli"]["status"] != "configured but not found on disk":
             v.append(f"missing-on-disk store misreported: {missing['stores']['cli']}")
 
+        # --- MAX_PATH guard and honest filesystem failure (Phase 4 UAT, 10280L,
+        #     2026-07-28) -------------------------------------------------------
+        # A live Cowork session's path measured 441 chars before its own filename:
+        # the encoded-cwd segment folds the whole path back into itself. Past
+        # MAX_PATH, `Path.is_dir()` swallows the OSError and returns False, so the
+        # store looked empty rather than unreadable -- the "confident zero" class.
+
+        # 1. _winlong prefixes on Windows, is a no-op elsewhere, and is idempotent.
+        #    os.name cannot be forced here: pathlib picks WindowsPath/PosixPath from
+        #    it at instantiation, so faking it raises "cannot instantiate
+        #    'WindowsPath' on your system". The prefixing branch is therefore only
+        #    assertable on a Windows host -- which is the host that matters, since
+        #    this whole guard exists for a Windows-only limit and the pre-commit
+        #    gate runs there (see
+        #    docs/investigation/2026-07-27_gate-green-on-linux-red-on-windows.md).
+        if lt.os.name == "nt":
+            got = str(lt._winlong(Path(r"C:\a\b")))
+            if not got.startswith("\\\\?\\"):
+                v.append(f"_winlong did not prefix an absolute path: {got!r}")
+            if str(lt._winlong(Path(got))) != got:
+                v.append("_winlong is not idempotent on an already-prefixed path")
+        else:
+            p = Path("/a/b")
+            if lt._winlong(p) != p:
+                v.append("_winlong is not a no-op off Windows")
+
+        # 2. The guard lives on the discovery functions, NOT on the caller. This is
+        #    the regression that actually bit: the first fix patched census() only,
+        #    ingest_local_transcripts.py builds its own root, and so it kept
+        #    silently finding 0 cowork sessions. Anyone moving this back to the
+        #    call sites must fail here.
+        for fn_name, root in (("discover_cli_store", cli_root),
+                              ("discover_cowork_store", cowork_root)):
+            seen: list[Path] = []
+            real = lt._winlong
+            try:
+                lt._winlong = lambda p, _s=seen, _r=real: (_s.append(p), _r(p))[1]
+                list(getattr(lt, fn_name)(root))
+            finally:
+                lt._winlong = real
+            if not seen:
+                v.append(f"{fn_name} does not apply the MAX_PATH guard itself -- "
+                         "a caller building its own root would lose it")
+
+        # 3. A filesystem failure is reported, never swallowed. Passing a FILE
+        #    where a directory is expected raises NotADirectoryError (an OSError)
+        #    deterministically on every platform, standing in for the ACL/long-path
+        #    cases that are not reproducible in a fixture.
+        not_a_dir = cli_root / "C--Users-x-repo" / "aaaa1111-1111-1111-1111-111111111111.jsonl"
+        errs: list[str] = []
+        if lt._safe_subdirs(not_a_dir, errs) != []:
+            v.append("_safe_subdirs returned entries for a non-directory")
+        if not errs:
+            v.append("_safe_subdirs swallowed an OSError instead of reporting it")
+
+        # 4. The census surfaces the channel, so a zero count can be distinguished
+        #    from an unreadable store by a reader of the report.
+        real_machine2 = lt.machine
+        try:
+            lt.machine = lambda host=None: {
+                "_hostname": "test-host",
+                "cli_transcripts_home": str(cli_root),
+                "cowork_transcripts_home": str(cowork_root),
+            }
+            rep = lt.census()
+        finally:
+            lt.machine = real_machine2
+        if "access_errors" not in rep["stores"]["cli"]:
+            v.append("census store report has no access_errors key -- a zero "
+                     "session count cannot be told apart from an unreadable store")
+
         # --- read-only: source files untouched -----------------------------------
         # mtimes unchanged after everything above -- discovery/parse/census must
         # never write into either store.

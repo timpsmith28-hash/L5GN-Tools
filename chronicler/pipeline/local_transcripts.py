@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -65,6 +66,34 @@ from l5gntools.config import machine
 # ---------------------------------------------------------------------------
 
 EXCLUDED_FILENAMES = frozenset({"audit.jsonl"})
+
+
+def _winlong(path: Path) -> Path:
+    """Extended-length form of an absolute Windows path (`\\\\?\\`-prefixed),
+    so filesystem calls aren't capped by the legacy 260-character MAX_PATH.
+
+    Real and hit in practice, not theoretical: Phase 4 UAT on 10280L
+    (2026-07-28) found a live Cowork session whose full
+    `<root>/<workspace-id>/<project-id>/local_<session-id>/.claude/projects/
+    <encoded-cwd>` path measured 441 characters before the session's own
+    `.jsonl` filename was even added -- the encoded-cwd segment folds the
+    *entire* path back into itself, and that self-nesting is what pushes it
+    past MAX_PATH. Every level below the truncation point looked like a
+    directory that legitimately doesn't exist, exactly the "confident zero"
+    class this module exists to catch, one call this module previously
+    hadn't guarded: `Path.is_dir()` swallows the resulting `OSError`
+    internally and returns `False`, same as an absent directory would.
+
+    A no-op on non-Windows and a no-op if already prefixed, so callers can
+    apply it unconditionally at the one point a store root is constructed;
+    every path built from it via `/` inherits the prefix.
+    """
+    if os.name != "nt":
+        return path
+    s = str(path)
+    if s.startswith("\\\\?\\"):
+        return path
+    return Path("\\\\?\\" + s)
 
 # Record types that never carry conversation text. Every one of these is
 # session/tool bookkeeping (Phase 0's findings), counted but never turned
@@ -92,7 +121,47 @@ class TranscriptFile:
     is_sidechain: bool   # under a subagents/ folder -- a subagent's own transcript
 
 
-def _iter_projects_tree(projects_root: Path, store: str):
+def _safe_subdirs(path: Path, errors: list | None, predicate=None) -> list[Path]:
+    """Immediate subdirectories of ``path``, catching ``OSError`` explicitly
+    instead of relying on ``Path.iterdir()``/``Path.is_dir()``, which swallow
+    a permission failure internally and simply act as if the entry were not
+    there. That distinction matters here specifically:
+    docs/investigation/2026-07-27_cowork-transcript-store.md already found
+    one case where a census pointed at the wrong (MSIX-virtualised) path
+    returned "a confident zero with no hint that redirection is in play" --
+    that time the path itself was wrong. This guards the *other* way the
+    same symptom can happen: the path is right, but something (AppContainer
+    ACLs, a locked-down corporate device policy) blocks a plain,
+    non-packaged process from listing one level of it, and every level below
+    a silently-empty listing looks like "no sessions" rather than "could not
+    look". Every ``OSError`` met while listing or stat-ing an entry is
+    appended to ``errors`` (when given) and the walk continues -- Phase 1's
+    "listed, never swallowed" rule, applied to the filesystem itself and not
+    just to record parsing.
+    """
+    try:
+        entries = sorted(path.iterdir())
+    except OSError as exc:
+        if errors is not None:
+            errors.append(f"cannot list {path}: {exc}")
+        return []
+    out: list[Path] = []
+    for p in entries:
+        try:
+            is_dir = p.is_dir()
+        except OSError as exc:
+            if errors is not None:
+                errors.append(f"cannot stat {p}: {exc}")
+            continue
+        if not is_dir:
+            continue
+        if predicate is not None and not predicate(p):
+            continue
+        out.append(p)
+    return out
+
+
+def _iter_projects_tree(projects_root: Path, store: str, errors: list | None = None):
     """Yield a TranscriptFile for every *.jsonl under a `.claude/projects`-shaped
     tree: `<projects_root>/<encoded-cwd>/<uuid>.jsonl` and
     `<projects_root>/<encoded-cwd>/subagents/agent-*.jsonl`.
@@ -102,12 +171,25 @@ def _iter_projects_tree(projects_root: Path, store: str):
     folder is a session file by the brief's own description of the store.
     ``audit.jsonl`` is excluded by name; nothing else here is filtered, so an
     unexpected file surfaces as a parse failure in the caller's report rather
-    than being silently absorbed.
+    than being silently absorbed. Filesystem access failures while walking go
+    to ``errors`` via :func:`_safe_subdirs`, not into a silent empty result.
     """
-    if not projects_root.is_dir():
+    try:
+        exists = projects_root.is_dir()
+    except OSError as exc:
+        if errors is not None:
+            errors.append(f"cannot stat {projects_root}: {exc}")
         return
-    for cwd_dir in sorted(p for p in projects_root.iterdir() if p.is_dir()):
-        for jsonl_path in sorted(cwd_dir.rglob("*.jsonl")):
+    if not exists:
+        return
+    for cwd_dir in _safe_subdirs(projects_root, errors):
+        try:
+            jsonl_paths = sorted(cwd_dir.rglob("*.jsonl"))
+        except OSError as exc:
+            if errors is not None:
+                errors.append(f"cannot scan {cwd_dir}: {exc}")
+            continue
+        for jsonl_path in jsonl_paths:
             if jsonl_path.name in EXCLUDED_FILENAMES:
                 continue
             is_side = "subagents" in jsonl_path.relative_to(cwd_dir).parts
@@ -120,12 +202,12 @@ def _iter_projects_tree(projects_root: Path, store: str):
             )
 
 
-def discover_cli_store(root: Path):
+def discover_cli_store(root: Path, errors: list | None = None):
     """The plain CLI store: `<root>/<encoded-cwd>/<uuid>.jsonl`."""
-    yield from _iter_projects_tree(root, "cli")
+    yield from _iter_projects_tree(_winlong(root), "cli", errors)
 
 
-def discover_cowork_store(root: Path):
+def discover_cowork_store(root: Path, errors: list | None = None):
     """The Cowork desktop store: `<root>/<workspace-id>/<project-id>/
     local_<session-id>/.claude/projects/<encoded-cwd>/<uuid>.jsonl`
     (docs/investigation/2026-07-27_cowork-transcript-store.md). Everything
@@ -134,17 +216,32 @@ def discover_cowork_store(root: Path):
     `local_` + is-a-directory check -- excluded by shape, not by walking
     around it, so a store layout change only needs a name/shape check
     updated here, not new traversal logic.
+
+    ``_winlong`` is applied here, at the discovery entry point, rather than
+    by each caller -- ``census()`` and ``ingest_local_transcripts.py`` build
+    ``root`` independently, and the first version of this fix only patched
+    the former, so ``ingest`` kept silently finding 0 cowork sessions (Phase
+    4 UAT, 10280L, 2026-07-28) even after the census was fixed. One caller
+    forgetting to apply a caller-side fix is exactly the failure mode a
+    caller-side fix invites; putting it on the function everyone already
+    calls closes that off structurally instead of by convention.
     """
-    if not root.is_dir():
+    root = _winlong(root)
+    try:
+        exists = root.is_dir()
+    except OSError as exc:
+        if errors is not None:
+            errors.append(f"cannot stat {root}: {exc}")
         return
-    for workspace_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        for project_dir in sorted(p for p in workspace_dir.iterdir() if p.is_dir()):
-            for session_dir in sorted(
-                p for p in project_dir.iterdir()
-                if p.is_dir() and p.name.startswith("local_")
+    if not exists:
+        return
+    for workspace_dir in _safe_subdirs(root, errors):
+        for project_dir in _safe_subdirs(workspace_dir, errors):
+            for session_dir in _safe_subdirs(
+                project_dir, errors, predicate=lambda p: p.name.startswith("local_")
             ):
                 nested = session_dir / ".claude" / "projects"
-                yield from _iter_projects_tree(nested, "cowork")
+                yield from _iter_projects_tree(nested, "cowork", errors)
 
 
 # ---------------------------------------------------------------------------
@@ -315,8 +412,13 @@ def census(host: str | None = None) -> dict:
             report["stores"][name] = store_report
             continue
 
+        # The MAX_PATH guard (`_winlong`) is applied inside discover_*
+        # itself, not here -- ingest_local_transcripts.py builds its own
+        # `root` independently of census() and must get the same guard
+        # without having to remember to ask for it.
+        access_errors: list[str] = []
         sessions: list[ParsedSession] = []
-        for tf in discover(root):
+        for tf in discover(root, access_errors):
             sessions.append(parse_session(tf))
 
         top_level = [s for s in sessions if not s.is_sidechain]
@@ -341,6 +443,7 @@ def census(host: str | None = None) -> dict:
             "entrypoints_seen": sorted({ep for s in sessions for ep in s.entrypoints}),
             "sessions_with_parse_failures": len(failures),
             "parse_failures": failures,
+            "access_errors": access_errors,
         })
         report["stores"][name] = store_report
 
@@ -366,6 +469,11 @@ def _print_human(report: dict) -> None:
         print(f"  date range:          {sr['date_range']}")
         print(f"  entrypoints seen:    {sr['entrypoints_seen']}")
         print(f"  encoded cwds:        {len(sr['encoded_cwds'])}")
+        if sr.get("access_errors"):
+            print(f"  ** {len(sr['access_errors'])} filesystem access error(s) while walking -- "
+                  f"sessions_found above is NOT proof the store is empty **")
+            for err in sr["access_errors"]:
+                print(f"     {err}")
         if sr["sessions_with_parse_failures"]:
             print(f"  ** parse failures:   {sr['sessions_with_parse_failures']} session(s) **")
             for f in sr["parse_failures"]:
