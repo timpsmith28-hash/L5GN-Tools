@@ -953,13 +953,15 @@ looking ungoverned, which it plainly is not. Defensibility (INTENT) gains the
 artefact it actually needs: the work estate's evidence of considered practice is
 its knowledge base, not an ADR count it will never have.
 
-Left open, deliberately, as implementation for a brief rather than ruled here:
-the exact convention that marks a knowledge document (a `*_KNOWLEDGE.md` filename
-is the existing de-facto shape in MCF, and the cheapest candidate), and whether
-`ValidationAutomation/docs/DECISIONS.md` is realigned to `## <NNNN> — …` so it
-counts as the decision log it genuinely is, or is left as it stands. The first is
-a convention this entry endorses; the second is a one-file editorial choice with
-no bearing on the rule.
+A knowledge document is any .md whose filename contains _KNOWLEDGE_,
+case-insensitively, anywhere in the name — in practice it is a suffix
+(SolConfig_Knowledge.md, LEGACY_BUNDLE_KNOWLEDGE.md), but the match is not
+anchored, so a differently-shaped name still counts. doc_census reports the
+total .md count, the classified count and the classified percentage — the
+raw counts always beside the ratio, because a percentage over a denominator
+containing generated output is not a governance signal. Measured 2026-07-28:
+work 36/77 classified (6 knowledge docs across 4 of 9 projects), personal
+45/824 — where 646 of those 824 are generated output in two projects.
 
 Not decided here: the `L5GN-Castle` payload anomaly (a capped 1.1 MB `file_census`
 still present on the 2026-07-28 build). Suspected backup and duplicated folders
