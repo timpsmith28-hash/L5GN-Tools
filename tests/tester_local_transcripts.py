@@ -30,7 +30,8 @@ def _build_cli_store(root: Path) -> None:
     _write(cwd_dir / "aaaa1111-1111-1111-1111-111111111111.jsonl", "\n".join([
         '{"type":"mode","mode":"normal","sessionId":"aaaa1111-1111-1111-1111-111111111111"}',
         '{"type":"user","message":{"role":"user","content":"hello there"},'
-        '"uuid":"u1","timestamp":"2026-07-13T16:29:10.841Z","entrypoint":"cli"}',
+        '"uuid":"u1","timestamp":"2026-07-13T16:29:10.841Z","entrypoint":"cli",'
+        '"cwd":"C:\\\\Users\\\\x\\\\repo"}',
         '{"type":"assistant","message":{"role":"assistant","content":'
         '[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"hi back"}]},'
         '"uuid":"a1","timestamp":"2026-07-13T16:29:12.000Z","entrypoint":"cli"}',
@@ -100,6 +101,10 @@ def run() -> list[str]:
         if main_sess is not None:
             if [m[1:3] for m in main_sess.messages] != [("user", "hello there"), ("assistant", "hi back")]:
                 v.append(f"cli main session messages wrong: {main_sess.messages}")
+            if main_sess.cwd != "C:\\Users\\x\\repo":
+                v.append(f"cli session cwd not captured: {main_sess.cwd!r}")
+            if main_sess.messages[0][4] != "u1":
+                v.append(f"cli session message uuid not captured: {main_sess.messages[0]}")
             if main_sess.title != "My Session":
                 v.append(f"cli main session title wrong: {main_sess.title!r}")
             if main_sess.bookkeeping_records != 3:  # mode, attachment, last-prompt
@@ -112,8 +117,12 @@ def run() -> list[str]:
                 v.append("cli session leaked a `thinking` block into messages")
 
         sub_sess = cli_sessions.get("agent-bbbb")
-        if sub_sess is not None and not sub_sess.is_sidechain:
-            v.append("subagent transcript not flagged is_sidechain")
+        if sub_sess is not None:
+            if not sub_sess.is_sidechain:
+                v.append("subagent transcript not flagged is_sidechain")
+            if sub_sess.title != "subagent task":
+                v.append(f"subagent transcript title not synthesised from first "
+                         f"user message: {sub_sess.title!r}")
 
         if set(cowork_sessions) != {"cccc2222-2222-2222-2222-222222222222"}:
             v.append(f"cowork discovery wrong: {sorted(cowork_sessions)}")

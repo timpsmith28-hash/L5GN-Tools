@@ -162,7 +162,17 @@ class ParsedSession:
     created_at: str | None = None
     updated_at: str | None = None
     entrypoints: set = field(default_factory=set)
-    # (seq, role, content, created_at) -- mirrors the `messages` table shape.
+    # The session's real, un-encoded cwd (e.g. "C:\Users\timps\Documents\
+    # GitHub\L5GN-Tools"), read straight from a record's own `cwd` field --
+    # NOT decoded from `encoded_cwd`. The encoding (":"/"\\"/"/" -> "-") is
+    # one-way: a folder name that already contains "-" makes decoding
+    # ambiguous, so anything that needs the real path (Phase 2 project
+    # attribution) must read it from here, never reconstruct it.
+    cwd: str | None = None
+    # (seq, role, content, created_at, record_uuid) -- mirrors the `messages`
+    # table shape; record_uuid is the source-native id (schema: "source-native
+    # uuid where available, else synthetic hash"), None when a record has no
+    # uuid of its own.
     messages: list = field(default_factory=list)
     total_records: int = 0
     bookkeeping_records: int = 0
@@ -233,6 +243,9 @@ def parse_session(tf: TranscriptFile) -> ParsedSession:
         ep = rec.get("entrypoint")
         if ep:
             sess.entrypoints.add(ep)
+        raw_cwd = rec.get("cwd")
+        if raw_cwd and sess.cwd is None:
+            sess.cwd = raw_cwd
 
         if rtype == "custom-title":
             custom_title = rec.get("customTitle") or custom_title
@@ -256,10 +269,17 @@ def parse_session(tf: TranscriptFile) -> ParsedSession:
 
         text = _message_text(message.get("content"))
         if text:
-            sess.messages.append((seq, role, text, ts))
+            sess.messages.append((seq, role, text, ts, rec.get("uuid")))
             seq += 1
 
     sess.title = custom_title or ai_title
+    if sess.title is None and sess.messages:
+        # No `custom-title`/`ai-title` record (Phase 0: subagent transcripts
+        # in particular never carry one) -- synthesise from the first human
+        # turn, per Phase 0's own open question on this.
+        first_user = next((m[2] for m in sess.messages if m[1] == "user"), None)
+        if first_user:
+            sess.title = (first_user[:80] + "…") if len(first_user) > 80 else first_user
     return sess
 
 

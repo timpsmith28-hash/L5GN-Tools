@@ -241,12 +241,14 @@ the field driving `source`/`account` classification in Phase 2.
 
 # Phase 1 ▸ a read-only reader and a census, no DB
 
-**Status: code done, gate GREEN, real numbers not yet run** — see "What Tim
-needs to do" below. This sandbox has no filesystem access to either real
-store (confirmed again in Phase 0: both `~\.claude` and the Cowork
-`LocalCache` tree refuse mounting as protected host locations), so the
-33-Cowork/26-CLI census the brief's acceptance asks for has to be run on the
-gaming rig itself, by Tim, not by this session.
+**Status: acceptance met.** Code done, gate GREEN (`python verify.py`, run
+both from this sandbox and by Tim on the gaming rig — see commit `cce49a2`),
+and the real census now run on the gaming rig: 18 CLI + 3 subagent sessions,
+48 Cowork + 2 subagent sessions, zero parse failures. Real numbers are below,
+under "Real census". One finding from the real run changes a Phase 2 design
+assumption — see the `entrypoint` note below; not a blocker for calling
+Phase 1 closed, but a ruling Phase 2 needs before it writes classification
+logic.
 
 ## What was built
 
@@ -306,28 +308,51 @@ gaming rig itself, by Tim, not by this session.
   `python verify.py` properly on the gaming rig too, though nothing here is
   Windows-specific enough to expect a different result.)
 
-## What Tim needs to do
-
-This session cannot reach either real store, so the acceptance criterion
-itself — "run on the gaming rig, output a census of the real 33 Cowork
-sessions and 26 CLI ones" — has to be run by hand:
+## Real census — run by Tim on the gaming rig, `python verify.py` GREEN first
 
 ```
-cd C:\Users\timps\Documents\GitHub\L5GN-Tools\chronicler\pipeline
-..\..\.venv\Scripts\python.exe local_transcripts.py
+[cli] root: C:/Users/timps/.claude/projects
+  sessions:            18  (+3 subagent)
+  messages:            57
+  bookkeeping records: 115
+  total bytes:         1,033,980
+  date range:          2026-07-13T16:29:10.841Z .. 2026-07-26T20:38:37.091Z
+  entrypoints seen:    claude-desktop, cli, sdk-cli
+  encoded cwds:        2
+  parse failures:      none
+
+[cowork] root: .../LocalCache/Roaming/Claude/local-agent-mode-sessions
+  sessions:            48  (+2 subagent)
+  messages:            2,524
+  bookkeeping records: 4,577
+  total bytes:         76,800,069
+  date range:          2026-07-08T16:42:40.930Z .. 2026-07-28T00:16:10.298Z
+  entrypoints seen:    local-agent
+  encoded cwds:        45
+  parse failures:      none
 ```
 
-(No `chronicler` extras needed — the module imports only `l5gntools.config`
-and the stdlib, so the base editable install is enough. `--json` for a
-machine-readable version if useful.)
+**Zero parse failures across 66 real sessions and ~2,700 real records** —
+the format held up outside the synthetic fixture, no STOP, no unrecognised
+record type. Counts differ from the investigation note's 33 Cowork / 26 CLI
+(now 48/18, spanning a wider date range including a week after that census
+was taken) — expected, these stores grow, not a discrepancy to chase.
 
-**Please paste the output back** (or drop it as a file, same as the Phase 0
-samples) so the acceptance check — session counts matching the known 33/26,
-zero unexpected parse failures, byte totals in a sane range — can be closed
-out against real numbers rather than the synthetic fixture. If the counts
-come back different from 33/26, that's useful signal (store contents change
-over time, this isn't a demand for an exact match) but worth a look together
-rather than assuming the numbers are stale.
+**One real finding that changes Phase 2's design, not just a number:**
+every one of the 48 Cowork sessions reports `entrypoint: "local-agent"` —
+not `"claude-desktop"`, the value Phase 0's one hand-picked sample showed.
+`"claude-desktop"` does appear, but only inside the **CLI store** (alongside
+`"cli"` and `"sdk-cli"`), consistent with Phase 0's other finding that a
+session run through Cowork can land a byte-identical copy in the plain
+`~/.claude/projects` tree too. So the earlier recommendation — "use
+`entrypoint`, not source directory, to drive Phase 2's `source`/`account`
+classification" — still holds, but the **value** to match on for a Cowork
+thread is `"local-agent"`, not `"claude-desktop"` as Phase 0 assumed from
+one sample. Worth Tim's explicit ruling before Phase 2 writes any
+classification logic: is `entrypoint == "local-agent"` the right test for
+"this thread came from the Cowork desktop app", full stop, or could a
+CLI-store session also legitimately carry `"local-agent"` in some
+configuration this sample set didn't hit?
 
 ## Open items carried into Phase 2
 
@@ -338,10 +363,180 @@ rather than assuming the numbers are stale.
   scanners are. Not blocking, but worth a decision before Phase 2 starts
   writing to the DB: either extend one of those auditors to cover chronicler
   pipeline modules too, or accept the weaker guarantee.
-- **Byte-fraction and volume numbers in this report are from one session.**
-  The real census Tim runs above will give the true 33+26-session numbers;
-  the brief's Phase 2 volume ruling ("a retention or truncation rule is a
-  decision, not an implementation detail") should use those, not the Phase 0
-  single-sample figures.
-- Per the brief: **Phase 2 does not start until Tim has seen this Phase 1
-  report and the real census output.**
+- **`entrypoint` value for Cowork threads is `"local-agent"`, not
+  `"claude-desktop"`** — see "Real census" above. Needs Tim's ruling before
+  Phase 2 writes `source`/`account` classification.
+- **Volume, for real now:** 76.8 MB across 48 Cowork sessions / 1.03 MB
+  across 18 CLI sessions, ~2,580 messages total against ~4,690 bookkeeping
+  records — the brief's Phase 2 volume ruling ("a retention or truncation
+  rule is a decision, not an implementation detail") can use these instead
+  of the Phase 0 single-sample estimate.
+- Per the brief: **Phase 2 does not start until Tim has ruled on the
+  `entrypoint` question above.** *(Ruled — see below: `entrypoint == "local-agent"`
+  for Cowork, but Phase 2 ended up not needing this at all — see "Attribution,
+  reworked" below.)*
+
+---
+
+# Phase 2 ▸ ingest into the dev vault, behind `--apply`
+
+**Status: code done, gate GREEN (`python verify.py`), not yet run against the
+real dev vault.** Two rulings Tim gave directly (content sensitivity:
+conversation records only; attribution: CLI exact / Cowork evidence) are
+built in. Everything below is dry-run-by-default and untested against real
+data — the acceptance walk (dev vault gains real threads, re-run changes
+nothing, an appended transcript adds only new messages) still needs Tim to
+run it, same shape as Phase 1's real census.
+
+## What was built
+
+- **`chronicler/pipeline/ingest_local_transcripts.py`** — the writer.
+  `python3 pipeline/ingest_local_transcripts.py [--apply] [--host NAME]`,
+  dry-run by default (writes are rolled back, not committed, unless
+  `--apply`). Writes through the standard `db.get_connection()` /
+  `CHRONICLER_HOME` mechanism — **point `CHRONICLER_HOME` at the dev vault
+  before running this**, nothing in the code enforces that, same as every
+  other normalizer.
+
+- **`source = "claude-local"`** — the new value (ruling 3), one parser for
+  both stores, permanently distinct from export-derived `source='claude'`
+  even on the personal estate where both will describe the same thread.
+  **`account = f"claude-local-{estate}"`**, estate read from
+  `l5gntools.config.machine()["estate"]` only — the module refuses to run
+  (`SystemExit`) if the machine has no estate configured or it's still the
+  template default `"unknown"`, rather than writing threads into a wall the
+  estate can't see through.
+
+- **`thread_id`** = the session's own uuid, stable across runs.
+  **`message_id`** = the record's own `uuid` when present (every real
+  user/assistant record has one), else `sha256(f"{thread_id}:{seq}")[:32]` —
+  a synthetic id that's stable across re-runs because it's derived from
+  position, not randomness, so a re-parsed file never gets a second id for
+  the same conceptual message.
+
+- **Idempotency**: every run re-parses the full file (not incrementally) and
+  upserts every thread/message via `ON CONFLICT ... DO UPDATE`, same shape
+  as `normalize_claude.py`. Correct by construction for a store that only
+  ever grows: unchanged files write the same rows back; a file with new
+  lines appended adds exactly the new messages, because identity is the
+  record's own uuid, not its line position.
+
+- **Attribution, reworked from what the brief/Phase-0-report assumed:**
+  the ruling said "CLI's encoded cwd names the repo," but decoding
+  `encoded_cwd` back to a real path is **ambiguous** — the encoding
+  (`:`/`\`/`/` → `-`) is one-way, and a folder like `L5GN-Tools` already
+  contains a `-`, so you can't tell where the path separator was. Rather
+  than decode, this Phase 2 pass added a field to `local_transcripts.py`'s
+  parser: `ParsedSession.cwd`, the session's **real, un-encoded** `cwd`,
+  read straight off a `user`/`assistant`/`system` record's own `cwd` field
+  (present in every real sample — Phase 0 already saw it, just hadn't been
+  captured). Attribution matches that real path's segments against the
+  project registry using the exact same compact/alias-matching rule
+  `extract_path_mentions.py` already uses for path-mention evidence, so
+  there's one matching convention in the codebase, not two. CLI sessions
+  that match get `project_confidence='exact'` directly; **Cowork sessions
+  are never attempted** regardless of what their `cwd` says (ruling 2) —
+  they land `project_confidence='none'`, `review_status='pending'`, and
+  fall through to the ordinary evidence pipeline later.
+  An `'exact'` link, once written, is protected from being overwritten by a
+  weaker result on a later run (e.g. if the registry temporarily loses an
+  alias) — tested directly, not just asserted.
+
+- **`entrypoint == "local-agent"` turned out not to be needed for
+  attribution or classification** — `source`/`account` come from which
+  store's directory `local_transcripts.py` discovered the file under
+  (`ParsedSession.store`, `"cli"` or `"cowork"`), same as Phase 1's census
+  already reported it, not from `entrypoint`. The earlier open question
+  (which literal `entrypoint` string means "Cowork") turned out to be a
+  Phase 1 census-labelling question, not a Phase 2 ingest-routing one —
+  worth noting in case a future phase (e.g. Phase 3's coherence check) still
+  wants `entrypoint` as a cross-check, since it remains stored implicitly
+  via `raw_ref` -> re-parse if ever needed, just not persisted as its own
+  column.
+
+- **`tests/tester_ingest_local_transcripts.py`** — hermetic. Builds a
+  synthetic registry, CLI store, and Cowork store, monkeypatches
+  `get_connection`/`init_db`/`resolve_registry_path`/`machine` to point at a
+  throwaway DB and registry, and proves (not just asserts): dry-run writes
+  zero rows; a CLI session with a real `cwd` matching the registry gets
+  `project_confidence='exact'` with the right `project_link`; a Cowork
+  session with an equally-matchable `cwd` gets no link at all; message ids
+  are source-native when available and a stable synthetic hash when not; a
+  bookkeeping-only session (zero conversation messages) is skipped, never
+  written as an empty thread; running twice with no new data changes
+  nothing; appending one new line to a source file and re-running adds
+  exactly one new message and zero new threads; an `'exact'` link survives a
+  re-run even when the registry match is simulated to fail; a missing
+  estate config raises `SystemExit` rather than writing into an
+  unclassified account; and the source file's mtime is unchanged throughout
+  (read-only, checked not claimed). Registered in `verify.py`.
+
+- **Full gate**: `python verify.py` — green, including both new testers.
+
+## What Tim needs to do
+
+This sandbox has no real dev vault and no real project registry to ingest
+into safely, so — same shape as Phase 1 — the acceptance walk needs running
+by hand, with `CHRONICLER_HOME` pointed at the dev vault
+(`config/local.json` already has it: `C:/Users/timps/Documents/chronicler_dev`):
+
+```
+cd C:\Users\timps\Documents\GitHub\L5GN-Tools\chronicler\pipeline
+..\..\.venv\Scripts\python.exe ingest_local_transcripts.py
+# review the dry-run output, then:
+..\..\.venv\Scripts\python.exe ingest_local_transcripts.py --apply
+# re-run to confirm idempotency for real:
+..\..\.venv\Scripts\python.exe ingest_local_transcripts.py --apply
+```
+
+Worth checking in the output: how many CLI sessions land `exact`-linked
+(there are only 2 encoded cwds in the real CLI store, both under
+`L5GN-Tools`, so this should be a clean, small, checkable number) and that
+the second `--apply` run reports the same session/message counts as the
+first. **Please paste the output back** so Phase 2's acceptance — "dev vault
+gains the threads; a second run changes nothing; a run after appending to a
+transcript adds only the new messages" — closes out against the real vault,
+not just the synthetic fixture.
+
+## Real ingest — run by Tim against the dev vault (`chronicler_dev/chronicler.db`)
+
+First attempt ran against the wrong DB — `CHRONICLER_HOME` is a shell
+environment variable, not read from `config/local.json` automatically, and
+wasn't set, so `db.py` fell back to its repo-local default
+(`chronicler/chronicler.db`, gitignored, harmless but not the dev vault).
+Corrected and re-run with `$env:CHRONICLER_HOME` set:
+
+```
+sessions:          71  (0 exact-linked)
+messages:          2596
+```
+Two consecutive `--apply` runs reported **identical counts** — idempotency
+holds on the real vault, not just the synthetic fixture. `0 exact-linked` is
+expected, not a defect: `L5GN-Tools` is the toolkit itself, scanning its
+sibling projects — it isn't a tracked entry in its own
+`project_registry.json`, so a CLI session run inside this repo has nothing
+to match. (Message count crept from 2,594 -> 2,596 across the wrong-DB and
+corrected runs — the Cowork store's date range runs right up to the moment
+of testing, consistent with a live session gaining lines between commands,
+not a counting defect.)
+
+**Phase 2 acceptance met**: dev vault gained 71 real threads / 2,596
+messages; a second `--apply` changed nothing; the earlier hermetic tester
+already proved the "file grows -> only new messages added" case directly.
+Full gate green throughout (`python verify.py`, including the pre-commit
+hook's own gate run).
+
+## Open items carried into Phase 3
+
+- **Dedupe against the export** (ruling 6) is explicitly not attempted here.
+  Once real Cowork/CLI threads and the existing `source='claude'`
+  export-derived threads both sit in the dev vault, Phase 3's coherence
+  check is where overlap gets measured and a dedupe rule falls out of that
+  measurement — not invented ahead of the data.
+- **Empty-thread skip is a judgement call, not a brief requirement**: a
+  session with zero conversation messages (pure bookkeeping) is skipped
+  entirely rather than written with zero messages. Seemed obviously right,
+  flagging in case Tim wants those tracked some other way (e.g. a
+  "discovered but empty" count somewhere) rather than silently dropped.
+- Per the brief: **Phase 3 does not start until Tim has seen this Phase 2
+  report and the real ingest output.**
