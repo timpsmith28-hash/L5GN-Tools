@@ -16,6 +16,7 @@ from . import __version__
 from .common import (DATA_DIR, ESTATE_ROOT, TOOLKIT_ROOT, now_iso,
                      toolkit_git_info, write_json)
 from .registry import SCANNERS
+from .scanners import doc_census
 
 
 #: A single (project, scanner) payload larger than this is called out in the
@@ -226,6 +227,11 @@ def build_estate(projects: list[Path], resume: bool = True,
         # Oversized / capped scanner payloads, surfaced so a runaway is a visible
         # line in the report rather than a silent truncation (Task B.3).
         "anomalies": _payload_audit(projects_out, estate_out),
+        # Task D (doc_provenance_coverage): a project's raw doc_count wildly out
+        # of scale with the rest of the estate -- a payload/scale signal, kept
+        # separate from `anomalies` (bytes-based) because the unit and the
+        # question it answers are both different.
+        "doc_anomalies": doc_census.out_of_band(projects_out),
         "projects": projects_out,
         "estate": estate_out,
     }
@@ -587,9 +593,48 @@ addTab('files','Files',v=>{
     });
   });
 });
+// --- Docs tab: provenance-honest coverage (0026, doc_provenance_coverage) ---
+// Every ratio here is authored/classified over AUTHORED documents only, with
+// the generated count always shown beside it -- never a percentage over a
+// denominator full of machine output (Task B). The grid (Task C) is coverage,
+// not a score: no total column, no rank, no colour implying pass/fail.
+const GRID_TYPES=['knowledge','adr','decisions','readme','claude_md','glossary',
+  'intent','architecture','runbook','uat','plan','brief','report'];
 addTab('docs','Docs',v=>{
-  const rows=SP().map(p=>{const d=p.doc_census||{};return ['<b>'+esc(p.name)+'</b>','<span class="num">'+(d.doc_count||0)+'</span>',d.has_readme?pill('yes','ok'):pill('no','bad'),d.has_claude_md?pill('yes','ok'):pill('no','muted'),'<span class="num">'+(d.adr_files||0)+'</span>'];});
-  v.innerHTML=table(['Project','Docs','README','CLAUDE.md','ADR files'],rows);
+  let h='';
+  const oob=(DATA.doc_anomalies||[]).filter(a=>inScope(a.project));
+  if(oob.length){
+    const rows=oob.map(a=>'<b>'+esc(a.project)+'</b> &mdash; '+a.doc_count+' markdown files '
+      +'(estate median '+a.median+', flagged above '+a.threshold+')').join('<br>');
+    h+='<div class="banner"><b>&#9888; Out-of-band document count ('+oob.length+')</b> &mdash; '
+      +'raw doc_count, not a documentation-quality signal: a project generating far more '
+      +'markdown than the rest of the estate is worth knowing about in its own right.<br>'
+      +rows+'</div>';
+  }
+  const rows=SP().map(p=>{const d=p.doc_census||{};
+    const gen=d.generated_count||0;
+    const genNote=gen?' <span class="muted">('+gen+' generated)</span>':'';
+    return ['<b>'+esc(p.name)+'</b>',
+      '<span class="num">'+(d.authored_count!=null?d.authored_count:(d.doc_count||0))+'</span>'+genNote,
+      '<span class="num">'+(d.classified_count||0)+'</span>',
+      (d.classified_pct||0)+'%',
+      d.has_readme?pill('yes','ok'):pill('no','bad'),
+      d.has_claude_md?pill('yes','ok'):pill('no','muted'),
+      '<span class="num">'+(d.adr_files||0)+'</span>'];});
+  h+=table(['Project','Authored docs','Classified','Classified %','README','CLAUDE.md','ADR files'],rows);
+
+  // Coverage grid (Task C): project x document type, ticks and blanks over
+  // authored documents only. No total, no rank -- see the note above.
+  h+='<h2>Coverage <span class="muted">(authored documents, by type -- absence, not a score)</span></h2>';
+  const gridRows=SP().map(p=>{const tally=(p.doc_census||{}).type_tally||{};
+    return ['<b>'+esc(p.name)+'</b>',...GRID_TYPES.map(t=>tally[t]?pill(String(tally[t]),'ok'):'<span class="muted">&mdash;</span>')];});
+  h+=table(['Project',...GRID_TYPES.map(esc)],gridRows);
+  h+='<div class="muted">Rules: knowledge = stem contains "_knowledge" (case-insensitive, '
+    +'unanchored); adr = an <code>adr</code> path segment; decisions = stem contains "DECISIONS"; '
+    +'readme/claude_md/glossary = exact filename; intent/architecture/runbook (+playbook)/uat '
+    +'(+checklist)/plan (+status)/brief/report = stem contains the marker word, unanchored. '
+    +'"generated" = a directory segment starts with . or _, or is output/logs/AutoFiles.</div>';
+  v.innerHTML=h;
 });
 addTab('hygiene','Hygiene',v=>{
   const rows=SP().map(p=>{const b=p.bloat_audit||{},e=p.env_scanner||{};

@@ -34,6 +34,7 @@ TESTERS: list[str] = [
     "tests.tester_blast_radius",
     "tests.tester_blast_uncommitted",
     "tests.tester_file_census",
+    "tests.tester_doc_census",
     "tests.tester_census",
     "tests.tester_contract",
     "tests.tester_config",
