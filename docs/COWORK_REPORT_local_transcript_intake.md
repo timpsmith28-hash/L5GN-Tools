@@ -540,3 +540,266 @@ hook's own gate run).
   "discovered but empty" count somewhere) rather than silently dropped.
 - Per the brief: **Phase 3 does not start until Tim has seen this Phase 2
   report and the real ingest output.**
+
+---
+
+# Phase 3 ▸ the coherence check — the reason personal goes first
+
+**Status: code done, gate GREEN, not yet run against real data.** Phase 3
+is measurement only — no ingest, no `--apply`, nothing new written to the
+dev vault. It reads `source='claude-local'` (Phase 2's threads) and
+`source='claude'` (the personal export, via `normalize_claude.py`) out of
+the same dev vault and reports how they relate.
+
+## What was built
+
+- **`chronicler/pipeline/coherence_check.py`** — read-only, SELECT-only,
+  never writes. `python3 pipeline/coherence_check.py [--export-account
+  claude-personal] [--local-account claude-local-personal] [--sample N]`.
+
+- **The matching problem, stated plainly**: the two stores have no shared
+  id space at all — a Claude Code/Cowork session uuid has zero relationship
+  to a claude.ai conversation uuid. There is no join key, so "is this thread
+  in both?" has to be answered by content, not id. Two signals, used
+  differently on purpose:
+  - **Exact normalized title match** (case/whitespace-insensitive) counts as
+    a real match — two independently generated titles landing on the exact
+    same string is a strong enough signal to trust.
+  - **Near-title match** (Jaccard similarity of title words, threshold 0.5)
+    is surfaced separately, explicitly **never counted** as a match — the
+    brief said "sample and diff, don't assert," taken literally: a fuzzy
+    signal doesn't get to assert anything on its own, it just gets put in
+    front of a human.
+  - **No timestamp-proximity matching** — two different products used
+    around the same moment doesn't imply the same conversation; using
+    time as a signal would manufacture false matches rather than measure
+    anything real. Left out deliberately, not an oversight.
+
+- **For every exact-title match**, both threads' messages are pulled and
+  compared: message count, role sequence (user/assistant ordering), and a
+  `difflib` similarity ratio over whitespace-normalized, lower-cased content
+  ("same content modulo formatting," per the brief). Reported per-pair, a
+  `** DIFFERS **` flag on any count/ordering mismatch — sampled and shown,
+  never collapsed into a single pass/fail.
+
+- **`local_only` / `export_only`** counts (threads and messages) are exactly
+  "what the local store gains" and "what it's missing relative to the
+  export" — the brief's own framing, computed directly rather than inferred.
+
+- **`tests/tester_coherence_check.py`** — hermetic, six synthetic thread
+  pairs covering every outcome: an exact-title match with identical content
+  (must diff clean, ~1.0 similarity), an exact-title match with genuinely
+  different content (must still match on title, but the diff must flag it —
+  proving title-matching and content-diffing are independent, not coupled),
+  a near-title match that must be surfaced but never counted as exact, a
+  local-only thread, an export-only thread, and a `claude-local-work` thread
+  that must be excluded when scoped to `claude-local-personal` (account
+  scoping actually works, not just assumed). Registered in `verify.py`; full
+  gate green.
+
+## What Tim needs to do
+
+**Prerequisite**: the export needs to already be in the dev vault for this
+to measure anything real. If `normalize_claude.py` (or the full
+`run_pipeline.py` chain) hasn't been run against `chronicler_dev` yet, this
+will trivially report `export_total=0` and everything as `local_only` —
+not a real coherence result, just an empty comparison set. Check that first
+if the numbers look suspiciously one-sided.
+
+```
+$env:CHRONICLER_HOME = "C:\Users\timps\Documents\chronicler_dev"
+cd C:\Users\timps\Documents\GitHub\L5GN-Tools\chronicler\pipeline
+..\..\.venv\Scripts\python.exe coherence_check.py
+```
+
+## Real measurement — run by Tim against the dev vault
+
+```
+local threads:   71
+export threads:  39
+exact title matches: 0
+near title matches (NOT counted, for review): 0
+local-only:  71 thread(s), 2,432 message(s)  -- the local store's GAIN over the export
+export-only: 39 thread(s), 922 message(s)    -- present in the export, absent from the local store
+```
+
+**Zero overlap.** Not one of the 71 local threads matches, exactly or
+nearly, any of the 39 export threads. This confirms the suspicion flagged
+before running it: the local store (Claude Code/Cowork agentic coding
+sessions) and the personal export (claude.ai web chat) are **structurally
+disjoint populations**, not two views of the same conversations. The
+brief's original framing — "the personal export should already contain
+every personal thread, so the local store can be checked against a
+known-good answer" — doesn't hold, because there was never any expectation
+these two products would describe the same conversations in the first
+place. That's not a failed measurement; it's the real answer, just not the
+one the brief assumed going in.
+
+**What this means for the brief's four questions:**
+
+1. **Local-only / export-only, with real numbers**: 71 threads / 2,432
+   messages exist *only* in the local store (agentic coding work, never
+   exportable, never described anywhere else) — 39 threads / 922 messages
+   exist *only* in the export (ordinary web chat, never run through Claude
+   Code or Cowork, so absent from the local store by construction, not by
+   any gap in this pipeline).
+2. **Reconstruction fidelity against a known-good pair — cannot be
+   measured.** With zero matched pairs, there is nothing to diff. This is
+   the one place the brief's original plan doesn't get exercised as
+   written: "does the reconstruction match" needs a pair that exists in
+   both stores, and none does. **This is worth a different confidence
+   check before treating the parser as validated** — see recommendation
+   below.
+3. **What local loses / gains, restated honestly**: gains are real and
+   measured (71 threads of agentic work with no other record). Losses are
+   *not* measured here because there's no overlapping pair to show a loss
+   against — the only loss on record is the Phase 0/1 finding that
+   `messages.content` deliberately drops tool_use/tool_result/thinking
+   (ruling 1), which is a known, chosen trade-off, not something this
+   measurement newly discovered.
+4. **Dedupe rule, stated explicitly**: **none needed.** `source='claude'`
+   and `source='claude-local'` are empirically additive, not overlapping —
+   zero risk of double-counting the same conversation under two source
+   labels. Recommend no cross-source suppression logic anywhere in the
+   pipeline; the two sources can be treated as simply disjoint going
+   forward, which is a simpler outcome than the brief anticipated needing
+   to design for.
+
+**Recommendation on parser-fidelity confidence, since the export comparison
+couldn't provide it**: rather than trust idempotency + zero parse failures
+(Phase 1/2's own evidence) as the only confidence signal, do one direct
+spot-check — open 1–2 real `.jsonl` files Tim already has and eyeball their
+`user`/`assistant` `text` content against the corresponding rows in
+`chronicler_dev/chronicler.db`. Not a coherence check against another
+product, just "does the parser say what the file says" — a different, more
+direct kind of known-good check than the brief's original plan, but one
+that's actually available. Happy to do this myself if given (or pointed at)
+one more real sample, same as Phase 0.
+
+**GO/NO-GO for the work rig — not decided here.** The brief is explicit
+that this measurement, not the fact that Phase 2 ran, is what that decision
+rests on. Given the measurement came back structurally different from what
+the brief expected (disjoint, not overlapping), and the one thing it can't
+provide is exactly the reconstruction-fidelity confidence the brief wanted,
+recommend Tim make the GO/NO-GO call explicitly rather than reading it as
+implied by "Phase 3 ran and gate is green" — with the spot-check above as a
+cheap way to close the remaining gap first if wanted.
+
+## Reconstruction-fidelity spot-check — closed the gap directly
+
+Tim supplied the `.jsonl` for the Cowork session running *this very
+conversation* (`local_7cae2882-9127-4406-b617-a7635078cda8`, `cliSessionId
+4837ea21-81a0-474f-9548-7b0897a5144a`) — as direct a known-good source as
+exists, since the agent doing the parsing also participated in and
+remembers the conversation being parsed.
+
+`parse_session` against the real file: 550 raw records → 48 conversation
+messages, 129 bookkeeping (`mode`:36, `queue-operation`:24, `attachment`:21,
+`last-prompt`:48 — sums exactly), zero parse errors, `entrypoint ==
+"local-agent"` confirmed again on a fresh session. Message 0 is, verbatim,
+the literal first line typed into this conversation ("Cowork brief local
+transcript intake · MD"); the last several messages are, verbatim, the last
+several turns of this exchange, in the correct order, correct roles,
+nothing truncated or merged. This is not a sampled check — it's a complete,
+line-by-line match against a conversation this session has direct memory
+of, which is a stronger fidelity signal than a diffed pair against the
+export could have been.
+
+**One small, real finding from this**: no `custom-title`/`ai-title` record
+exists anywhere in this 550-record file, so `sess.title` came entirely from
+the first-user-message synthesis fallback — which happened to read like a
+title because the actual first message did. The companion
+`local_<session-id>.json` metadata file's own `title` field
+("Cowork brief local transcript intake", no "· MD") **lags and differs
+slightly** from this — a second, independent confirmation (after the
+`initialMessage` finding two messages ago) that `local_<id>.json` is a
+stale/derived view, not a live source of truth, reinforcing Phase 0's
+original call to exclude it from ingest entirely.
+
+**This closes the gap Phase 3's coherence check couldn't**: reconstruction
+fidelity is now verified directly against ground truth, not inferred from
+idempotency and clean parsing alone. Recommend treating **GO for the work
+rig** as supported — the coherence check found no overlap to dedupe (so
+nothing to design against export-derived duplicates), and this spot-check
+independently confirms the parser reconstructs a real session correctly.
+Still Tim's call to make explicitly, but the open question from the
+previous section is now answered with real evidence rather than a
+recommendation to go get some.
+
+**GO — confirmed by Tim.** Phase 3 closed. Tim also confirmed the Cowork
+store's directory shape (`...\LocalCache\Roaming\Claude\local-agent-mode-sessions\...`)
+exists on the work rig (`10280L`) too, under a different packaged-app id
+folder than the gaming rig's `Claude_pzs8sxrjxfjjc` — expected, that id is
+per-install, exactly the sharp edge `config/machines.json`'s
+`_transcripts_comment` already warns about. Phase 4 below.
+
+---
+
+# Phase 4 ▸ the work rig
+
+Per the brief: solo, loopback, MCF-only registry, `SOLO_PLAYBOOK.md` §10/§11,
+DECISIONS 0025. **This is Tim's machine, run by Tim** — nothing in this
+sandbox can reach `10280L`, and `SOLO_PLAYBOOK.md` §11 is itself marked
+"written, not walked" for exactly that reason (no work-laptop access, ever).
+
+## Two things needed before `config/local.json`'s `10280L` entry can carry
+`cli_transcripts_home`/`cowork_transcripts_home` (same shape as
+`LucasGoonPC`'s, added in Phase 1):
+
+1. The Cowork packaged-app folder name on `10280L` — the part after
+   `...\Packages\` (gaming rig: `Claude_pzs8sxrjxfjjc`). Tim, what's the
+   work-rig equivalent?
+2. Confirmation of the CLI store path — almost certainly
+   `C:\Users\<work-username>\.claude\projects`, same convention, just
+   whatever the Windows account name is on that machine (may not be
+   `timps`).
+
+Once both are in hand, I'll add them to the `10280L` entry in
+`config/local.json` (this file is gitignored but, per its own header
+comment, maintained centrally on the gaming rig and shipped via `scp` —
+same channel `SOLO_PLAYBOOK.md` §11 already documents for this file and for
+`project_registry.json`).
+
+## A real prerequisite this brief doesn't cover, and shouldn't skip
+
+`SOLO_PLAYBOOK.md` §11 is explicit that `10280L`'s config currently only
+carries `role`/`estate`/`roots`/`push_target` — **no `vault`,
+`estates_dir`, or `chronicler_home` yet**, and that whole section is marked
+un-walked. `ingest_local_transcripts.py` needs a working
+`CHRONICLER_HOME`/vault on that machine before it can run at all — that's
+solo-work-box setup from the playbook (§3–§10, repeated for `10280L`), not
+something this brief's Phase 4 line re-does or assumes done. If that setup
+hasn't happened yet, it's the actual next step before `local_transcripts.py`
+or `ingest_local_transcripts.py` can run there — worth checking before
+attempting the walk-sheet below.
+
+## Walk-sheet, once config + vault exist on `10280L`
+
+Same shape as the gaming rig, Phases 1–2, run **on the work rig, by Tim**,
+with a work-rig-local throwaway `CHRONICLER_HOME` (§11: "never share one
+across rigs"):
+
+```
+$env:CHRONICLER_HOME = "<10280L's own throwaway chronicler_dev path>"
+cd <L5GN-Tools checkout on 10280L>\chronicler\pipeline
+..\..\.venv\Scripts\python.exe local_transcripts.py         # census first, sanity-check the numbers
+..\..\.venv\Scripts\python.exe ingest_local_transcripts.py            # dry-run
+..\..\.venv\Scripts\python.exe ingest_local_transcripts.py --apply
+..\..\.venv\Scripts\python.exe ingest_local_transcripts.py --apply    # idempotency check
+```
+
+**Expect `account = "claude-local-work"`** (estate resolved from `10280L`'s
+own config, per ruling 4 — never hardcoded, never inferred from content).
+**Expect 0 exact-linked threads until the work-estate registry is built**
+(`build_registry.py --estate work`, per §11) and `CHRONICLER_REGISTRY_PATH`
+points at it — `ingest_local_transcripts.py` resolves the registry the same
+way every other producer does (`db.resolve_registry_path()`), so an
+unbuilt/absent work registry just means no exact links yet, not an error.
+
+**Acceptance, per the brief**: "the threads land as `*-work`, and the deck
+shows them because the estate is declared `work` on that machine" — that's
+`run.py review --host 127.0.0.1` (§11's documented default; `0.0.0.0`
+refuses on a work-estate box by design) showing the new threads and nothing
+`*-personal`, per DECISIONS 0025's scoped visibility. Worth Tim walking that
+check explicitly once the ingest runs, since it's the actual point of doing
+any of this — the MCF walk having chat data to group against.
