@@ -1,4 +1,5 @@
 <!-- uat: commit=dec7dc5 dirty=true host=gaming-rig walked=2026-07-28 -->
+<!-- gate-frozen: commit=dec7dc5 -->
 
 # UAT results — document provenance and coverage
 

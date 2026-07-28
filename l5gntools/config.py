@@ -81,12 +81,23 @@ def author_aliases() -> dict:
 
 
 def _root_entries(host: str | None = None) -> list[dict]:
-    """Normalise the ``roots`` config into ``[{"path": Path, "scope": str|None}]``.
+    """Normalise the ``roots`` config into
+    ``[{"path": Path, "scope": str|None, "is_project": bool}]``.
 
-    Two accepted shapes, so old config keeps working:
+    Three accepted shapes, so old config keeps working:
 
         "roots": ["D:/Work/Github/MCF"]                       # bare, scope unknown
         "roots": [{"path": "D:/Work/Github/MCF", "scope": "mcf"}]
+        "roots": [{"path": ".../L5GN-Tools", "scope": "l5gn", "is_project": true}]
+
+    ``is_project`` says *this path is itself a project*, not a container whose
+    children are projects. Without it a project that does not live under a
+    container root is unscannable by config alone: naming its parent drags in
+    every unrelated sibling, and naming the project drags in its own
+    subdirectories as if each were a project. It is also the only way the
+    toolkit's own repo can be scanned -- :func:`common.discover_projects` skips
+    ``TOOLKIT_ROOT`` when walking a container, and an ``is_project`` entry is an
+    explicit declaration rather than something stumbled into by a broad root.
 
     The tagged shape is the **config-tag resolution** for scope (DECISIONS 0012 /
     round-3 Task C.3): a project's ``scope`` is whichever configured root it was
@@ -106,9 +117,10 @@ def _root_entries(host: str | None = None) -> list[dict]:
             path = r.get("path")
             if not path:
                 continue
-            out.append({"path": Path(path), "scope": r.get("scope")})
+            out.append({"path": Path(path), "scope": r.get("scope"),
+                        "is_project": bool(r.get("is_project"))})
         else:
-            out.append({"path": Path(r), "scope": None})
+            out.append({"path": Path(r), "scope": None, "is_project": False})
     return out
 
 

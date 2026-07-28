@@ -38,6 +38,7 @@ TESTERS: list[str] = [
     "tests.tester_census",
     "tests.tester_contract",
     "tests.tester_config",
+    "tests.tester_project_root",
     "tests.tester_vault_reader",
     "tests.tester_project_trail",
     "tests.tester_estate_diff",

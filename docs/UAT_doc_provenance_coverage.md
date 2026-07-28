@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=87253c8 -->
+
 # UAT walk-sheet — document provenance and coverage
 
 Pair: `docs/COWORK_BRIEF_doc_provenance_coverage.md` +

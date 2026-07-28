@@ -66,15 +66,26 @@ def discover_projects(include_third_party: bool = False) -> list[Path]:
     When this machine declares ``roots`` in ``config/machines.json``, the
     projects are the child folders of every configured estate root. Otherwise
     fall back to the legacy behaviour: sibling folders of the toolkit itself.
+
+    A root tagged ``is_project`` contributes *itself*, not its children -- for a
+    project that sits outside every container root. That is also the one route by
+    which ``TOOLKIT_ROOT`` enters a scan: :func:`_projects_under` skips it on
+    every container walk, so the toolkit is only ever scanned when a producer has
+    said so explicitly in its own config.
     """
     from . import config  # local import keeps common <- config one-directional
 
-    roots = config.estate_roots()
-    if roots:
+    entries = config.estate_roots_tagged()
+    if entries:
         out: list[Path] = []
         seen: set[Path] = set()
-        for root in roots:
-            for p in _projects_under(root, include_third_party):
+        for entry in entries:
+            root = entry["path"]
+            found = [root] if entry.get("is_project") else _projects_under(
+                root, include_third_party)
+            for p in found:
+                if not p.exists():
+                    continue
                 rp = p.resolve()
                 if rp not in seen:
                     seen.add(rp)
@@ -92,8 +103,15 @@ def resolve_targets(target: str | None, do_all: bool,
             return [p.resolve()]
         from . import config
         # A bare name is resolved against configured roots first, then the
-        # legacy sibling location, then the current working directory.
-        for root in (config.estate_roots() or []):
+        # legacy sibling location, then the current working directory. An
+        # `is_project` root answers to its own folder name, since it has no
+        # children to look in.
+        for entry in config.estate_roots_tagged():
+            root = entry["path"]
+            if entry.get("is_project"):
+                if root.name == target and root.exists():
+                    return [root.resolve()]
+                continue
             cand = root / target
             if cand.exists():
                 return [cand.resolve()]
