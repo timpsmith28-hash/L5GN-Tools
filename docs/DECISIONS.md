@@ -1007,3 +1007,31 @@ is a hard requirement and not a nicety: a render-time reader with a path
 parameter is a file-disclosure bug waiting for the day someone binds it wrong.
 
 ---
+
+## 0028 — A local surface may stage a working-tree change; it may never commit
+
+**Date:** 2026-07-28 · **Status:** accepted · **Builds on:** 0007, 0024
+(write surfaces are narrow and column-scoped), 0025 (loopback), 0027
+(render-time reads) · **Source:** design thread
+
+**Context.** Every write surface so far touches the vault and nothing else. The
+docs board's one genuine action — archiving a completed pair — is a change to
+the **source tree**: `git mv` and a prepended stamp. The `docs-archivist` skill
+already performs exactly this, by hand, under a hard rule: *never move a file
+until Tim has ratified that specific move*, and leave everything **staged,
+uncommitted**.
+
+**Decision.** A local-only surface (loopback, own estate, per 0025/0027) may
+**stage** a working-tree change, subject to all of:
+1. the change is confined to `docs/` and is a `git mv` into `docs/archive/`
+   plus a stamp prepended above the title — **never a body edit**;
+2. it is performed only on a per-pair ratification given in that session, never
+   in bulk and never inferred from a green gate;
+3. **it never runs `git commit`.** The human reviews `git diff --staged` and
+   commits in a terminal. The gate runs on that commit, as it does today.
+
+**Consequences.** The mechanical layer is automated; the judgement layer is not.
+The pre-commit gate remains the last word, because a commit is still a human
+act. A surface that can stage but not commit cannot produce an unreviewed
+change — the worst case is a working tree the operator must clean up, not a
+laundered history.
