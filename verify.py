@@ -42,6 +42,8 @@ TESTERS: list[str] = [
     "tests.tester_vault_reader",
     "tests.tester_project_trail",
     "tests.tester_estate_diff",
+    "tests.tester_estate_data",
+    "tests.tester_review_preflight",
     "tests.tester_drift",
     "tests.tester_authors",
     "tests.tester_deposit",

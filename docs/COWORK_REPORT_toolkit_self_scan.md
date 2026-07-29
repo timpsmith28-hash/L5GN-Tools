@@ -2,8 +2,10 @@
 
 **Pair:** `docs/COWORK_BRIEF_toolkit_self_scan.md`. Session 2026-07-28.
 **Base commit:** `ac7710d`, working tree dirty.
-**Gate:** `python verify.py` → **GREEN, 6 auditors + 51 testers** (was 50; +1:
-`tester_project_root`, which locks the new root shape).
+**Gate:** `python verify.py` → **GREEN, 6 auditors + 53 testers** (was 50; +1:
+`tester_project_root`, which locks the new root shape; the count then moved to
+53 when the local-deck slice registered `tester_estate_data` and
+`tester_review_preflight` before this pair was committed).
 **Nothing committed. No `--apply`. No deposit. No link changed.**
 
 **Where this ran, and why it matters.** The Cowork session's shell is an isolated

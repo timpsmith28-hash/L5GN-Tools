@@ -4,8 +4,8 @@
 **Report:** `docs/COWORK_REPORT_toolkit_self_scan.md`
 **Built:** 2026-07-28, base commit `ac7710d`, working tree dirty.
 **Nothing committed** — walk against the staged tree.
-**Gate at build time:** `python verify.py` → **GREEN**, 6 auditors + 51 testers
-(+1 `tester_project_root`). Two `gate-frozen` markers were added to finished
+**Gate at build time:** `python verify.py` → **GREEN**, 6 auditors + 53 testers
+(+1 `tester_project_root`; +2 from the local-deck slice registered alongside). Two `gate-frozen` markers were added to finished
 docs so `auditor_doc_claims` stops red — see the report's closing section before
 treating that as unrelated tidying.
 

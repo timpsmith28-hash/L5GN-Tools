@@ -71,20 +71,144 @@
   .btn-other { border-color: #d98a2b88; }
   .ok { color: #1a7f37; } .err { color: #c0392b; }
   .empty { opacity: .7; padding: 2.5rem 0; text-align: center; }
+
+  /* ==== local deck slice 1: build stamp, tabs, documents, search, time ==== */
+
+  /* The build stamp is the first thing on the page because a deck rendering a
+     three-day-old snapshot must say so before it says anything else. */
+  #stamp { max-width: 68rem; margin: 0 auto .8rem; font-size: .78rem;
+           border: 1px solid #8884; border-radius: 8px; padding: .45rem .7rem;
+           display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  #stamp .k { opacity: .6; }
+  #stamp .stale { color: #c0392b; font-weight: 600; }
+  #stamp .dirty { color: #d9822b; font-weight: 600; }
+
+  #tabs { max-width: 68rem; margin: 0 auto .9rem; display: flex; gap: .3rem;
+          border-bottom: 1px solid #8884; flex-wrap: wrap; }
+  .tab { padding: .4rem .8rem; cursor: pointer; border: 1px solid transparent;
+         border-bottom: none; border-radius: 8px 8px 0 0; font-size: .87rem;
+         margin-bottom: -1px; }
+  .tab:hover { background: #8881; }
+  .tab.active { border-color: #8884; background: #4a90e21a; font-weight: 600; }
+  .pane { display: none; }
+  .pane.active { display: block; }
+  .degraded { max-width: 68rem; margin: 0 auto; border: 1px solid #d9822b66;
+              border-left: 3px solid #d9822b; border-radius: 8px;
+              padding: .7rem .9rem; font-size: .85rem; }
+
+  .doc-groups { }
+  .doc-group-head { font-size: .78rem; text-transform: uppercase;
+                    letter-spacing: .04em; opacity: .7; margin: .9rem 0 .35rem; }
+  .doc-group-head.knowledge { color: #1a7f37; opacity: 1; font-weight: 700; }
+  .doc-row { display: flex; justify-content: space-between; gap: .6rem;
+             padding: .35rem .55rem; border: 1px solid #8883; border-radius: 6px;
+             margin-bottom: .3rem; cursor: pointer; font-size: .85rem; }
+  .doc-row:hover { background: #8881; }
+  .doc-row.active { background: #4a90e21a; font-weight: 600; }
+  .doc-row .p { opacity: .6; font-variant-numeric: tabular-nums; flex: none; }
+  /* The document itself. <pre> + textContent, deliberately: no markdown pass,
+     so there is no second parser and no path by which document text can become
+     markup. Wrapped, because a 120-col line in a terminal-width pane is not a
+     horizontal scrollbar anybody wants. */
+  #doc-view { border: 1px solid #8884; border-radius: 8px; padding: .9rem 1.1rem; }
+  #doc-view pre { white-space: pre-wrap; word-wrap: break-word; margin: 0;
+                  font: 13px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace; }
+  .doc-head { display: flex; justify-content: space-between; gap: .6rem;
+              flex-wrap: wrap; align-items: baseline; margin-bottom: .6rem;
+              padding-bottom: .5rem; border-bottom: 1px solid #8883; }
+
+  #search-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; }
+  #q { flex: 1; min-width: 14rem; font: inherit; padding: .4rem .6rem;
+       border: 1px solid #8886; border-radius: 6px; background: transparent;
+       color: inherit; }
+  select { font: inherit; padding: .35rem .5rem; border-radius: 6px;
+           border: 1px solid #8886; background: transparent; color: inherit; }
+  .hit { border: 1px solid #8884; border-left: 3px solid #8886; border-radius: 8px;
+         padding: .55rem .8rem; margin-bottom: .5rem; cursor: pointer; }
+  .hit:hover { background: #8881; }
+  .hit.knowledge { border-left-color: #1a7f37; }
+  .hit mark { background: #f5d90a55; color: inherit; font-weight: 600; }
+
+  /* One row per project on a shared axis. min-width so a project whose whole
+     history is one afternoon is still visible -- the bar is a marker, and the
+     honest number is printed beside it. */
+  .tl-row { display: grid; grid-template-columns: 15rem 1fr; gap: .6rem;
+            align-items: center; font-size: .8rem; margin-bottom: .3rem; }
+  .tl-track { position: relative; height: 1.15rem; background: #8881;
+              border-radius: 4px; }
+  .tl-bar { position: absolute; top: 0; bottom: 0; background: #4a90e2aa;
+            border-radius: 4px; min-width: 3px; }
+  .tl-bar.dirty { background: #d9822baa; }
+  .tl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-axis { display: grid; grid-template-columns: 15rem 1fr; gap: .6rem;
+             font-size: .72rem; opacity: .6; margin-bottom: .4rem; }
+  .tl-axis .ends { display: flex; justify-content: space-between; }
+  .nohist { border-left: 3px solid #c0392b88; padding: .3rem .6rem;
+            font-size: .8rem; margin-bottom: .3rem; }
+  .card { border: 1px solid #8884; border-radius: 8px; padding: .7rem .9rem;
+          margin-bottom: .7rem; }
+  .card h3 { margin: 0 0 .4rem; font-size: .92rem; }
+  table.delta { border-collapse: collapse; width: 100%; font-size: .8rem; }
+  table.delta td, table.delta th { border-bottom: 1px solid #8883;
+                                   padding: .3rem .5rem; text-align: left;
+                                   vertical-align: top; }
 </style>
 </head>
 <body>
-  <h1>Chronicler — Command Deck (project review)</h1>
-  <p class="sub">Personal-estate threads only (DECISIONS 0023 — work is behind a gate
-     that doesn't exist yet, so it isn't rendered here at all). Pick a project on the
-     left, work its batch, repeat.</p>
-  <div id="status"></div>
-  <div class="layout">
-    <div id="nav"><div class="nav-empty">Loading…</div></div>
-    <div id="batch">
-      <div class="empty">Pick a project on the left to see its pending batch.</div>
-    </div>
+  <h1>Chronicler — Command Deck</h1>
+  <p class="sub">Local surface, this machine's own estate (DECISIONS 0025 / 0027).
+     Documents are read from disk when you open them and are never cached.</p>
+
+  <div id="stamp"><span class="k">build</span> <span>loading…</span></div>
+
+  <div id="tabs">
+    <div class="tab active" data-pane="queue" onclick="showPane('queue')">Review queue</div>
+    <div class="tab" data-pane="docs" onclick="showPane('docs')">Documents</div>
+    <div class="tab" data-pane="search" onclick="showPane('search')">Search</div>
+    <div class="tab" data-pane="time" onclick="showPane('time')">Time</div>
   </div>
+
+  <section id="pane-queue" class="pane active">
+    <p class="sub" style="max-width:68rem;margin-inline:auto">Personal-estate threads
+       only (DECISIONS 0023 — work is behind a gate that doesn't exist yet, so it
+       isn't rendered here at all). Pick a project on the left, work its batch, repeat.</p>
+    <div id="status"></div>
+    <div class="layout">
+      <div id="nav"><div class="nav-empty">Loading…</div></div>
+      <div id="batch">
+        <div class="empty">Pick a project on the left to see its pending batch.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pane-docs" class="pane">
+    <div class="layout">
+      <div id="doc-nav"><div class="nav-empty">Loading…</div></div>
+      <div id="doc-pane">
+        <div class="empty">Pick a project, then a document. Authored documents
+          only — generated output is not browsable here.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pane-search" class="pane">
+    <div style="max-width:68rem;margin-inline:auto">
+      <div id="search-bar">
+        <input id="q" type="search" placeholder="Search authored documents…"
+               onkeydown="if(event.key==='Enter')runSearch()">
+        <select id="scope"><option value="">whole estate</option></select>
+        <button class="primary" onclick="runSearch()">Search</button>
+      </div>
+      <div id="search-status" class="sub"></div>
+      <div id="search-results"></div>
+    </div>
+  </section>
+
+  <section id="pane-time" class="pane">
+    <div style="max-width:68rem;margin-inline:auto">
+      <div id="time-view"><div class="empty">Loading…</div></div>
+    </div>
+  </section>
 
 <script>
 let PROJECTS = [];
@@ -114,7 +238,10 @@ function navHtml(){
 async function loadProjects(preserveSelection){
   const s = document.getElementById("status");
   try {
-    const projects = await fetch("/api/queue/projects").then(r=>r.json());
+    // jget unwraps the 503 the queue routes return on a machine with no vault,
+    // so "this rig has no thread store" reads as an explanation rather than a
+    // JavaScript error about .length of undefined.
+    const projects = await jget("/api/queue/projects");
     PROJECTS = projects;
     document.getElementById("nav").innerHTML = navHtml();
     s.textContent = `${projects.length} project(s) with pending threads`;
@@ -129,7 +256,18 @@ async function loadProjects(preserveSelection){
           : `<div class="empty">Nothing pending. 🎉</div>`;
     }
   } catch(e){
-    s.innerHTML = `<span class="err">Failed to load projects: ${esc(String(e))}</span>`;
+    if (e.status === 503){
+      s.innerHTML = `<span class="dirty">Review queue unavailable on this machine.</span>
+        <span class="meta">${esc(String(e.message||e))}</span>`;
+      document.getElementById("nav").innerHTML =
+        `<div class="nav-empty">No vault here.</div>`;
+      document.getElementById("batch").innerHTML =
+        `<div class="degraded">This rig has no thread store, so there is nothing
+          to rule on. The Documents, Search and Time tabs work regardless —
+          they need only <code>data/estate.json</code>.</div>`;
+      return;
+    }
+    s.innerHTML = `<span class="err">Failed to load projects: ${esc(String(e.message||e))}</span>`;
   }
 }
 
@@ -295,7 +433,302 @@ async function rejectOne(btn){
   }
 }
 
-loadProjects();
+/* ===================== local deck slice 1 ============================== */
+
+let ESTATE_PROJECTS = [];
+let DOC_PROJECT = null;
+let TIME_LOADED = false;
+
+function showPane(name){
+  document.querySelectorAll(".tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.pane === name));
+  document.querySelectorAll(".pane").forEach(p =>
+    p.classList.toggle("active", p.id === `pane-${name}`));
+  if (name === "time" && !TIME_LOADED) loadTime();
+}
+
+// A JSON error body from FastAPI is {detail: {...}}; unwrap to the sentence
+// the server actually wrote rather than showing "[object Object]".
+async function jget(url){
+  const res = await fetch(url);
+  let body = null;
+  try { body = await res.json(); } catch(e){ /* non-JSON error page */ }
+  if (!res.ok){
+    const d = body && body.detail;
+    const msg = (d && (d.detail || d.reason)) || (typeof d === "string" ? d : res.status);
+    const err = new Error(msg);
+    err.reason = d && d.reason;
+    err.status = res.status;
+    throw err;
+  }
+  return body;
+}
+
+function degraded(el, msg){
+  el.innerHTML = `<div class="degraded">${esc(msg)}</div>`;
+}
+
+/* ---- the build stamp: staleness, stated ---- */
+
+function ago(seconds){
+  if (seconds == null) return "unknown age";
+  const h = seconds / 3600;
+  if (h < 1) return `${Math.round(seconds/60)} min old`;
+  if (h < 48) return `${h.toFixed(1)} h old`;
+  return `${(h/24).toFixed(1)} days old`;
+}
+
+async function loadStamp(){
+  const el = document.getElementById("stamp");
+  try {
+    const h = await jget("/api/estate/header");
+    if (!h.available){
+      el.innerHTML = `<span class="stale">No estate build on this machine</span>
+        <span class="k">·</span><span>${esc(h.reason||"")} — run <code>python run.py build</code>.
+        Estate views are unavailable; the review queue is unaffected.</span>`;
+      return;
+    }
+    // Anything over 24h reads as stale. Not a threshold with a theory behind
+    // it -- just the point past which "today's build" stops being true.
+    const stale = (h.age_seconds ?? 0) > 86400;
+    el.innerHTML = `
+      <span class="k">build</span><strong>${esc(h.generated_at||"?")}</strong>
+      <span class="${stale?'stale':''}">(${esc(ago(h.age_seconds))}${stale?' — STALE':''})</span>
+      <span class="k">·</span><span class="k">commit</span><code>${esc(h.toolkit_commit||"?")}</code>
+      ${h.toolkit_dirty?'<span class="dirty">toolkit dirty at build time</span>':''}
+      <span class="k">·</span><span class="k">estate</span>${esc(h.estate_name||"?")}
+      <span class="k">·</span>${h.project_count} projects,
+      ${h.authored_document_count} authored docs
+      ${(h.warnings||[]).length?`<span class="k">·</span><span class="dirty">${h.warnings.length} warning(s): ${esc(h.warnings.join("; "))}</span>`:''}`;
+  } catch(e){
+    el.innerHTML = `<span class="err">Build stamp unavailable: ${esc(String(e.message||e))}</span>`;
+  }
+}
+
+/* ---- documents ---- */
+
+async function loadEstateProjects(){
+  const nav = document.getElementById("doc-nav");
+  try {
+    ESTATE_PROJECTS = await jget("/api/estate/projects");
+  } catch(e){
+    degraded(nav, `Documents unavailable: ${e.message}`);
+    return;
+  }
+  const scope = document.getElementById("scope");
+  ESTATE_PROJECTS.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.project; o.textContent = p.project;
+    scope.appendChild(o);
+  });
+  // A project with zero authored documents is listed and disabled rather than
+  // hidden: "Armory has nothing written down" is a finding, not an absence.
+  nav.innerHTML = ESTATE_PROJECTS.map(p => `
+    <div class="nav-item${p.authored_count?'':' nav-empty-proj'}"
+         data-proj="${esc(p.project)}"
+         ${p.authored_count?`onclick="selectDocProject('${esc(p.project)}')"`:''}
+         style="${p.authored_count?'':'opacity:.45;cursor:default'}"
+         title="${p.authored_count} authored, ${p.generated_count??0} generated">
+      <span>${esc(p.project)}${p.has_knowledge?' <span class="badge" style="border-color:#1a7f37;color:#1a7f37">knowledge</span>':''}
+        <br><span class="nav-crumb">${p.is_git?'git':'no git'} · ${p.generated_count??0} generated</span></span>
+      <span class="nav-count">${p.authored_count}</span>
+    </div>`).join("");
+}
+
+async function selectDocProject(project){
+  DOC_PROJECT = project;
+  document.querySelectorAll("#doc-nav .nav-item").forEach(el =>
+    el.classList.toggle("active", el.dataset.proj === project));
+  const pane = document.getElementById("doc-pane");
+  pane.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const data = await jget(`/api/estate/documents?project=${encodeURIComponent(project)}`);
+    pane.innerHTML = `<div class="doc-groups">` + data.groups.map(g => `
+      <div class="doc-group-head ${g.doc_type==='knowledge'?'knowledge':''}">${esc(g.doc_type)} · ${g.count}</div>
+      ${g.documents.map(d => `
+        <div class="doc-row" data-id="${esc(d.id)}" onclick="openDoc('${esc(d.id)}')">
+          <span>${esc(d.title || d.path)}<br><span class="meta">${esc(d.path)}</span></span>
+          <span class="p">${d.words ?? "?"} w</span>
+        </div>`).join("")}`).join("") +
+      `</div><div id="doc-view" style="margin-top:1rem;display:none"></div>`;
+  } catch(e){
+    degraded(pane, `Could not list documents: ${e.message}`);
+  }
+}
+
+async function openDoc(docId){
+  document.querySelectorAll(".doc-row").forEach(el =>
+    el.classList.toggle("active", el.dataset.id === docId));
+  const view = document.getElementById("doc-view");
+  if (!view) return;
+  view.style.display = "block";
+  view.innerHTML = `<div class="empty">Reading from disk…</div>`;
+  try {
+    const d = await jget(`/api/estate/document?doc_id=${encodeURIComponent(docId)}`);
+    view.innerHTML = `<div class="doc-head">
+        <div><strong>${esc(d.title||d.path)}</strong>
+          <div class="meta">${esc(d.project)} · ${esc(d.path)} · ${esc(d.doc_type)}
+            · ${d.bytes_on_disk} bytes on disk now</div></div>
+        <div class="meta">read at render time (0027) · not cached</div>
+      </div>
+      ${d.truncated?`<div class="degraded" style="margin-bottom:.6rem">${esc(d.note)}</div>`:''}
+      <pre></pre>`;
+    // textContent, not innerHTML: the document is text and stays text.
+    view.querySelector("pre").textContent = d.text;
+    view.scrollIntoView({behavior: "smooth", block: "nearest"});
+  } catch(e){
+    view.innerHTML = `<div class="degraded"><strong>Refused${e.reason?` (${esc(e.reason)})`:''}:</strong>
+      ${esc(String(e.message||e))}</div>`;
+  }
+}
+
+/* ---- search ---- */
+
+// The server marks matches with \x02 / \x03 rather than HTML, so the highlight
+// is applied here AFTER escaping -- a document containing "<script>" cannot
+// smuggle markup through a snippet.
+function snippetHtml(s){
+  return esc(s).replace(/\x02/g, "<mark>").replace(/\x03/g, "</mark>");
+}
+
+async function runSearch(){
+  const q = document.getElementById("q").value.trim();
+  const project = document.getElementById("scope").value;
+  const out = document.getElementById("search-results");
+  const st = document.getElementById("search-status");
+  if (!q){ out.innerHTML = ""; st.textContent = ""; return; }
+  out.innerHTML = `<div class="empty">Searching…</div>`;
+  try {
+    const url = `/api/estate/search?q=${encodeURIComponent(q)}` +
+                (project ? `&project=${encodeURIComponent(project)}` : "");
+    const r = await jget(url);
+    const bits = [`${r.count} result(s)`, `engine: ${r.engine}`,
+                  project ? `scope: ${project}` : "scope: whole estate"];
+    st.innerHTML = esc(bits.join(" · ")) +
+      (r.notice ? `<br><span class="dirty">${esc(r.notice)}</span>` : "") +
+      (r.error ? `<br><span class="err">${esc(r.error)}</span>` : "");
+    out.innerHTML = r.results.length ? r.results.map(h => `
+      <div class="hit ${h.is_knowledge?'knowledge':''}" onclick="jumpToDoc('${esc(h.project)}','${esc(h.id)}')">
+        <div class="row1">
+          <span class="badge">${esc(h.doc_type)}</span>
+          <span class="badge">${esc(h.project)}</span>
+          <span class="title">${esc(h.title||h.path)}</span>
+        </div>
+        <div class="meta">${esc(h.path)}</div>
+        <div class="snippet">${snippetHtml(h.snippet)}</div>
+      </div>`).join("")
+      : `<div class="empty">Nothing matched. That is itself a finding if you
+           are sure you wrote it down.</div>`;
+  } catch(e){
+    st.innerHTML = `<span class="err">Search failed: ${esc(String(e.message||e))}</span>`;
+    out.innerHTML = "";
+  }
+}
+
+async function jumpToDoc(project, docId){
+  showPane("docs");
+  if (DOC_PROJECT !== project) await selectDocProject(project);
+  openDoc(docId);
+}
+
+/* ---- time ---- */
+
+function fmtDate(iso){ return iso ? String(iso).slice(0,10) : "—"; }
+
+function timelineHtml(tl){
+  if (!tl.has_axis){
+    return `<div class="degraded">${esc(tl.note||"No history to plot.")}</div>` +
+      nohistHtml(tl.without_history);
+  }
+  return `<div class="card">
+    <h3>Estate timeline — ${fmtDate(tl.axis_start)} to ${fmtDate(tl.axis_end)}
+        (${tl.axis_span_days} days)</h3>
+    <div class="tl-axis"><span></span><span class="ends">
+      <span>${fmtDate(tl.axis_start)}</span><span>${fmtDate(tl.axis_end)}</span></span></div>
+    ${tl.projects.map(p => `
+      <div class="tl-row">
+        <span class="tl-name" title="${esc(p.project)}">${esc(p.project)}</span>
+        <span class="tl-track" title="${fmtDate(p.first_commit)} → ${fmtDate(p.last_commit)} · ${p.span_days} days · ${p.commit_count} commits">
+          <span class="tl-bar${p.dirty_files?' dirty':''}"
+                style="left:${(p.offset*100).toFixed(2)}%;width:${(p.width*100).toFixed(2)}%"></span>
+        </span>
+      </div>`).join("")}
+  </div>` + spansHtml(tl.projects) + nohistHtml(tl.without_history);
+}
+
+function spansHtml(projects){
+  return `<div class="card"><h3>Per project</h3>
+    <table class="delta"><tr><th>project</th><th>first</th><th>last</th>
+      <th>days</th><th>commits</th><th>contributors</th></tr>
+    ${projects.map(p => `<tr>
+      <td>${esc(p.project)}${p.dirty_files?` <span class="dirty" title="${p.dirty_files} dirty files at build time">●</span>`:''}</td>
+      <td>${fmtDate(p.first_commit)}</td><td>${fmtDate(p.last_commit)}</td>
+      <td>${p.span_days}</td><td>${p.commit_count ?? "?"}</td>
+      <td>${esc((p.contributors||[]).map(c => c.commits==null?`${c.author} (latest only)`:`${c.author} ${c.commits}`).join(", "))}</td>
+    </tr>`).join("")}</table></div>`;
+}
+
+function nohistHtml(absent){
+  if (!absent || !absent.length) return "";
+  return `<div class="card"><h3>No history — stated, not guessed</h3>
+    ${absent.map(p => `<div class="nohist"><strong>${esc(p.project)}</strong> — ${esc(p.reason)}</div>`).join("")}
+    <div class="meta" style="margin-top:.4rem">These are not given a span from
+      file mtimes. A fabricated window is worse than an absent one.</div></div>`;
+}
+
+function deltaHtml(d){
+  if (d.status !== "ok"){
+    return `<div class="card"><h3>What changed since the last build</h3>
+      <div class="degraded">${esc(d.note || d.status)} (${d.snapshots_available ?? 0} snapshot(s) in ${esc(d.history_dir||"history")})</div></div>`;
+  }
+  const stamp = b => `${esc(b.file||"?")} — ${esc(b.generated_at||"undated")} @ ${esc(b.toolkit_commit||"?")}${b.toolkit_dirty?" (dirty)":""}`;
+  const s = d.summary || {};
+  return `<div class="card">
+    <h3>What changed since the last build</h3>
+    <div class="meta">Comparing <strong>${stamp(d.from_build||{})}</strong>
+      → <strong>${stamp(d.to_build||{})}</strong></div>
+    <p class="note">${s.projects_changed} project(s) changed ·
+      ${s.projects_added} added · ${s.projects_removed} removed ·
+      ${s.new_commits} new commit(s)</p>
+    ${d.projects_added.length?`<div class="note">Appeared: ${esc(d.projects_added.join(", "))}</div>`:""}
+    ${d.projects_removed.length?`<div class="note">Vanished: ${esc(d.projects_removed.join(", "))}</div>`:""}
+    ${d.changed.length?`<table class="delta">
+      <tr><th>project</th><th>git</th><th>documents</th></tr>
+      ${d.changed.map(c => `<tr>
+        <td>${esc(c.project)}</td>
+        <td>${c.git?`${c.git.new_commit_count} new commit(s)`:"—"}</td>
+        <td>${c.docs?esc(["added","removed","changed"].map(k =>
+              (c.docs[k]||[]).length?`${k}: ${(c.docs[k]||[]).length}`:"").filter(Boolean).join(" · ")||"—"):"—"}</td>
+      </tr>`).join("")}</table>`:`<div class="empty">Nothing moved between these two builds.</div>`}
+  </div>`;
+}
+
+async function loadTime(){
+  const el = document.getElementById("time-view");
+  try {
+    const [tl, delta] = await Promise.all([
+      jget("/api/estate/timeline"), jget("/api/estate/changes")]);
+    el.innerHTML = timelineHtml(tl) + deltaHtml(delta);
+    TIME_LOADED = true;
+  } catch(e){
+    degraded(el, `Time views unavailable: ${e.message}`);
+  }
+}
+
+/* ---- boot ---- */
+
+// The queue half may be absent (no vault on this machine) without stopping the
+// estate half, and vice versa -- which is the whole point of the preflight
+// split. So each loader reports its own gap and neither aborts the other.
+async function boot(){
+  loadStamp();
+  loadEstateProjects();
+  try {
+    await loadProjects();
+  } catch(e){ /* loadProjects reports into #status itself */ }
+}
+
+boot();
 </script>
 </body>
 </html>

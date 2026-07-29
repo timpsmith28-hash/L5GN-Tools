@@ -312,30 +312,36 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     DECISIONS 0025: the deck renders only the running machine's declared
     estate, and a `work`-estate machine must bind loopback only -- enforced
     structurally below, not by the default. FastAPI/uvicorn are an OPTIONAL
-    extra; if absent this skips cleanly and loudly with the install hint."""
+    extra; if absent this skips cleanly and loudly with the install hint.
+
+    The preflight is split by *what each route needs*, not one all-or-nothing
+    check (local-deck slice 1). Vault-backed routes (the review queue) need the
+    vault DB and the registry; estate-backed routes (documents, search, the
+    timeline) need only `data/estate.json`. A machine with a vault and no
+    estate build, and a machine with an estate build and no vault, must both
+    serve -- so a missing half degrades that half and is reported, and only a
+    machine missing *both* is refused, because then there is nothing to render.
+    """
     from l5gntools import config
-    from chronicler.review import app, core
+    from chronicler.review import app, core, doc_search, estate_data
     m = config.machine()
-    try:
-        db = core.resolve_db_path(m)
-    except FileNotFoundError as exc:
-        print(f"review: {exc}", file=sys.stderr)
-        return 2
-    if not db.exists():
-        print(f"review: vault DB not found at {db} -- nothing to review "
-              "(is CHRONICLER_HOME / 'vault' set for this machine?).", file=sys.stderr)
-        return 2
-    try:
-        reg_path = core.resolve_registry_path(m)
-        registry = core.load_registry(reg_path)
-    except (FileNotFoundError, ValueError, KeyError) as exc:
-        print(f"review: registry unreadable -- {exc}", file=sys.stderr)
-        return 2
-    if not registry:
-        print("review: registry has no link-target ids -- refusing to serve a "
-              "write surface that can only reject (check project_registry.json).",
+
+    # --- the vault half: may be absent on a plain producer rig ---
+    db, registry, vault_gap = core.vault_preflight(m)
+
+    # --- the estate half: may be absent on a machine that never runs build ---
+    estate = estate_data.EstateData.load()
+
+    if db is None and not estate.available:
+        print("review: this machine has neither a vault nor an estate build, so "
+              "there is nothing for the surface to render.", file=sys.stderr)
+        print(f"review:   vault  -- {vault_gap.detail}", file=sys.stderr)
+        print(f"review:   estate -- {estate.reason} at {estate.source}",
               file=sys.stderr)
+        print("review: run `python run.py build` for the estate views, or point "
+              "CHRONICLER_HOME at a vault for the review queue.", file=sys.stderr)
         return 2
+
     if not app.available():
         print("review: FastAPI/uvicorn are not installed. They are an OPTIONAL "
               "extra, kept out of the stdlib-only core:\n"
@@ -347,44 +353,64 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     # unrecognised estate ('both', missing, junk) is exactly the co-rendering
     # case 0023 gates, and there is no gate yet, so this refuses loudly rather
     # than picking a default.
-    estate = m.get("estate")
+    # (`declared_estate` -- the config string -- is deliberately not named
+    # `estate`, which now holds the loaded snapshot. Two different things.)
+    declared_estate = m.get("estate")
     try:
-        account_clause = core.account_clause_for_estate(estate)
+        account_clause = core.account_clause_for_estate(declared_estate)
     except ValueError as exc:
         print(f"review: {exc}", file=sys.stderr)
         return 2
 
     # DECISIONS 0025's load-bearing half: the loopback rule is NOT config-derived
     # and must not be bypassable by it. A work-estate surface asked to bind
-    # beyond loopback refuses to start -- not a warning, not a flag.
-    if estate != "personal" and not core.is_loopback_host(args.host):
+    # beyond loopback refuses to start -- not a warning, not a flag. This also
+    # supplies 0027's condition (2) for the document routes for free: the only
+    # non-loopback surface permitted is a personal-estate one on its own machine.
+    if declared_estate != "personal" and not core.is_loopback_host(args.host):
         print(
             f"review: refusing to bind {args.host!r} -- this machine's declared "
-            f"estate is {estate!r}, and DECISIONS 0025 requires a work-estate "
+            f"estate is {declared_estate!r}, and DECISIONS 0025 requires a work-estate "
             "surface to bind loopback only (127.0.0.1 / ::1 / localhost). "
             "Run with --host 127.0.0.1.", file=sys.stderr)
         return 2
 
-    try:
-        # Pre-flight only -- core.connect() re-checks on every request too, but
-        # failing fast here means an unmigrated vault never gets as far as
-        # binding a port.
-        core.connect(db).close()
-    except core.DeckSchemaNotMigratedError as exc:
-        print(f"review: {exc}", file=sys.stderr)
-        return 2
+    # The search index is built here, in memory, once -- never written to disk
+    # (DECISIONS 0027 condition 1). Skipped entirely when there is no estate.
+    index = doc_search.DocumentIndex(estate) if estate.available else None
+
     port = args.port if "--port" in argv else REVIEW_DEFAULT_PORT
-    print(f"review: DB={db}")
-    print(f"review: registry={reg_path} ({len(registry)} link-target ids)")
-    print(f"review: estate={estate!r} -- rendering only that estate's threads "
-          "(DECISIONS 0025)")
-    print(f"review: binding {args.host}:{port} -- writes ONLY project_link + "
-          "project_confidence='manual'")
+    if db is not None:
+        print(f"review: vault DB={db}")
+        print(f"review: registry={core.resolve_registry_path(m)} "
+              f"({len(registry)} link-target ids)")
+        print("review: queue routes ENABLED -- writes ONLY project_link + "
+              "project_confidence='manual'")
+    else:
+        print(f"review: queue routes DEGRADED -- {vault_gap.detail}")
+    if estate.available:
+        head = estate.header()
+        dirty = " (toolkit dirty)" if head.get("toolkit_dirty") else ""
+        print(f"review: estate build={head.get('generated_at')} "
+              f"commit={head.get('toolkit_commit')}{dirty}")
+        print(f"review: estate routes ENABLED -- {head.get('project_count')} projects, "
+              f"{head.get('authored_document_count')} authored documents, "
+              f"search engine={index.status()['engine']}")
+        if index is not None and index.notice:
+            print(f"review: {index.notice}")
+        for warning in head.get("warnings", []):
+            print(f"review: estate warning -- {warning}")
+    else:
+        print(f"review: estate routes DEGRADED -- {estate.reason} at {estate.source}")
+    print(f"review: estate={declared_estate!r} -- rendering only that estate's "
+          "threads (DECISIONS 0025)")
+    print(f"review: binding {args.host}:{port}")
     print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
           f"on the LAN: http://<knight-192.168.x>:{port}/")
     try:
         return app.run(db, registry, host=args.host, port=port,
-                       account_clause=account_clause)
+                       account_clause=account_clause, estate=estate,
+                       index=index, vault_unavailable=vault_gap)
     except KeyboardInterrupt:
         return 0
 

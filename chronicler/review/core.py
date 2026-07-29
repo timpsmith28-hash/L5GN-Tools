@@ -173,6 +173,66 @@ def connect(db_path: Path) -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 # Path resolution -- config-driven, never hardcoded (DECISIONS 0007, round-2 C.4)
 # ---------------------------------------------------------------------------
+class VaultUnavailable:
+    """Why the vault-backed half of the surface cannot serve on this machine.
+
+    The preflight used to be one all-or-nothing check: no vault DB, or no
+    registry, and ``run.py review`` exited 2 before binding a port. That was
+    right when every route wrote to the vault. It is wrong now that the surface
+    also renders estate documents and timelines, which need neither -- a plain
+    producer rig with no vault would be unable to open its own knowledge base.
+
+    So the preflight splits by *what each route needs*. This object is the
+    "vault absent" outcome: the queue routes report it and degrade, and
+    everything estate-backed carries on. ``reason`` is a stable tag; ``detail``
+    is the sentence a human reads.
+    """
+
+    def __init__(self, reason: str, detail: str):
+        self.reason = reason
+        self.detail = detail
+
+    def as_dict(self) -> dict:
+        return {"available": False, "reason": self.reason, "detail": self.detail}
+
+
+def vault_preflight(machine: dict | None = None) -> tuple[object | None, dict, VaultUnavailable | None]:
+    """Resolve the vault DB and registry, or say precisely why not.
+
+    Returns ``(db_path, registry, None)`` when the vault half can serve, and
+    ``(None, {}, VaultUnavailable)`` when it cannot. It never raises and never
+    exits: the caller decides whether a missing vault is fatal (it is not, for
+    a surface that also serves estate routes).
+    """
+    try:
+        db = resolve_db_path(machine)
+    except FileNotFoundError as exc:
+        return None, {}, VaultUnavailable("vault_home_unset", str(exc))
+    if not db.exists():
+        return None, {}, VaultUnavailable(
+            "vault_db_missing",
+            f"No vault DB at {db} -- this machine has no thread store, so the "
+            "review queue has nothing to show. Estate views are unaffected.")
+    try:
+        reg_path = resolve_registry_path(machine)
+        registry = load_registry(reg_path)
+    except (FileNotFoundError, ValueError, KeyError) as exc:
+        return None, {}, VaultUnavailable("registry_unreadable",
+                                          f"Registry unreadable -- {exc}")
+    if not registry:
+        return None, {}, VaultUnavailable(
+            "registry_empty",
+            "The registry has no link-target ids, so the review queue could "
+            "only ever reject. Refusing to serve it (check project_registry.json).")
+    try:
+        # Pre-flight only -- connect() re-checks per request. Failing here means
+        # an unmigrated vault is reported as such rather than erroring per-route.
+        connect(db).close()
+    except DeckSchemaNotMigratedError as exc:
+        return None, {}, VaultUnavailable("schema_not_migrated", str(exc))
+    return db, registry, None
+
+
 def resolve_db_path(machine: dict | None = None) -> Path:
     """The live vault path, resolved EXACTLY like `serve`/`backup`.
 

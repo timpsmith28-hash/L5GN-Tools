@@ -973,7 +973,7 @@ out when there is no `.gitignore` to do it.
 
 ## 0027 — Summary-only governs artefacts that travel; a local surface reads the source at render time
 
-**Date:** 2026-07-28 · **Status:** proposed · **Builds on:** 0010 (the wall),
+**Date:** 2026-07-28 · **Status:** accepted · **Builds on:** 0010 (the wall),
 0013 (serve a snapshot), 0025 (gate the surface, not the data) ·
 **Source:** design thread
 
