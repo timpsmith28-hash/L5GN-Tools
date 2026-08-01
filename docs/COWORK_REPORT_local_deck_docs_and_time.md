@@ -1,3 +1,11 @@
+<!-- gate-frozen: commit=ac7710d -->
+<!-- The gate count below is stated as of `ac7710d`, the base commit this
+     report names in its own second paragraph. The docs-board slice registered
+     `tester_docs_board` and moved the live count to 54, which is exactly the
+     "legitimately added a tester" case docs/README.md §3 describes: this
+     document is not wrong, it is finished. The alternative — editing 53 to 54
+     — would rewrite an observation to match a tree it was never taken on. -->
+
 # Cowork report — the local deck, slice 1: the knowledge base and the time dimension
 
 **Brief:** `docs/COWORK_BRIEF_local_deck_docs_and_time.md`. **Implements:**

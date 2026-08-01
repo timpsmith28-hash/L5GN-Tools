@@ -129,6 +129,61 @@ def path_within_roots(candidate, roots) -> bool:
     return False
 
 
+#: This repository's own root, derived from this file's location rather than
+#: read from config. It is a **second containment anchor**, not a second
+#: resolver -- see :func:`resolve_contained`.
+#:
+#: The estate anchor (``config.estate_roots()``) is the right boundary for
+#: estate documents and the wrong one for the toolkit's own ``docs/``. The
+#: toolkit happens to sit inside a configured root on the gaming rig and does
+#: not on the work rig, so a board anchored only to the estate roots would
+#: render on one machine and refuse on the other -- for a directory it reaches
+#: by construction, not by configuration. Anchoring to ``__file__`` makes that
+#: structural: there is no config value that widens or narrows it, and a
+#: machine cannot be misconfigured into reading the wrong tree.
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
+
+
+def resolve_contained(candidate, anchors, *,
+                      outside_reason: str = "outside_estate_roots",
+                      no_anchor_reason: str = "no_configured_roots",
+                      boundary: str = "this machine's configured estate roots",
+                      no_anchor_detail: str | None = None) -> Path:
+    """**The** containment gate: verify ``candidate`` lies inside one of
+    ``anchors``, then return its fully resolved path. Nothing reads a file in
+    this package without coming through here first.
+
+    There is exactly one implementation of this check and there must stay
+    exactly one. What varies between callers is the *anchor set* and the
+    vocabulary of the refusal, both of which are parameters -- never the
+    resolution logic, because a second copy of it is a second place for the
+    ``os.sep`` subtlety in :func:`path_within_roots` to be got wrong.
+
+    Two anchor sets exist today:
+
+      * ``EstateData.roots`` -- the configured estate roots, for estate
+        documents (0027 condition 3).
+      * ``[REPO_ROOT]`` -- this repository, for the docs board. The board
+        renders the toolkit's own ``docs/``, which is not estate data and is
+        reached structurally rather than by configuration.
+
+    An empty anchor set refuses rather than passing everything: "no boundary
+    configured" must never read as "no boundary applies".
+    """
+    if not anchors:
+        raise DocumentRefused(
+            no_anchor_reason,
+            no_anchor_detail or
+            ("This machine declares no estate roots, so no file is inside "
+             "the boundary 0027 requires. Set 'roots' in config."))
+    if not path_within_roots(candidate, anchors):
+        raise DocumentRefused(
+            outside_reason,
+            f"That document resolves outside {boundary} and will not be read "
+            "(DECISIONS 0027).")
+    return Path(os.path.realpath(str(candidate)))
+
+
 def parse_timestamp(value) -> datetime | None:
     """Parse an ISO timestamp from the snapshot. Tolerates a trailing ``Z``,
     which ``fromisoformat`` rejects before 3.11 and this package supports 3.10."""
@@ -357,17 +412,10 @@ class EstateData:
         entry = self.document(doc_id)
         base = Path(entry["project_path"])
         candidate = base.joinpath(*entry["path"].replace("\\", "/").split("/"))
-        if not self.roots:
-            raise DocumentRefused(
-                "no_configured_roots",
-                "This machine declares no estate roots, so no file is inside "
-                "the boundary 0027 requires. Set 'roots' in config.")
-        if not path_within_roots(candidate, self.roots):
-            raise DocumentRefused(
-                "outside_estate_roots",
-                "That document resolves outside this machine's configured "
-                "estate roots and will not be read (DECISIONS 0027).")
-        return Path(os.path.realpath(str(candidate)))
+        # Delegates to the one containment gate. The refusal tags and wording
+        # are unchanged from when this check was inline here -- the surface
+        # already renders them and a tester already asserts them.
+        return resolve_contained(candidate, self.roots)
 
     def read_document(self, doc_id: str) -> dict:
         """Read a document from disk **at render time** and return its text.

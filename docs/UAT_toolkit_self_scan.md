@@ -1,3 +1,7 @@
+<!-- gate-frozen: commit=ac7710d -->
+<!-- "Gate at build time", at the commit named below. Walked and closed; the
+     count moved to 54 when `tester_docs_board` was registered. -->
+
 # UAT walk-sheet — the toolkit sees itself
 
 **Brief:** `docs/COWORK_BRIEF_toolkit_self_scan.md`

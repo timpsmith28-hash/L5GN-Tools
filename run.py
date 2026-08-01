@@ -333,14 +333,20 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     estate = estate_data.EstateData.load()
 
     if db is None and not estate.available:
-        print("review: this machine has neither a vault nor an estate build, so "
-              "there is nothing for the surface to render.", file=sys.stderr)
+        # Both data halves absent. This used to be the refusal case, and was,
+        # while every route needed one of them. The docs board needs neither:
+        # it derives from `docs/` in this checkout, which is present by
+        # construction wherever this file is. So the preflight split runs to
+        # its conclusion -- the surface serves the one route whose dependency
+        # is satisfied and says plainly what it hasn't got.
+        print("review: this machine has neither a vault nor an estate build.",
+              file=sys.stderr)
         print(f"review:   vault  -- {vault_gap.detail}", file=sys.stderr)
         print(f"review:   estate -- {estate.reason} at {estate.source}",
               file=sys.stderr)
-        print("review: run `python run.py build` for the estate views, or point "
-              "CHRONICLER_HOME at a vault for the review queue.", file=sys.stderr)
-        return 2
+        print("review: serving the docs board only. Run `python run.py build` "
+              "for the estate views, or point CHRONICLER_HOME at a vault for "
+              "the review queue.", file=sys.stderr)
 
     if not app.available():
         print("review: FastAPI/uvicorn are not installed. They are an OPTIONAL "
@@ -355,24 +361,61 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     # than picking a default.
     # (`declared_estate` -- the config string -- is deliberately not named
     # `estate`, which now holds the loaded snapshot. Two different things.)
+    # The clause scopes THREADS, and only threads: it is a `t.account LIKE ...`
+    # predicate on the vault's queue tables. So an unresolvable estate must
+    # disable the routes that read threads -- not the process. Estate documents
+    # and the toolkit's own docs/ are not estate-labelled data, carry no
+    # account column, and are governed by 0027's containment rule instead;
+    # refusing to start over a clause they never use would take the docs board
+    # off every machine whose declared estate is not exactly 'personal' or
+    # 'work', for a wall it does not stand behind.
+    #
+    # The wall itself is untouched, and is if anything tightened: a machine
+    # that cannot name one estate now serves NO thread, where before the same
+    # condition was a startup argument that a later refactor could have
+    # softened into a default. Deny-by-default, scoped to what the clause
+    # actually governs.
     declared_estate = m.get("estate")
+    estate_clause_gap = None
     try:
         account_clause = core.account_clause_for_estate(declared_estate)
     except ValueError as exc:
-        print(f"review: {exc}", file=sys.stderr)
+        estate_clause_gap = str(exc)
+        account_clause = None
+        db = None  # vault routes off: _need_vault() 503s them, uniformly
+        # A gap the queue routes can state. `vault_preflight` may have found a
+        # perfectly good vault -- the reason this machine serves no thread is
+        # the unresolved estate, and the 503 must say so rather than claim a
+        # missing DB that is sitting right there.
+        vault_gap = core.VaultUnavailable(
+            "estate_unresolved",
+            f"Thread routes are disabled on this machine: {exc}")
+
+    if db is None and estate_clause_gap and not estate.available:
+        print(f"review: {estate_clause_gap}", file=sys.stderr)
+        print("review: and this machine has no estate build either, so there "
+              "is nothing left to render.", file=sys.stderr)
         return 2
 
     # DECISIONS 0025's load-bearing half: the loopback rule is NOT config-derived
-    # and must not be bypassable by it. A work-estate surface asked to bind
+    # and must not be bypassable by it. Any NON-PERSONAL estate asked to bind
     # beyond loopback refuses to start -- not a warning, not a flag. This also
     # supplies 0027's condition (2) for the document routes for free: the only
     # non-loopback surface permitted is a personal-estate one on its own machine.
+    #
+    # The message says "non-personal", not "work". The condition has always been
+    # `!= "personal"`, but until the estate clause was scoped to the vault half
+    # an unrecognised estate exited at the clause check and never reached this
+    # line -- so in practice only `work` ever saw it, and the wording was true
+    # by accident. It is now reachable with `both`, where "a work-estate
+    # surface" contradicts the value printed in the same sentence.
     if declared_estate != "personal" and not core.is_loopback_host(args.host):
         print(
             f"review: refusing to bind {args.host!r} -- this machine's declared "
-            f"estate is {declared_estate!r}, and DECISIONS 0025 requires a work-estate "
-            "surface to bind loopback only (127.0.0.1 / ::1 / localhost). "
-            "Run with --host 127.0.0.1.", file=sys.stderr)
+            f"estate is {declared_estate!r}, and DECISIONS 0025 requires any "
+            "non-personal estate to bind loopback only "
+            "(127.0.0.1 / ::1 / localhost). Run with --host 127.0.0.1.",
+            file=sys.stderr)
         return 2
 
     # The search index is built here, in memory, once -- never written to disk
@@ -402,8 +445,14 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
             print(f"review: estate warning -- {warning}")
     else:
         print(f"review: estate routes DEGRADED -- {estate.reason} at {estate.source}")
-    print(f"review: estate={declared_estate!r} -- rendering only that estate's "
-          "threads (DECISIONS 0025)")
+    if estate_clause_gap:
+        print(f"review: estate={declared_estate!r} -- NO thread is rendered on "
+              "this machine (DECISIONS 0025: a surface that cannot name one "
+              "estate shows none). Document routes are unaffected -- docs/ and "
+              "the estate build are not estate-labelled data.")
+    else:
+        print(f"review: estate={declared_estate!r} -- rendering only that estate's "
+              "threads (DECISIONS 0025)")
     print(f"review: binding {args.host}:{port}")
     print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
           f"on the LAN: http://<knight-192.168.x>:{port}/")

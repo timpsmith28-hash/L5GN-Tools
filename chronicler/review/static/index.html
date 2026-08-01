@@ -148,6 +148,80 @@
   .card { border: 1px solid #8884; border-radius: 8px; padding: .7rem .9rem;
           margin-bottom: .7rem; }
   .card h3 { margin: 0 0 .4rem; font-size: .92rem; }
+  /* ==== docs board ==== */
+  #board-view { display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+                gap: .7rem; align-items: start; }
+  @media (max-width: 70rem){ #board-view { grid-template-columns: 1fr; } }
+  /* Each column scrolls independently. The Archived column has a 25-card tail
+     and used to set the page height for all four, which buried everything
+     below the board -- including the document viewer. Capping the column and
+     scrolling it keeps the four heads on screen together, which is the only
+     view in which the counts can be compared. */
+  .board-col { max-height: calc(100vh - 9rem); overflow-y: auto;
+               overflow-x: hidden; padding-right: .2rem; }
+  @media (max-width: 70rem){ .board-col { max-height: 28rem; } }
+  /* `Canvas` is the UA's own background for the active colour-scheme, so the
+     head is OPAQUE in both light and dark without hardcoding either. It was
+     translucent, and cards scrolling underneath bled through it. The blue tint
+     is layered on top as an image so it composites over the opaque base
+     instead of replacing it. */
+  .col-head { position: sticky; top: 0; z-index: 2; padding: .45rem .6rem;
+              border-radius: 6px; background-color: Canvas;
+              background-image: linear-gradient(#4a90e21a, #4a90e21a);
+              border: 1px solid #8884; margin-bottom: .5rem; }
+  .col-head .t { font-weight: 600; display: flex; gap: .4rem; align-items: baseline; }
+  .col-head .n { font-variant-numeric: tabular-nums; opacity: .75; }
+  .col-head .hint { font-size: .72rem; opacity: .7; margin-top: .2rem; display: block; }
+  .col-head .sub-count { font-size: .72rem; margin-top: .25rem; display: block; }
+  .card { border: 1px solid #8884; border-radius: 6px; padding: .5rem .6rem;
+          margin-bottom: .45rem; background: #8881; }
+  .card .ttl { font-weight: 600; font-size: .84rem; word-break: break-word; }
+  .card .kind { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em;
+                border: 1px solid #8886; border-radius: 3px; padding: 0 .3rem;
+                opacity: .8; }
+  .card .kind.unmatched { border-color: #d4a02a; color: #d4a02a; }
+  .card .kind.walk_only { border-color: #4a90e2; color: #4a90e2; }
+  .card .files { margin-top: .35rem; display: flex; flex-direction: column; gap: .12rem; }
+  .card .files a { font-size: .74rem; cursor: pointer; text-decoration: none;
+                   opacity: .85; font-family: ui-monospace, monospace; }
+  .card .files a:hover { text-decoration: underline; opacity: 1; }
+  .card .files .role { display: inline-block; min-width: 3.6rem; opacity: .55; }
+  .card .items { font-size: .74rem; margin-top: .3rem; font-variant-numeric: tabular-nums; }
+  .card .disp { font-size: .72rem; margin-top: .25rem; opacity: .8; }
+  .card .flag { font-size: .72rem; margin-top: .3rem; color: #d4a02a;
+                border-left: 2px solid #d4a02a; padding-left: .4rem; }
+  .card .action { font-size: .72rem; margin-top: .35rem; opacity: .6; font-style: italic; }
+  #board-findings .fnd { border: 1px solid #d4a02a; border-left-width: 3px;
+                         border-radius: 5px; padding: .45rem .6rem; margin-bottom: .4rem;
+                         font-size: .78rem; background: #d4a02a12; }
+  /* The header: findings + off-board list on the left, the document on the
+     right, both the same fixed height so the board below always starts in the
+     same place. `min-height: 0` on the children is what lets a grid item
+     actually scroll rather than stretching the row to fit its content. */
+  #board-top { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem;
+               height: 30rem; margin-bottom: .9rem; }
+  @media (max-width: 70rem){
+    #board-top { grid-template-columns: 1fr; height: auto; }
+    #board-left, #board-doc { max-height: 22rem; }
+  }
+  #board-left, #board-doc { min-height: 0; overflow-y: auto; overflow-x: hidden;
+                            border: 1px solid #8884; border-radius: 8px;
+                            padding: .6rem .8rem; }
+  #board-off { margin: .2rem 0 .2rem; font-size: .76rem; opacity: .75; }
+  #board-off li { margin: .1rem 0; }
+  #board-doc h3 { margin: 0 0 .4rem; font-size: .86rem;
+                  font-family: ui-monospace, monospace;
+                  position: sticky; top: -.6rem; z-index: 1;
+                  background-color: Canvas;
+                  padding: .6rem 0 .35rem; margin-top: -.6rem; }
+  /* Typography only -- the text is still inserted with textContent and is
+     still not markup. See the report: rendering markdown here would mean a
+     parser, and a parser is a path from document text to HTML. The pane
+     scrolls, so the <pre> does not need its own box or its own scrollbar. */
+  #board-doc pre { white-space: pre-wrap; word-break: break-word;
+                   font: .8rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+                   margin: 0; padding: 0; border: 0; }
+
   table.delta { border-collapse: collapse; width: 100%; font-size: .8rem; }
   table.delta td, table.delta th { border-bottom: 1px solid #8883;
                                    padding: .3rem .5rem; text-align: left;
@@ -166,6 +240,7 @@
     <div class="tab" data-pane="docs" onclick="showPane('docs')">Documents</div>
     <div class="tab" data-pane="search" onclick="showPane('search')">Search</div>
     <div class="tab" data-pane="time" onclick="showPane('time')">Time</div>
+    <div class="tab" data-pane="board" onclick="showPane('board')">Docs board</div>
   </div>
 
   <section id="pane-queue" class="pane active">
@@ -207,6 +282,31 @@
   <section id="pane-time" class="pane">
     <div style="max-width:68rem;margin-inline:auto">
       <div id="time-view"><div class="empty">Loading…</div></div>
+    </div>
+  </section>
+
+  <section id="pane-board" class="pane">
+    <div style="max-width:96rem;margin-inline:auto">
+      <p class="sub">The lifecycle in <code>docs/README.md</code> §2/§3, derived from
+         what is on disk right now. Nothing here is stored — no board state file,
+         no column assignments; §5 retires status boards by class and this one
+         declines to become one. <strong>Read-only:</strong> ratification and
+         archive staging are the next slice, so no card offers an archive action.</p>
+      <!-- A fixed-height header of two panes, then the board full width below.
+           The Archived column runs to 25 cards, and with the board first
+           everything after it sat below that tail: you clicked a file at the
+           top of a column and the text appeared off-screen. Pinning both panes
+           to one screen-ish height means the board starts at a predictable
+           place instead of wherever the findings list happened to end. -->
+      <div id="board-top">
+        <div id="board-left">
+          <div id="board-findings"></div>
+          <div id="board-off"></div>
+        </div>
+        <div id="board-doc"><div class="empty">Pick a file on any card. It is
+          read from disk when you open it and is never cached.</div></div>
+      </div>
+      <div id="board-view"><div class="empty">Loading…</div></div>
     </div>
   </section>
 
@@ -438,6 +538,7 @@ async function rejectOne(btn){
 let ESTATE_PROJECTS = [];
 let DOC_PROJECT = null;
 let TIME_LOADED = false;
+let BOARD_LOADED = false;
 
 function showPane(name){
   document.querySelectorAll(".tab").forEach(t =>
@@ -445,6 +546,7 @@ function showPane(name){
   document.querySelectorAll(".pane").forEach(p =>
     p.classList.toggle("active", p.id === `pane-${name}`));
   if (name === "time" && !TIME_LOADED) loadTime();
+  if (name === "board" && !BOARD_LOADED) loadBoard();
 }
 
 // A JSON error body from FastAPI is {detail: {...}}; unwrap to the sentence
@@ -712,6 +814,134 @@ async function loadTime(){
     TIME_LOADED = true;
   } catch(e){
     degraded(el, `Time views unavailable: ${e.message}`);
+  }
+}
+
+/* ---- docs board ---- */
+
+// Actions are a function of the column and nothing else. The two write-side
+// actions the brief describes (a "UAT ratified?" control on `walked`, and
+// "Prepare archive" on an archivable card) are ABSENT here, not disabled: this
+// slice ships read-only, and a greyed-out button is a promise the surface
+// cannot keep. `archivable` is not a column at all, because it is not
+// derivable -- it needs a human saying the walk happened.
+const BOARD_ACTIONS = {
+  open_brief:      "open the brief — the work is elsewhere",
+  open_walk_sheet: "open the walk-sheet; slice 2 attaches “walk it” here",
+  open_results:    "open the results log — walked ≠ archivable",
+  show_stamp:      "read-only history; the stamp is below",
+};
+
+function boxes(c){
+  // Both counts, always, even when one is zero. A card that reads 0/19 is
+  // saying something, and it is not "no work was done" -- see the flag.
+  const bits = [`<span class="items">walk-sheet <b>${c.done_items}</b> done /
+    <b>${c.open_items}</b> open</span>`];
+  const r = c.results_items || {done:0, open:0};
+  if (r.done || r.open)
+    bits.push(`<span class="items">results log <b>${r.done}</b> done /
+      <b>${r.open}</b> open</span>`);
+  return bits.join("<br>");
+}
+
+function cardHtml(c, action){
+  const kindTag = c.kind === "pair" ? "" :
+    `<span class="kind ${esc(c.kind)}">${esc(c.kind.replace("_"," "))}</span>`;
+  const files = (c.members||[]).map(m => `
+    <a onclick="openBoardDoc('${esc(m.id)}')" title="${esc(m.rel)}">
+      <span class="role">${esc(m.role)}</span>${esc(m.name)}</a>`).join("");
+  const marks = (c.members||[]).filter(m => m.gate_frozen || m.uat).map(m => {
+    const bits = [];
+    if (m.gate_frozen) bits.push(`gate-frozen@${esc(m.gate_frozen.commit||"?")}`);
+    if (m.uat) bits.push(`uat commit=${esc(m.uat.commit||"?")} walked=${esc(m.uat.walked||"?")}`);
+    return `<div class="disp">${esc(m.name)}: ${bits.join(" · ")}</div>`;
+  }).join("");
+  const disp = c.disposition
+    ? `<div class="disp">stamped <b>${esc(c.disposition)}</b>${
+        c.kind === "unmatched"
+          ? ` — but pairs with nothing by filename, so the board calls it
+              unmatched. Both are true; the stamp is the archivist's judgement,
+              the kind is what the names carry.` : ""}</div>` : "";
+  const flags = (c.flags||[]).map(f => `<div class="flag">${esc(
+    f === "checkbox_evidence_in_results_log"
+      ? "Walked, but the ticks are in the results log, not the sheet. Shown, not normalised — do not tick the sheet to clear this."
+    : f === "unstamped_archive_file"
+      ? "In archive/ with no ARCHIVED stamp (§3). Unstamped, which is a finding — not the same thing as unmatched."
+    : f === "members_stamped_with_different_dispositions"
+      ? "This card's files carry different dispositions in their stamps."
+      : f)}</div>`).join("");
+  return `<div class="card">
+    <div class="ttl">${esc(c.title)} ${kindTag}</div>
+    <div class="files">${files}</div>
+    ${(c.open_items||c.done_items||(c.results_items&&(c.results_items.done||c.results_items.open)))?`<div>${boxes(c)}</div>`:""}
+    ${disp}${marks}${flags}
+    <div class="action">${esc(action||"")}</div>
+  </div>`;
+}
+
+async function loadBoard(){
+  const el = document.getElementById("board-view");
+  let b;
+  try { b = await jget("/api/docs/board"); }
+  catch(e){ degraded(el, `Docs board unavailable: ${e.message}`); return; }
+
+  el.innerHTML = b.columns.map(col => {
+    // The unmatched count rides on the COLUMN, not just the cards. A pot of
+    // archived files that quietly stopped pairing would otherwise look like a
+    // smaller archive; a published count changes on its own when pairing
+    // breaks, which is the only way that bug is visible without reading 45
+    // filenames by hand.
+    const subs = [];
+    if (col.key === "archived"){
+      subs.push(`${col.file_count} files`);
+      subs.push(`<b>${col.unmatched_count} unmatched</b>`);
+      if (col.walk_only_count) subs.push(`${col.walk_only_count} walk-only`);
+    }
+    return `<div class="board-col">
+      <div class="col-head">
+        <div class="t"><span>${esc(col.label)}</span><span class="n">${col.count}</span></div>
+        <span class="hint">${esc(col.hint)}</span>
+        ${subs.length?`<span class="sub-count">${subs.join(" · ")}</span>`:""}
+      </div>
+      ${col.cards.map(c => cardHtml(c, BOARD_ACTIONS[col.action])).join("")
+        || `<div class="empty">Nothing in this column.</div>`}
+    </div>`;
+  }).join("");
+
+  const fnd = document.getElementById("board-findings");
+  fnd.innerHTML = (b.findings||[]).length
+    ? `<div class="fnd"><b>${b.findings.length} finding(s)</b> — the board's first
+        job is exposing these, not correcting them.</div>` +
+      b.findings.map(f => `<div class="fnd"><b>${esc(f.file)}</b> —
+        ${esc(f.detail)}</div>`).join("")
+    : `<div class="sub">No findings: every archived file is stamped and every
+        walked pair records its evidence on its own sheet.</div>`;
+
+  const off = document.getElementById("board-off");
+  off.innerHTML = `<details><summary>${b.off_board.length} document(s)
+    deliberately not on the board</summary><ul>` +
+    b.off_board.map(o => `<li><code>${esc(o.name)}</code> — ${esc(o.reason)}</li>`)
+      .join("") + `</ul></details>`;
+  BOARD_LOADED = true;
+}
+
+async function openBoardDoc(id){
+  const el = document.getElementById("board-doc");
+  el.innerHTML = `<div class="empty">Reading from disk…</div>`;
+  try {
+    const d = await jget(`/api/docs/document?doc_id=${encodeURIComponent(id)}`);
+    el.innerHTML = `<h3 style="margin:.8rem 0 .3rem">${esc(d.rel)}</h3>
+      ${d.truncated?`<div class="fnd">${esc(d.note)}</div>`:""}<pre></pre>`;
+    // textContent, never innerHTML: document text cannot become markup, which
+    // is the same call slice 1 made for estate documents and the same reason.
+    el.querySelector("pre").textContent = d.text;
+    el.scrollTop = 0;
+    // `nearest` scrolls the page only if the header is actually off-screen --
+    // clicking a card near the top should not yank the view around.
+    document.getElementById("board-top")
+            .scrollIntoView({behavior:"smooth", block:"nearest"});
+  } catch(e){
+    el.innerHTML = `<div class="fnd">Refused: ${esc(String(e.message||e))}</div>`;
   }
 }
 

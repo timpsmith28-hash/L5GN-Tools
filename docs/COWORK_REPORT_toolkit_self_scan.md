@@ -1,3 +1,8 @@
+<!-- gate-frozen: commit=ac7710d -->
+<!-- Frozen at the base commit this report names below. `tester_docs_board`
+     later moved the live count to 54; this document records the gate as it
+     stood when it was written (docs/README.md §3). -->
+
 # Cowork report — the toolkit sees itself
 
 **Pair:** `docs/COWORK_BRIEF_toolkit_self_scan.md`. Session 2026-07-28.

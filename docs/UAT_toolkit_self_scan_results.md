@@ -1,4 +1,10 @@
 <!-- uat: commit=a202ba0 dirty=false host=LucasGoonPC walked=2026-08-01 -->
+<!-- gate-frozen: commit=a202ba0 -->
+<!-- This is a results log: §"Gate state" records what `verify.py` PRINTED on
+     2026-08-01 at the commit in the uat stamp above. Editing 53 to 54 would
+     falsify an observation, which is the one thing a results log exists to
+     prevent. Frozen instead, per docs/README.md §3. -->
+
 <!-- Sections A-C were walked 2026-07-29 against a dirty tree at ac7710d/6dd70f1
      and are carried here as recorded, not re-derived. Sections D-F and the stop
      conditions were walked 2026-08-01 against a clean a202ba0 after a

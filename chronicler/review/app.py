@@ -91,6 +91,19 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
     from fastapi.responses import JSONResponse
     from fastapi.staticfiles import StaticFiles
 
+    # The estate wall, made structural rather than argued. `account_clause` is
+    # the ONLY thing scoping thread reads to one estate, so a vault served
+    # without one would be a surface rendering every estate's threads at once
+    # -- exactly the co-rendered case 0023 gates. `run.py` disables the vault
+    # half when the clause cannot be resolved; this refuses to build an app
+    # where that pairing was got wrong, so the failure is a startup crash and
+    # never a silent wall breach.
+    if db_path is not None and not account_clause:
+        raise ValueError(
+            "refusing to serve vault routes with no estate clause: thread "
+            "reads are scoped by `account_clause` alone (DECISIONS 0023/0025). "
+            "Pass db_path=None to degrade the queue half instead.")
+
     app = FastAPI(title="Chronicler review", docs_url="/api/docs")
     # Tailscale/LAN-only bind makes wildcard CORS acceptable (0007).
     app.add_middleware(CORSMiddleware, allow_origins=["*"],
@@ -280,6 +293,42 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         from . import estate_time
         return estate_time.build_delta()
 
+    # ---- the docs board (0027 read-time; 0028 staging is NOT in this slice) --
+    # Neither route is gated. The board derives from `docs/` in this checkout,
+    # which needs no vault, no estate build and no configured root -- so
+    # gating it behind either half would refuse to render a directory the
+    # process is sitting inside. That is the preflight split's rule applied
+    # honestly, not an exception to it.
+
+    @app.get("/api/docs/board")
+    def docs_board_route():
+        """The whole board, recomputed from `docs/` on every call.
+
+        Nothing is cached between requests, which is not an optimisation
+        oversight: a cached board is a stored board, and a stored board is the
+        status board `docs/README.md` §5 retires by class. Reloading the page
+        after a `git mv` shows the move.
+        """
+        from . import docs_board
+        return docs_board.board()
+
+    @app.get("/api/docs/document")
+    def docs_board_document(doc_id: str):
+        """One card's document, read from disk at request time.
+
+        `doc_id`, never a path -- the same rule as `/api/estate/document`, and
+        the containment check behind it is literally the same function, run
+        against this repository instead of the estate roots.
+        """
+        from . import docs_board
+        from .estate_data import DocumentRefused
+        try:
+            return docs_board.read_card_document(doc_id)
+        except DocumentRefused as exc:
+            status = 404 if exc.reason == "unknown_document" else 403
+            raise HTTPException(status_code=status,
+                                detail={"reason": exc.reason, "detail": exc.message})
+
     @app.get("/api/health")
     def health():
         # Both halves reported separately -- this endpoint is how you tell a
@@ -297,6 +346,8 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
                        if estate is not None
                        else {"available": False, "reason": "estate_absent"}),
             "search": (index.status() if index is not None else None),
+            # Always available: it depends on this checkout, nothing else.
+            "docs_board": {"available": True, "read_only": True},
         })
 
     static_dir = Path(__file__).resolve().parent / "static"

@@ -1,3 +1,9 @@
+<!-- gate-frozen: commit=ac7710d -->
+<!-- The sheet's claim is explicitly "gate at BUILD TIME", at the commit named
+     on the line below it. That is testimony about a moment, not an assertion
+     about the live tree, and it stays true as later rounds register testers.
+     The sheet itself is still open — this freezes one number, not the walk. -->
+
 # UAT walk-sheet — the local deck, slice 1: documents and time
 
 Pair: `docs/COWORK_BRIEF_local_deck_docs_and_time.md` +
