@@ -1,23 +1,30 @@
-<!-- gate-frozen: commit=86fca68 -->
+<!-- gate-frozen: commit=f5a14d2 -->
+<!-- uat: commit=f5a14d2 dirty=false host=multi-rig walked=2026-08-03 -->
 
 # Cowork report — scanner scope bypass
 
-Pair: `docs/COWORK_BRIEF_scanner_scope_bypass.md`. Session 2026-08-03, on top of
-`86fca68`. **BUILD, then STOP — nothing committed; everything staged for Tim's
-review.** Ran in a Cowork sandbox with the git clone only — no tailnet reach to
-the knight, gaming rig or work rig, so Task 3's actual remediation is a runbook,
-not an executed remediation. See "What this session could not do" below.
+Pair: `docs/COWORK_BRIEF_scanner_scope_bypass.md`. Built 2026-08-03 on top of
+`86fca68`, committed as `f5a14d2` ("fix: file_census and workspace_scanner now
+honor the Scope data-dir guard"). **Fully walked** — the code fix, the
+registry-iterating tester, and Task 3's actual remediation were all executed
+and independently re-measured across the gaming rig, the work rig and the
+knight in the same session that produced this report. Task 3 started as a
+runbook (this session's Cowork sandbox has no tailnet reach to any of the
+three machines) and was then walked live, over chat, with Tim running every
+command on the real rigs.
 
-`python verify.py` — **GREEN**, 6 auditors + **54** testers at this build.
-*(Frozen build-time count, written `**N**` per the estate's convention for
-historical gate figures.)*
+`python verify.py` — **GREEN** on the gaming rig at commit time, 6 auditors +
+**54** testers. *(Frozen build-time count, written `**N**` per the estate's
+convention for historical gate figures. The work rig shows one pre-existing,
+unrelated `tester_serve` failure — see "Found during the live walk" below;
+not caused by and not blocking this round.)*
 
 | Task | State | What landed |
 |---|---|---|
 | Precondition — DECISIONS 0029 | **already ratified** | `Status: accepted` found in the working tree; not re-drafted |
-| 1 — scope structural for `file_census` / `workspace_scanner` | **green** | both now consult `Scope`; per-scanner import kept, reasoning below |
-| 2 — the tester iterates the registry | **green** | `tester_scanner_scope` now runs every `registry.SCANNERS` entry against a planted data dir |
-| 3 — measure + remediate the knight's deposits | **runbook only** | `docs/RUNBOOK_scope_bypass_remediation.md` — needs a machine with tailnet access |
+| 1 — scope structural for `file_census` / `workspace_scanner` | **green, walked** | both now consult `Scope`; per-scanner import kept, reasoning below |
+| 2 — the tester iterates the registry | **green, walked** | `tester_scanner_scope` now runs every `registry.SCANNERS` entry against a planted data dir; red/green verified by hand on both scanners |
+| 3 — measure + remediate the knight's deposits | **done, walked live** | both estates re-measured clean on the knight after remediation; see results below |
 | 4 — restate the disclosure boundary | **green** | field-by-field table below |
 
 ---
@@ -127,35 +134,96 @@ both fixes in place, 6 auditors + 54 testers.
 
 ---
 
-## Task 3 — measured on paper, not executed here
+## Task 3 — measured, remediated, re-measured clean
 
-**This Cowork session has the git clone only.** `hostname` inside its sandbox
-is `claude`, not `LucasGoonPC`, `10280L` or `l5gn-castle` — there is no tailnet
-route to the knight from here, so the actual measure-rebuild-redeposit-remove
-sequence cannot run in this session.
+Started as `docs/RUNBOOK_scope_bypass_remediation.md` (this Cowork sandbox has
+no tailnet route to any of the three rigs), then walked live: Tim ran every
+step on the gaming rig, the work rig and the knight, pasting output back for
+each check before the next step ran. The runbook held up with two amendments,
+both real findings the brief didn't anticipate.
 
-Per the answer given when this was raised: **`docs/RUNBOOK_scope_bypass_remediation.md`**
-is written so the sequence is copy-paste ready on whichever machine has the
-access. It carries:
+### Finding: `run.py build` without `--fresh` silently ships stale scans
 
-- a **before** measurement command (the brief's own substring-count technique,
-  extended to include `Chronicler_Backup` per the diagnosis table, with an
-  explicit instruction to flag — not silently absorb — a nonzero count that
-  isn't already nested under a recognised data-dir ancestor);
-- rebuild-on-fixed-producer steps for both rigs, each gated on a **local**
-  zero-count check before depositing anything;
-- the DECISIONS 0029 deletion step on the knight (`estate.json`,
-  `deposit_manifest.json`, and the single `history/estate-2026-07-25.json` per
-  estate — **exactly two bundles, exactly one snapshot each**, matching the
-  brief's own dating: both from one commit, one morning, and no deposit since);
-- deposit + consume, then the **same** measurement re-run against the fresh
-  landing, so the remediation is confirmed clean rather than merely claimed.
+`report.py`'s `_scan_one_project` reuses a per-project, per-scanner cache file
+(`data/<scanner>/<project>.json`) **whenever one already exists on disk**, with
+no check on whether the scanner's code changed since it was written — and the
+`scanned <name>` progress line prints identically whether it actually re-ran
+the scanner or silently served the cache. On the gaming rig, the first
+post-fix `build` (no `--fresh`) looked clean by the blunt substring count but
+still carried real data-dir paths from four projects' pre-fix caches, caught
+only by re-running the precise path-aware leak check (below). `--fresh` on
+both rigs resolved it; the runbook now calls this out explicitly so it isn't
+rediscovered the hard way on a future round.
 
-The dated exposure is not re-derived here (brief's own instruction): `6d09eb3`
-(scope discipline) landed 09:32:56; `1951cfe` (carrying the guard, but not in
-the two unwired scanners) is 09:35:22; the two violating deposits followed 25
-and 48 minutes later. No deposit has happened since (rig built on `a202ba0`,
-never pushed), so remediation is bounded and small, not a backlog.
+### Finding: an undocumented third tainted snapshot
+
+The brief's dating — "exactly two bundles, one commit, one morning, no
+deposit since" — was accurate for the *current* deposits but missed an older
+history snapshot. Before deleting anything, the knight's `history/` dirs were
+inspected rather than trusted to match the brief:
+
+| snapshot | disposition | measured |
+|---|---|---|
+| `personal/history/estate-2026-07-17.json` | **kept — clean** | 0 matches |
+| `personal/history/estate-2026-07-25.json` | removed (brief's finding) | not re-measured before delete; superseded per 0029 regardless |
+| `work/history/estate-2026-07-21.json` | **removed — newly found, tainted** | 5,812 matches (`raw_gemini_files` 993, `chat_threads` 2410, `vault_staging` 1404, `Takeout` 993, `raw_claude_files` 12) |
+| `work/history/estate-2026-07-25.json` | removed (brief's finding) | not re-measured before delete; superseded per 0029 regardless |
+
+Three snapshots removed, not two; one older one kept because it measured
+genuinely clean rather than being deleted on the assumption that "older than
+the fix" automatically means "tainted." DECISIONS 0029 was applied identically
+to the newly-found snapshot — replaced/removed, not edited.
+
+### Before/after, both estates
+
+| estate | before (personal deposit table, brief's own count) | after remediation, on the knight |
+|---|---:|---|
+| `estates/personal/estate.json` | **9,159** matches | **0** real leaks — see caveat below |
+| `estates/work/estate.json` | **2,328** matches | **0** |
+
+**Personal estate caveat, checked rather than assumed:** the whole-file
+substring count on the fresh personal deposit read `23 total
+(raw_claude_files: 1, Chronicler_Backup: 22)`, not zero. Re-run through the
+precise, path-aware check (parses the JSON, walks every `path` field, tests
+each with `is_data_dir_name` — the same check that cleared a false alarm on
+the work rig's whole-file count earlier in this round) returned `leaks: NONE`.
+`L5GN-Tools` is confirmed present in the personal estate's own project list
+(self-scanned, `is_project` root per DECISIONS 0020) — its own docs
+(`DECISIONS.md`, this brief/report/runbook) now discuss `raw_claude_files` and
+`Chronicler_Backup` extensively as their subject matter, correctly read by
+`doc_census`/`blast_radius`/`todo_adr_scanner`. No `Chronicler_Backup`-named
+directory was found outside a recognised `raw_*`/`*_files` ancestor on either
+estate, so `DATA_DIR_NAMES` needs no widening from this round's evidence —
+noted as checked, not assumed.
+
+### Two rig-specific findings, neither a regression from this round
+
+- **Work rig, `run.py config`:** the `L5GN` root briefly showed `(MISSING)` —
+  resolved before depositing; the rebuild went from 9 to 19 projects once
+  fixed.
+- **Work rig, `tester_serve` RED, permanently, until reconciled separately:**
+  an uncommitted, deliberate local edit to `l5gntools/viewer.py` on that
+  machine (confirmed via `git diff`, not a shadow import — `__file__` points
+  at the correct repo path) routes the Datasette invocation through
+  `[sys.executable, "-m", "datasette", ...]` instead of a bare `datasette`
+  call, working around that endpoint's policy blocking the `datasette.exe`
+  shim while `-m` still runs. Isolated to the Datasette read-surface
+  (DECISIONS 0007/0013); confirmed untouched by this round's diff and by
+  `git log` on `viewer.py` (last touched in `48ce16d`, long before this
+  round); does not affect `file_census`, `workspace_scanner`, `build`,
+  `deposit` or `consume`. **Not fixed here** — worth its own small follow-up
+  (teach `datasette_argv`/`datasette_available` to prefer `-m` when the shim
+  isn't runnable, or update `tester_serve` to accept both shapes) so this rig
+  stops carrying a permanent uncommitted diff and a permanently-red gate.
+
+### Confirmed, not merely claimed
+
+Final measurement on the knight, post-`consume`: `work/estate.json` — 0;
+`work/history/estate-2026-08-03.json` — 0; `personal/estate.json` — 23
+substring / 0 real (see caveat above); `personal/history/estate-2026-07-17.json`
+— 0 (kept); `personal/history/estate-2026-08-03.json` — 23 substring / 0 real.
+Both `deposit_manifest.json`s report `manifest_verified: true` implicitly via
+successful `consume` (sha256 match). Task 3 is closed.
 
 ---
 
@@ -219,27 +287,32 @@ Not touched: `docs/DECISIONS.md` (0029 was already in the working tree,
 
 ---
 
-## What this session could not do
+## What was deliberately left alone
 
-- **No deposit was measured, rebuilt or removed.** This sandbox has the git
-  clone and nothing else — no `LucasGoonPC`, `10280L` or `l5gn-castle` reach.
-  The runbook exists so that gap doesn't become a blocker; the actual
-  before/after counts still need to come from a walk on the real machines.
 - **The knight's stale local `data/estate.json`** — explicitly out of scope
   per the brief (it never travels; fixed by a re-census after the scanners
-  are, which this session's fix now enables).
-- **No `Chronicler_Backup` code change.** It appears in the brief's own
-  diagnosis table as a substring match; whether it names a top-level directory
-  outside the `raw_*`/`*_files` families that `DATA_DIR_NAMES` should also
-  recognise is a question the runbook asks the operator to check with real
-  data, not something this session had evidence to decide either way.
+  are, which this session's fix now enables). Still 8 days stale; not
+  rebuilt as part of this round.
+- **No `DATA_DIR_NAMES` change.** `Chronicler_Backup` was checked, live,
+  against both estates post-remediation (see Task 3) and did not name an
+  unrecognised top-level directory on either — the substring hits were
+  `L5GN-Tools`'s own prose. `DATA_DIR_NAMES` is left as-is on the evidence
+  gathered; the question is closed for this round, not left open.
+- **`tester_serve`'s work-rig divergence** — real, understood, deliberately
+  not fixed here (see Task 3). Isolated to a different subsystem.
+- **The `run.py build` cache-staleness gap** (no invalidation on toolkit
+  version/commit) is noted in the runbook and in Task 3 above, but not fixed
+  in this round — it's a correctness hazard for *any* future scanner fix, not
+  specific to this one, and deserves its own look rather than a patch bolted
+  on under this brief's scope.
 
 ---
 
 ## UAT
 
-Walk-sheet: `docs/UAT_scanner_scope_bypass.md`. The results log needs a `uat:`
-stamp naming the commit once walked (`docs/README.md` §3) — no `gate=` field,
-per the brief. An acknowledgement line belongs on
+Walk-sheet: `docs/UAT_scanner_scope_bypass.md`, fully walked 2026-08-03.
+Results log stamp: `<!-- uat: commit=f5a14d2 dirty=false host=multi-rig
+walked=2026-08-03 -->` (no `gate=` field, per the brief). An acknowledgement
+line belongs on
 `docs/investigation/2026-08-02_knight-roles_claude_2-response.md` (K3/K4) once
 this lands.

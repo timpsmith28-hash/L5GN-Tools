@@ -83,10 +83,22 @@ about.
 
 ## Step 2 ▸ GAMING — rebuild the personal estate on the fixed producer
 
+**Use `--fresh`, not a plain `build`.** `run.py build` defaults to
+`resume=True`, which reuses each scanner's per-project cache file at
+`data/<scanner_name>/<project>.json` **if one already exists on disk** — there
+is no check on whether the scanner's code changed since that cache was
+written, and the `scanned <name>` log line prints identically whether it
+actually re-ran the scanner or just read the stale cache back. A rig with any
+prior build will silently keep pre-fix `file_census`/`workspace_scanner`
+output unless the cache is bypassed. This is exactly what happened on the
+gaming rig during this round's own verification: the first `build` after the
+fix looked clean by eye but still carried real data-dir paths from four
+projects' stale caches, found by re-running the leak check below.
+
 ```powershell
 cd C:\Users\timps\Documents\GitHub\L5GN-Tools
 python run.py config          # confirm host, role: producer, estate: personal
-python run.py build
+python run.py build --fresh
 ```
 
 **Verify locally before depositing anything** — the same substring check, run
@@ -97,8 +109,16 @@ python -c "import pathlib; t=pathlib.Path('data/estate.json').read_text(encoding
 ```
 
 **Expect `total 0`.** If it isn't zero, stop — do not deposit a bundle that
-fails its own measurement. Re-check `verify.py` and that the build actually
-picked up the fixed scanners (`git log --oneline -1` should show the fix commit).
+fails its own measurement. Re-check `verify.py`, that the build actually
+picked up the fixed scanners (`git log --oneline -1` should show the fix
+commit), and that `--fresh` was actually passed (a plain `build` will look
+identical in its output either way — the cache hit is silent).
+
+For a sharper check than the whole-file substring count — one that only looks
+at `file_census`/`workspace_scanner` path fields via `is_data_dir_name`,
+rather than counting every mention anywhere (including this toolkit's own
+docs/tests, if it's configured as a self-scanned project on this rig) — see
+the report's precise leak-check script.
 
 ---
 
@@ -109,7 +129,7 @@ cd D:\Work\Github\L5GN-Tools
 git pull origin main
 python verify.py               # GREEN, same fix commit as gaming rig
 python run.py config            # confirm host, role: producer, estate: work
-python run.py build
+python run.py build --fresh     # --fresh: this rig's data/ cache predates the fix too
 python -c "import pathlib; t=pathlib.Path('data/estate.json').read_text(encoding='utf-8'); names=['raw_claude_files','raw_gemini_files','chat_threads','vault_staging','Takeout']; c={n:t.count(n) for n in names if t.count(n)}; print('total', sum(c.values()), c)"
 ```
 
