@@ -10,7 +10,8 @@ from ..contract import SAFE
 import ast
 from pathlib import Path
 
-from ..common import iter_files, is_vendored, rel
+from ..common import iter_files, rel
+from ._scope import Scope
 
 NAME = "workspace_scanner"
 DESCRIPTION = "AST code inventory: per-file classes, functions and imports."
@@ -30,14 +31,20 @@ def _module_imports(tree: ast.AST) -> list[str]:
 
 
 def scan(target: Path) -> dict:
+    # Adopts the shared Scope filter in full -- not just the data-dir slice --
+    # to match its sibling import_scanner exactly: both are plain content
+    # scanners over the same `iter_files(target, suffixes=(".py",))` walk, so
+    # there is no reason for one to honour gitignore/vendored/data-dir and the
+    # other to honour only vendored. The vendored-exclusion count below is now
+    # read from the same accounting the other scope-wired scanners report,
+    # rather than a second, scanner-local counter.
+    scope = Scope(target)
     modules: list[dict] = []
     classes: list[str] = []
     n_files = n_classes = n_funcs = 0
-    vendored_files = 0
 
     for path in iter_files(target, suffixes=(".py",)):
-        if is_vendored(path):
-            vendored_files += 1
+        if scope.skip(path):
             continue
         n_files += 1
         try:
@@ -63,9 +70,10 @@ def scan(target: Path) -> dict:
     return {
         "project": target.name,
         "py_files": n_files,
-        "vendored_py_files_excluded": vendored_files,
+        "vendored_py_files_excluded": scope.skipped["vendored"],
         "classes": n_classes,
         "functions": n_funcs,
         "top_classes": top,
         "modules": modules,
+        "scope": scope.report(),
     }

@@ -234,7 +234,14 @@ def _has_commits(target: Path) -> bool:
 
 def scan(target: Path) -> dict:
     target = Path(target)
-    git = _git_lookup(target)
+    # Local import: `_scope` imports `_git_lookup`/`status_of` from this module
+    # (it reuses file_census's one git implementation rather than adding a
+    # second one), so a module-level `from ._scope import Scope` here would be
+    # a circular import at load time. Deferred to call time, when both modules
+    # are fully initialised.
+    from ._scope import Scope
+    scope = Scope(target)
+    git = scope.git
 
     directories: dict[str, dict] = {}
     files: list[dict] = []
@@ -311,6 +318,13 @@ def scan(target: Path) -> dict:
         # never enters a venv and the mass is paid for exactly once.
         keep: list[str] = []
         for name in sorted(dirnames):
+            # Data/chat directories are pruned before anything else sees them --
+            # not rolled up as mass, not counted by file, not walked at all. A
+            # data dir is out of scope even when a project forgot to gitignore
+            # it (the wall doctrine `_scope` states), so this check must win
+            # over `_classify_dir` rather than fall through to it.
+            if scope.skip_dir(name):
+                continue
             child_rel = f"{reldir}/{name}" if reldir else name
             reason = _classify_dir(name, child_rel, git)
             if reason is None:
@@ -417,6 +431,7 @@ def scan(target: Path) -> dict:
         # `is_git: true`, `.gitignore` present, 0 commits, 117 at-risk files. An
         # initialised repo protects nothing until something is committed.
         "at_risk_note": _at_risk_note(target, git),
+        "scope": scope.report(),
     }
 
 

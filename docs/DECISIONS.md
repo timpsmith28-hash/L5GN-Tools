@@ -1035,3 +1035,15 @@ The pre-commit gate remains the last word, because a commit is still a human
 act. A surface that can stage but not commit cannot produce an unreviewed
 change — the worst case is a working tree the operator must clean up, not a
 laundered history.
+
+---
+
+## 0029 — A deposit found to carry more than its contract is replaced, never edited
+
+**Date:** 2026-08-02 · **Status:** accepted · Builds on: 0010 (the wall), 1.A2 (leaked paths are a defect), 0013 (snapshots are frozen by construction) · Source: the 2026-08-02 scanner-scope finding
+
+**Context.** Two scanners bypassed the data-directory guard, so every deposit taken since carries thousands of paths from inside raw export trees. The artefacts are self-describing and sha256-manifested (the deposit contract), so a deposit cannot be edited in place without invalidating the manifest that makes it trustworthy — and editing it would also destroy the record of what was actually produced on that date.
+
+**Decision.** A deposit discovered to violate its own contract is replaced by a fresh deposit from a fixed producer, and the superseded bundle is removed — never edited, never partially scrubbed. The consumer's per-estate history/ is treated the same way: a superseded snapshot is dropped whole.
+
+**Consequences.** The estate loses the affected history window rather than keeping a doctored version of it, which is the same trade docs/README.md §3 makes for archived documents — testimony is either kept intact or removed, not corrected. The alternative, an in-place scrub, produces a manifest-valid bundle whose contents nobody can date, which is worse than a gap.

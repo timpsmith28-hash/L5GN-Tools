@@ -90,6 +90,25 @@ class Scope:
         self.skipped[reason] += 1
         return True
 
+    def skip_dir(self, name: str) -> bool:
+        """True when a bare directory *name* (not a full path) is a data
+        directory -- for callers that prune whole subtrees before walking them
+        (``file_census``) rather than filtering individual file paths one at a
+        time. Only the data-dir reason applies here: a directory-pruning caller
+        already has its own git-status classification for gitignored/vendored
+        (that is precisely the tier system `file_census` reports), so this is
+        deliberately narrower than :meth:`skip`.
+
+        Recorded as one skip per pruned directory, not one per file inside it --
+        counting the files would mean walking the tree, which is the thing this
+        guards against. The doctrine is "we did not read your chat archive", not
+        "we read it only far enough to count it".
+        """
+        if is_data_dir_name(name):
+            self.skipped["data_dir"] += 1
+            return True
+        return False
+
     def report(self) -> dict:
         """The skip census a scanner embeds so the exclusion is visible, not silent."""
         return {
