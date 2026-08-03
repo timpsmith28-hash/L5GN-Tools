@@ -1047,3 +1047,74 @@ laundered history.
 **Decision.** A deposit discovered to violate its own contract is replaced by a fresh deposit from a fixed producer, and the superseded bundle is removed — never edited, never partially scrubbed. The consumer's per-estate history/ is treated the same way: a superseded snapshot is dropped whole.
 
 **Consequences.** The estate loses the affected history window rather than keeping a doctored version of it, which is the same trade docs/README.md §3 makes for archived documents — testimony is either kept intact or removed, not corrected. The alternative, an in-place scrub, produces a manifest-valid bundle whose contents nobody can date, which is worse than a gap.
+
+---
+
+## 0030 — Shape is generated; rationale is authored. ARCHITECTURE.md keeps the half that can't be derived
+
+**Date:** 2026-08-02 · **Status:** accepted · **Amends:** 0016 (does not
+supersede it) · **Builds on:** `docs/README.md` §1's governing rule ·
+**Source:** the 2026-08-02 architecture drift audit
+
+**Context.** `ARCHITECTURE.md` holds two kinds of content. **Rationale** — why
+the `l5gntools/` ↔ `chronicler/` boundary is capability and not custody, why
+the `--no-syncback` belt was traded for the `render_log` base — cannot be
+derived from anything and is the reason the document exists. **Shape** — which
+modules exist, which routes require what, which tables a module writes, what
+the gate is composed of — is derivable from the tree, and is the half that
+drifted. All twelve findings of the 2026-08-02 audit are shape claims in a
+rationale document.
+
+`docs/README.md` §1 already rules on this: *a document earns its place by
+holding something that can't be derived.* Status is derived, so it does not
+live in `docs/`. Shape is derived by the same argument and nobody had noticed.
+
+**Decision.** The two halves are separated:
+1. **Shape is generated** by a scanner, from the tree, and rendered to a
+   committed, machine-owned document. It is never hand-edited.
+2. **`ARCHITECTURE.md` keeps the rationale** and cites the generated document
+   for shape. It stops asserting module lists, route tables, write targets and
+   gate composition — the claims it cannot keep current.
+3. **0016's resolution stands.** ARCHITECTURE remains the replacement for the
+   never-located `chronicler_design_and_intent_v2.md`; what it is *authoritative
+   for* narrows to rationale, with shape delegated to a document that cannot
+   disagree with the code because it is produced from it.
+
+**Consequences.** The A1/A4/A8 failure class becomes structurally impossible
+rather than a thing to remember. The cost is a generated file in the repo and a
+gate check that refuses a stale one — the lockfile pattern, with the lockfile's
+familiar friction: adding a route means regenerating. That friction is the
+feature. A document that *can* silently disagree with the code eventually does.
+
+---
+
+## 0031 — A non-gating check surface reports findings and never issues a verdict
+
+**Date:** 2026-08-03 · **Status:** accepted · **Builds on:** 0022 (provenance
+for actions), `docs/README.md` §3 (the gate polices where an acceptance claim
+came from, never whether it was earned) · **Source:** the UAT-sidebar round
+
+**Context.** `verify.py` answers *"does the code work"* and gates commits. A
+human walking a sheet answers *"does it do what was asked"* and closes a pair.
+Between them sits a class of check that is fully deterministic yet needs a
+rendered surface and minutes rather than seconds — too slow and too stateful
+for the pre-commit hook, too mechanical to be a human's judgement. Today those
+checks live on walk-sheets, where they inflate the human's queue with work no
+human needs to do.
+
+**Decision.** A **witness** is a deterministic check surface that runs outside
+the commit gate and:
+1. asserts **rendered or observed state** against an expected state;
+2. emits **findings**, never a verdict — it cannot mark a UAT item passed, and
+   nothing it produces closes a pair;
+3. **never gates a commit.** The Windows pre-commit hook remains the only gate.
+
+A witness failure means *"the surface did not render what the code claims"* —
+not *"the code is broken"* (`verify.py`'s job) and not *"this isn't what I
+wanted"* (the walk-sheet's job).
+
+**Consequences.** Two authorities can never disagree about green, because only
+one of them is allowed to say it. The estate gains a place to put deterministic
+UI checks that is not the human's queue. The cost is a fourth artefact class to
+keep honest, which is why (2) is stated as a prohibition rather than a
+convention.
