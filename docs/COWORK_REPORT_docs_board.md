@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=a202ba0 -->
+
 # Cowork report — the docs board, read-only
 
 **Brief:** `docs/COWORK_BRIEF_docs_board.md`. **Implements:** DECISIONS 0027

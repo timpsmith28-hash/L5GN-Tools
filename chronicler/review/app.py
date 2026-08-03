@@ -45,10 +45,28 @@ try:
         # DECISIONS 0024: "not this project" for one (thread, candidate) pair.
         thread_id: str
         project_id: str
+
+    class UatEntry(BaseModel):
+        # One item's verdict + evidence (uat_sidebar Task 2). `evidence` is
+        # free text -- including pasted terminal output, which must survive
+        # verbatim, so nothing here trims or reformats it.
+        id: str
+        verdict: str
+        evidence: str = ""
+
+    class UatEmit(BaseModel):
+        # Task 3: emit the stamped results log. `mode` is None for a first
+        # attempt (the caller finds out here if a log already exists),
+        # "append" to add a new walk section under the original stamp.
+        stem: str
+        entries: list[UatEntry]
+        mode: str | None = None
 except ImportError:  # pydantic ships with fastapi; absent == web stack not installed
     Ruling = None  # type: ignore
     RulingBatch = None  # type: ignore
     Rejection = None  # type: ignore
+    UatEntry = None  # type: ignore
+    UatEmit = None  # type: ignore
 
 
 def available() -> bool:
@@ -326,6 +344,42 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
             return docs_board.read_card_document(doc_id)
         except DocumentRefused as exc:
             status = 404 if exc.reason == "unknown_document" else 403
+            raise HTTPException(status_code=status,
+                                detail={"reason": exc.reason, "detail": exc.message})
+
+    # ---- the UAT sidebar (0028: this is the one write this slice performs) --
+    # Both routes are ungated for the same reason the board routes are: this
+    # is this repository's own `docs/`, needing no vault and no estate build.
+
+    @app.get("/api/uat/sheet")
+    def uat_sheet(stem: str):
+        """One walk-sheet's items, plus the unticked-but-walked finding for
+        this stem, if any (docs_board's B1/B2, surfaced here on the item
+        view too). Read-only; records nothing."""
+        from . import uat_sidebar
+        from .estate_data import DocumentRefused, REPO_ROOT
+        try:
+            return uat_sidebar.sheet_view(REPO_ROOT, stem)
+        except DocumentRefused as exc:
+            status = 404 if exc.reason in ("no_sheet", "bad_stem") else 403
+            raise HTTPException(status_code=status,
+                                detail={"reason": exc.reason, "detail": exc.message})
+
+    @app.post("/api/uat/emit")
+    def uat_emit(payload: UatEmit):
+        """Task 3: emit `docs/UAT_<stem>_results.md`, staged (0028) and never
+        committed. Refuses (rather than overwrites) an existing log unless
+        `mode="append"` is given explicitly."""
+        from . import uat_sidebar
+        from .estate_data import DocumentRefused, REPO_ROOT
+        entries = [e.dict() for e in payload.entries]
+        try:
+            return uat_sidebar.emit_results_log(REPO_ROOT, payload.stem, entries,
+                                                mode=payload.mode)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except DocumentRefused as exc:
+            status = 404 if exc.reason in ("no_sheet", "bad_stem") else 403
             raise HTTPException(status_code=status,
                                 detail={"reason": exc.reason, "detail": exc.message})
 

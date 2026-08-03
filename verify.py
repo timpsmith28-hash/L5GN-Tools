@@ -76,6 +76,7 @@ TESTERS: list[str] = [
     "tests.tester_scrape_stage",
     "tests.tester_review",
     "tests.tester_docs_board",
+    "tests.tester_uat_sidebar",
 ]
 
 
