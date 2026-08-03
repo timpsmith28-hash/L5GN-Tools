@@ -16,7 +16,7 @@ These are maintained. If one contradicts the code, that's a bug in the doc.
 | Doc | Holds | Goes stale when |
 |---|---|---|
 | `INTENT.md` | Why the system is worth building. Wants, not facts. | The reason changes — not on a schedule |
-| `ARCHITECTURE.md` | What the system *is*, as built. The authoritative shape reference (DECISIONS 0016) | The shape changes |
+| `ARCHITECTURE.md` | What the system *is*, as built — and **why the boundaries sit where they do** | The shape changes |
 | `DECISIONS.md` | Append-only *why* behind each ruling. Never edited; superseded by a later entry | Never — entries are frozen by construction |
 | `KNIGHT_PLAYBOOK.md` | Deploy + operate the **consumer** (the knight). Operator-facing runbook | The deploy steps change |
 | `PRODUCER_PLAYBOOK.md` | Deploy + operate a **producer** rig. The other half of the runbook | The deploy steps change |
@@ -174,8 +174,10 @@ Rules:
 - **Never maintained, never corrected, never graduates to core.** A captured
   exchange is evidence; editing it destroys the thing it's kept for. Wrong turns
   and abandoned reasoning stay in.
-- **No stamps.** Investigations aren't archived, because they were never live.
-  They're born frozen.
+- **No archive stamp.** Investigations aren't archived, because they were never
+  live. They're born frozen. The one stamp they may carry is the
+  **acknowledgement stamp** below, which records what an investigation *caused*
+  and never touches what it says.
 - **Nothing here asserts current truth.** A core doc may cite an investigation as
   the source of a decision; it may not defer to it for what is true now.
 - Outside `auditor_doc_claims`' scan (`docs/*.md` is non-recursive), for the same
@@ -197,6 +199,42 @@ a field, underscores between fields.
 `chronicler_investigation_2026-07-18.md` predates this convention and is archived
 as half of a completed pair rather than moved here — it was a commissioned report
 against a brief, not a captured exchange.
+
+### The acknowledgement stamp
+
+An investigation records what was found. Nothing recorded whether anything *came
+of it* — that answer lived only in the thread, which then evaporated. So a
+response file may carry, as its **first line, above the `# Title`**:
+
+```
+<!-- actioned: YYYY-MM-DD · <finding-id> · <commit-sha|DECISIONS NNNN> · <one line: what was done> -->
+```
+
+This does not contradict "never maintained." It is the same move §3 makes for
+archived docs — *the body is evidence; say what happened to it in the stamp
+instead.* An acknowledgement is metadata **about** the document, not a correction
+**of** it, and it lives above the title where the body is not. The archive stamp
+is terminal and asserts a disposition; this one asserts nothing about the
+investigation's status. The file never moves.
+
+Rules:
+
+1. **Append-only, one line per actioned finding.** Never edited, never removed. A
+   reverted action is another line, not a deletion.
+2. **Strictly backwards-looking.** It records what *was* done. A line saying what
+   *should* be done is the stale forward-look that killed the handoffs (§5) and is
+   a violation.
+3. **The anchor must resolve** — a commit sha in this repo, or a DECISIONS entry
+   number. Same bar as the uat stamp's `commit=` and the `gate-frozen` marker: an
+   unresolvable anchor is a violation, not a silent pass.
+4. **The body is never touched.** Not the numbers, not the reasoning, not a
+   hypothesis the investigation itself disproved.
+5. **No actioned lines is a normal state, not a failure.** Most findings are
+   recorded, not fixed. `<!-- actioned: (none yet) -->` is complete and honest.
+
+Not enforced by the gate (§6). Making it machine-checkable — resolving each
+anchor the way `auditor_uat_stamp` resolves `commit=` — is a small auditor and a
+separate decision; do not assume it by writing the stamp.
 
 ## 5. Do not recreate
 
