@@ -13,17 +13,23 @@ result, not merely "ready to walk."
 
 ## 1 — `file_census` / `workspace_scanner` skip data directories
 
-- [ ] **1.1.** `file_census.scan()` on a project with a `raw_claude_files/` (or
+- [x] **1.1.** `file_census.scan()` on a project with a `raw_claude_files/` (or
   any `is_data_dir_name` match) directory never lists a path under it in
   `directories[]`, `files[]`, `at_risk[]`, `mass[]`, `outliers[]` or
-  `basenames_beyond_cap`.
-- [ ] **1.2.** `workspace_scanner.scan()` on the same project never lists a
+  `basenames_beyond_cap`. **Walked by hand**, gaming rig: a manual
+  `ManualCheck` fixture with `src/real.py` + `raw_claude_files/{conversations.json,leak.py}`
+  scanned directly (not via the tester) — `file_census leak: False`.
+- [x] **1.2.** `workspace_scanner.scan()` on the same project never lists a
   `.py` file under that directory in `modules[]`, and no class/function name
-  from inside it appears in `top_classes`.
-- [ ] **1.3.** Both scanners' output carries a `"scope"` block
+  from inside it appears in `top_classes`. **Walked by hand**, same fixture —
+  `workspace_scanner leak: False`; `Leaked class present in top_classes?: False`
+  (the planted `class Leaked` inside `raw_claude_files/leak.py` never got
+  parsed).
+- [x] **1.3.** Both scanners' output carries a `"scope"` block
   (`{"skipped_paths": N, "skipped_by_reason": {...}}`), same shape as
   `import_scanner` / `env_scanner` / `blast_radius` / `doc_census` /
-  `duplicate_finder` / `todo_adr_scanner`.
+  `duplicate_finder` / `todo_adr_scanner`. **Walked by hand** — both printed
+  `{'skipped_paths': 1, 'skipped_by_reason': {'data_dir': 1}}`.
 - [x] **1.4.** A fresh `run.py build` on `LucasGoonPC` produces an
   `estate.json` with **zero** data-directory paths in `at_risk[]`, `files[]`,
   `directories[]` and `modules[]`. **Walked** — required `--fresh`, not a
