@@ -57,6 +57,7 @@ import argparse
 import json
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from l5gntools.config import machine
@@ -119,6 +120,23 @@ class TranscriptFile:
     encoded_cwd: str
     session_uuid: str    # from the filename, before parsing confirms it
     is_sidechain: bool   # under a subagents/ folder -- a subagent's own transcript
+    # The outer `local_<uuid>` folder name -- the **conversation** id, what
+    # appears in the Cowork UI. None for the CLI store, which has no such
+    # grouping folder. Distinct from `session_uuid` (the inner, per-file
+    # agent-session id: there can be several per conversation -- resumes,
+    # `subagents/agent-*.jsonl`). COWORK_BRIEF_knowledge_curator.md K1: one
+    # conversation -> N transcript files, joined on this id, never on `cwd`
+    # (a Cowork session's `cwd` encodes its own `local_<session-id>` path,
+    # not the project folder -- no join signal there at all).
+    conversation_id: str | None = None
+    # The Cowork store's `<project-id>` path segment, one level above
+    # `local_<uuid>` -- the store's own on-disk project grouping, distinct
+    # from (and available before) whatever `config/mcf_conversation_map.tsv`
+    # later resolves a conversation to. None for the CLI store. K0 uses this
+    # to tell "these two openers collided but belong to the same on-disk
+    # project" from "different projects" without depending on the curated
+    # map already existing -- the map is what K0 is bootstrapping.
+    cowork_project_dir: str | None = None
 
 
 def _safe_subdirs(path: Path, errors: list | None, predicate=None) -> list[Path]:
@@ -161,10 +179,16 @@ def _safe_subdirs(path: Path, errors: list | None, predicate=None) -> list[Path]
     return out
 
 
-def _iter_projects_tree(projects_root: Path, store: str, errors: list | None = None):
+def _iter_projects_tree(projects_root: Path, store: str, errors: list | None = None,
+                          conversation_id: str | None = None,
+                          cowork_project_dir: str | None = None):
     """Yield a TranscriptFile for every *.jsonl under a `.claude/projects`-shaped
     tree: `<projects_root>/<encoded-cwd>/<uuid>.jsonl` and
     `<projects_root>/<encoded-cwd>/subagents/agent-*.jsonl`.
+
+    ``conversation_id`` is passed through unchanged onto every TranscriptFile
+    yielded -- the caller (``discover_cowork_store``) is the only one who
+    knows the outer `local_<uuid>` folder name; this function just carries it.
 
     Anything that isn't a directory under ``projects_root`` (e.g. a stray
     file) is skipped, not errored on -- only ``.jsonl`` under an encoded-cwd
@@ -199,11 +223,15 @@ def _iter_projects_tree(projects_root: Path, store: str, errors: list | None = N
                 encoded_cwd=cwd_dir.name,
                 session_uuid=jsonl_path.stem,
                 is_sidechain=is_side,
+                conversation_id=conversation_id,
+                cowork_project_dir=cowork_project_dir,
             )
 
 
 def discover_cli_store(root: Path, errors: list | None = None):
-    """The plain CLI store: `<root>/<encoded-cwd>/<uuid>.jsonl`."""
+    """The plain CLI store: `<root>/<encoded-cwd>/<uuid>.jsonl`. No
+    conversation grouping folder exists in this store, so
+    ``conversation_id`` is left None -- a CLI session is its own conversation."""
     yield from _iter_projects_tree(_winlong(root), "cli", errors)
 
 
@@ -241,7 +269,16 @@ def discover_cowork_store(root: Path, errors: list | None = None):
                 project_dir, errors, predicate=lambda p: p.name.startswith("local_")
             ):
                 nested = session_dir / ".claude" / "projects"
-                yield from _iter_projects_tree(nested, "cowork", errors)
+                # session_dir.name IS the conversation id (`local_<uuid>`) --
+                # the stable key K0/K1 curate the map on. Excluding
+                # non-session directories (`rpm`, `.project-cache`) is done
+                # by this same `local_` prefix predicate above, never by a
+                # denylist (brief: a denylist goes stale the first time the
+                # app adds a directory).
+                yield from _iter_projects_tree(
+                    nested, "cowork", errors, conversation_id=session_dir.name,
+                    cowork_project_dir=project_dir.name,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +292,8 @@ class ParsedSession:
     encoded_cwd: str
     path: Path
     is_sidechain: bool = False
+    conversation_id: str | None = None  # local_<uuid> folder; None for CLI store
+    cowork_project_dir: str | None = None  # Cowork store's <project-id> segment
     title: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
@@ -311,6 +350,8 @@ def parse_session(tf: TranscriptFile) -> ParsedSession:
     sess = ParsedSession(
         thread_id=tf.session_uuid, store=tf.store, encoded_cwd=tf.encoded_cwd,
         path=tf.path, is_sidechain=tf.is_sidechain,
+        conversation_id=tf.conversation_id,
+        cowork_project_dir=tf.cowork_project_dir,
     )
     custom_title: str | None = None
     ai_title: str | None = None
@@ -378,6 +419,184 @@ def parse_session(tf: TranscriptFile) -> ParsedSession:
         if first_user:
             sess.title = (first_user[:80] + "…") if len(first_user) > 80 else first_user
     return sess
+
+
+# ---------------------------------------------------------------------------
+# Conversation grouping -- COWORK_BRIEF_knowledge_curator.md K1/K2.
+#
+# A Cowork *conversation* (what the UI shows, and the curated join key) can
+# be backed by several transcript *files*: the top-level session plus any
+# `subagents/agent-*.jsonl` sidechains, plus a resume's own new uuid file
+# under the same `local_<uuid>` folder. This groups ParsedSession objects
+# back into conversations and resolves each one's real time, per the
+# brief's three-source fallback, naming which source was used. Ordering by
+# a relative UI label ("yesterday") or by file-listing order is explicitly
+# ruled out (COWORK_BRIEF_knowledge_curator.md stop conditions) -- both are
+# display text or filesystem happenstance, neither is "what actually
+# happened".
+# ---------------------------------------------------------------------------
+
+def _parse_iso(ts: str | None):
+    """Best-effort ISO-8601 -> aware datetime. None on anything that doesn't
+    parse -- never raises, per the module's "listed, never swallowed" rule
+    applied to timestamps: a bad timestamp is a source to fall back away
+    from, not a crash."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+@dataclass
+class Conversation:
+    conversation_id: str            # local_<uuid>, or "cli:<session_uuid>" for a CLI session
+    sessions: list                  # ParsedSession objects belonging to this conversation
+    real_time: str | None           # ISO-8601 UTC, best available; None if unresolved
+    real_time_source: str | None    # "last_message_timestamp" | "file_mtime" | "folder_mtime"
+    excluded: bool = False
+    exclude_reason: str | None = None
+
+    @property
+    def cowork_project_dir(self) -> str | None:
+        """The on-disk Cowork project segment, read off any member session
+        (they all share one -- same `local_<uuid>` folder). None for a CLI
+        conversation."""
+        for s in self.sessions:
+            if s.cowork_project_dir is not None:
+                return s.cowork_project_dir
+        return None
+
+
+def _conversation_folder(sess) -> Path | None:
+    """The `local_<uuid>` directory a ParsedSession's file lives under, found
+    by walking its own ancestors rather than re-deriving the path from
+    pieces -- the folder is a name we already saw during discovery
+    (`conversation_id`), so this just re-locates it, it does not guess it."""
+    if sess.conversation_id is None:
+        return None
+    for parent in sess.path.parents:
+        if parent.name == sess.conversation_id:
+            return parent
+    return None
+
+
+def group_conversations(sessions) -> list[Conversation]:
+    """Group ParsedSession objects into Conversations keyed on
+    `conversation_id` (one conversation, N transcript files: the top-level
+    session, `subagents/agent-*.jsonl` sidechains, a resume's new file). A
+    CLI session carries no `conversation_id` (that grouping folder doesn't
+    exist in that store) and is its own conversation.
+
+    Real time, best source first, taking the newest across every file in
+    the conversation when several exist:
+      1. the newest message timestamp found in any of its files;
+      2. else the newest `.jsonl` file mtime;
+      3. else the `local_<uuid>` folder's own mtime.
+    A conversation for which none of the three resolves comes back with
+    ``excluded=True`` and a reason -- callers must exclude and name it, per
+    the brief, never sort it to the end by omission.
+    """
+    groups: dict[str, list] = {}
+    for s in sessions:
+        key = s.conversation_id or f"cli:{s.thread_id}"
+        groups.setdefault(key, []).append(s)
+
+    out: list[Conversation] = []
+    for key, group in sorted(groups.items()):
+        parsed_ts = [(_parse_iso(s.updated_at), s.updated_at) for s in group]
+        parsed_ts = [(dt, raw) for dt, raw in parsed_ts if dt is not None]
+
+        real_time: str | None
+        source: str | None
+        if parsed_ts:
+            parsed_ts.sort(key=lambda pair: pair[0])
+            real_time = parsed_ts[-1][1]
+            source = "last_message_timestamp"
+        else:
+            file_mtimes = []
+            for s in group:
+                try:
+                    file_mtimes.append(s.path.stat().st_mtime)
+                except OSError:
+                    continue
+            if file_mtimes:
+                real_time = datetime.fromtimestamp(max(file_mtimes), tz=timezone.utc).isoformat()
+                source = "file_mtime"
+            else:
+                folder_mtimes = []
+                for s in group:
+                    folder = _conversation_folder(s)
+                    if folder is None:
+                        continue
+                    try:
+                        folder_mtimes.append(folder.stat().st_mtime)
+                    except OSError:
+                        continue
+                if folder_mtimes:
+                    real_time = datetime.fromtimestamp(max(folder_mtimes), tz=timezone.utc).isoformat()
+                    source = "folder_mtime"
+                else:
+                    real_time = None
+                    source = None
+
+        out.append(Conversation(
+            conversation_id=key,
+            sessions=group,
+            real_time=real_time,
+            real_time_source=source,
+            excluded=real_time is None,
+            exclude_reason=(
+                None if real_time is not None
+                else "no resolvable timestamp: no message timestamp, no readable "
+                     "file mtime, no readable folder mtime"
+            ),
+        ))
+    return out
+
+
+def earliest_session(conv: Conversation):
+    """The conversation's earliest transcript file, by first-message
+    timestamp (falling back to file mtime) -- used to find the true opening
+    prompt when a conversation spans several files (K0: 'where a
+    conversation spans several transcript files, use the earliest')."""
+    def sort_key(s):
+        dt = _parse_iso(s.created_at)
+        if dt is not None:
+            return (0, dt)
+        try:
+            return (1, datetime.fromtimestamp(s.path.stat().st_mtime, tz=timezone.utc))
+        except OSError:
+            return (2, datetime.max.replace(tzinfo=timezone.utc))
+    return min(conv.sessions, key=sort_key)
+
+
+def first_user_message(conv: Conversation) -> str | None:
+    """The literal text of the first `role=user` message with text content in
+    the conversation's earliest file. `ParsedSession.messages` already
+    excludes bookkeeping records, `tool_use`/`tool_result` blocks, and
+    `thinking` blocks (see `_message_text`) -- only text-bearing user/
+    assistant turns land there, so the first user-role entry here already
+    satisfies K0's 'skip system reminders, attachment preambles, and any
+    wrapper' requirement for everything this parser recognises as such.
+    None if the earliest file has no user turn at all."""
+    sess = earliest_session(conv)
+    for _, role, text, _, _ in sess.messages:
+        if role == "user" and text:
+            return text
+    return None
+
+
+def order_newest_first(conversations: list[Conversation]) -> tuple[list, list]:
+    """Split into (included, excluded) and sort included newest-first by
+    real_time. Excluded conversations (unresolved timestamp) are returned
+    separately, never interleaved by file order -- callers must name them,
+    not silently append them at the end."""
+    included = [c for c in conversations if not c.excluded]
+    excluded = [c for c in conversations if c.excluded]
+    included.sort(key=lambda c: c.real_time, reverse=True)
+    return included, excluded
 
 
 # ---------------------------------------------------------------------------

@@ -72,6 +72,23 @@ def _build_cowork_store(root: Path) -> None:
     # Explicitly excluded: audit.jsonl inside the session folder too.
     _write(session_dir / "audit.jsonl", '{"type":"tool_call_audit"}\n')
 
+    # A subagent sidechain inside the SAME conversation (local_sess1), with a
+    # LATER message timestamp -- K1/K2 grouping must fold it into one
+    # Conversation with the top-level file and take the newest time across
+    # both, not just the top-level file's own time.
+    _write(nested / "subagents" / "agent-dddd.jsonl",
+           '{"type":"user","message":{"role":"user","content":"subagent side task"},'
+           '"uuid":"sd1","timestamp":"2026-07-15T09:00:00Z","entrypoint":"claude-desktop"}\n')
+
+    # A second, separate conversation folder with NO message timestamps at
+    # all -- exercises the file_mtime fallback (folder_mtime is unreachable
+    # in a fixture without manipulating mtimes directly, so file_mtime is
+    # the fallback level under test here).
+    session_dir2 = root / "ws1" / "proj1" / "local_sess2"
+    nested2 = session_dir2 / ".claude" / "projects" / "C--out-dir2"
+    _write(nested2 / "eeee3333-3333-3333-3333-333333333333.jsonl",
+           '{"type":"mode","mode":"normal"}\n')
+
 
 def run() -> list[str]:
     v: list[str] = []
@@ -124,7 +141,10 @@ def run() -> list[str]:
                 v.append(f"subagent transcript title not synthesised from first "
                          f"user message: {sub_sess.title!r}")
 
-        if set(cowork_sessions) != {"cccc2222-2222-2222-2222-222222222222"}:
+        if set(cowork_sessions) != {
+            "cccc2222-2222-2222-2222-222222222222", "agent-dddd",
+            "eeee3333-3333-3333-3333-333333333333",
+        }:
             v.append(f"cowork discovery wrong: {sorted(cowork_sessions)}")
         cw = cowork_sessions.get("cccc2222-2222-2222-2222-222222222222")
         if cw is not None:
@@ -158,9 +178,10 @@ def run() -> list[str]:
             v.append(f"census cli parse-failure count wrong: {cli_r['sessions_with_parse_failures']}")
 
         cw_r = report["stores"]["cowork"]
-        if cw_r["status"] != "ok" or cw_r["sessions_found"] != 1:
+        if (cw_r["status"] != "ok" or cw_r["sessions_found"] != 2
+                or cw_r["subagent_sessions_found"] != 1):
             v.append(f"census cowork store wrong: {cw_r}")
-        if cw_r["message_count"] != 2:
+        if cw_r["message_count"] != 3:  # 2 in top-level + 1 in subagent sidechain
             v.append(f"census cowork message_count wrong: {cw_r['message_count']}")
 
         # --- census: absent store reported, not an error ------------------------
@@ -264,5 +285,84 @@ def run() -> list[str]:
         after = target.stat().st_mtime
         if before != after:
             v.append("parse_session modified a source file's mtime")
+
+        # --- K1: conversation_id surfaced, cowork only ----------------------
+        cowork_tfs = list(lt.discover_cowork_store(cowork_root))
+        cowork_sessions = [lt.parse_session(tf) for tf in cowork_tfs]
+        conv_ids = {s.conversation_id for s in cowork_sessions if not s.is_sidechain
+                    and "cccc2222" in s.thread_id}
+        if conv_ids != {"local_sess1"}:
+            v.append(f"cowork top-level session conversation_id wrong: {conv_ids}")
+        sidechain_ids = {s.conversation_id for s in cowork_sessions if s.is_sidechain}
+        if "local_sess1" not in sidechain_ids:
+            v.append("subagent sidechain lost its conversation_id -- grouping "
+                      "would silently split it into its own conversation")
+
+        cli_tfs = list(lt.discover_cli_store(cli_root))
+        cli_sessions = [lt.parse_session(tf) for tf in cli_tfs]
+        if any(s.conversation_id is not None for s in cli_sessions):
+            v.append("a CLI-store session was given a conversation_id -- "
+                      "that store has no such grouping folder")
+
+        # --- K1/K2: group_conversations + order_newest_first -----------------
+        all_sessions = cowork_sessions + cli_sessions
+        conversations = lt.group_conversations(all_sessions)
+        by_id = {c.conversation_id: c for c in conversations}
+
+        conv1 = by_id.get("local_sess1")
+        if conv1 is None:
+            v.append("local_sess1 did not come back as a Conversation")
+        else:
+            if len(conv1.sessions) != 2:
+                v.append(f"local_sess1 should fold top-level + subagent into one "
+                          f"conversation (2 files), got {len(conv1.sessions)}")
+            if conv1.real_time_source != "last_message_timestamp":
+                v.append(f"local_sess1 should resolve via last_message_timestamp, "
+                          f"got {conv1.real_time_source!r}")
+            # The subagent's later timestamp (09:00:00) must win over the
+            # top-level file's own last message (00:00:05).
+            if conv1.real_time != "2026-07-15T09:00:00Z":
+                v.append(f"local_sess1 real_time should take the newest across "
+                         f"both files, got {conv1.real_time!r}")
+
+        conv2 = by_id.get("local_sess2")
+        if conv2 is None:
+            v.append("local_sess2 (no message timestamps) did not come back as "
+                      "a Conversation -- must fall back to file_mtime, not vanish")
+        elif conv2.real_time_source != "file_mtime":
+            v.append(f"local_sess2 should fall back to file_mtime, got "
+                      f"{conv2.real_time_source!r}")
+
+        # A CLI session is its own conversation, keyed cli:<uuid>.
+        cli_key = "cli:aaaa1111-1111-1111-1111-111111111111"
+        if cli_key not in by_id:
+            v.append("a CLI session did not get its own cli:<uuid> conversation key")
+
+        included, excluded = lt.order_newest_first(conversations)
+        if excluded:
+            v.append(f"fixture has no unresolvable-timestamp conversation, but "
+                      f"{len(excluded)} came back excluded: "
+                      f"{[c.conversation_id for c in excluded]}")
+        times = [c.real_time for c in included]
+        if times != sorted(times, reverse=True):
+            v.append("order_newest_first did not return conversations newest-first")
+
+        # An unresolvable conversation (no message ts, unreadable path for
+        # mtime) must be excluded and named, never silently dropped or
+        # sorted to the end by omission.
+        fake = lt.ParsedSession(
+            thread_id="ffff0000-0000-0000-0000-000000000000", store="cowork",
+            encoded_cwd="C--nowhere", path=Path("/nonexistent/path/x.jsonl"),
+            conversation_id="local_ghost",
+        )
+        ghost_conversations = lt.group_conversations([fake])
+        ghost = ghost_conversations[0]
+        if not ghost.excluded or not ghost.exclude_reason:
+            v.append("a conversation with no resolvable timestamp at all was not "
+                      "excluded-and-named")
+        ghost_included, ghost_excluded = lt.order_newest_first(ghost_conversations)
+        if ghost_included or ghost not in ghost_excluded:
+            v.append("order_newest_first did not route the unresolvable "
+                      "conversation into 'excluded'")
 
     return v

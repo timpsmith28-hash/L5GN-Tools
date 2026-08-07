@@ -1118,3 +1118,35 @@ one of them is allowed to say it. The estate gains a place to put deterministic
 UI checks that is not the human's queue. The cost is a fourth artefact class to
 keep honest, which is why (2) is stated as a prohibition rather than a
 convention.
+
+---
+
+## 0032 — The Knowledge Curator reads local transcripts, is MCF-scoped, and treats recency as truth order
+
+**Date:** 2026-08-07 · **Status:** proposed · **Builds on:** 0025 (a solo box
+reads its own estate), 0026 (knowledge documents), 0030 (derived output is not
+a document) · **Source:** `docs/SPEC_Knowledge_Curator.md` review,
+`docs/COWORK_BRIEF_knowledge_curator.md`
+
+**Context.** The Curator was specced against `chronicler.db`. Retargeting it at
+the local Cowork transcript store removes its vault dependency, its linking-
+coverage ceiling, and its cross-estate exposure in one move — but introduces a
+question the estate has not ruled on: when two conversations disagree, which is
+true?
+
+**Decision.**
+1. The Curator reads the **local transcript store on the machine that owns it**,
+   is **scoped to the work/MCF estate**, and never reads personal-estate
+   content. It is a solo-machine tool (0025) and produces no travelling artefact.
+2. **Recency is the truth order.** Conversations are processed newest-first by
+   real modified time; the newest claim on a topic is current, an older
+   conflicting claim is **superseded and reported as such**, never discarded and
+   never treated as a gap.
+3. Its output is **derived**, written under `data/`, and does not earn a place
+   in `docs/` (0030, `docs/README.md` §1).
+
+**Consequences.** The tool gains an honest answer to "why does the current
+knowledge say this" — the superseded trail — which the vault route could not
+have produced. The cost is that recency is a heuristic: a newer casual remark
+can supersede an older considered one. Accepted, because both are quoted and
+dated in the report, so a wrong ordering is visible rather than silent.

@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=69d1112 -->
 # Cowork report — the UAT sidebar
 
 **Brief:** `docs/COWORK_BRIEF_uat_sidebar.md`. **Depends on:**
