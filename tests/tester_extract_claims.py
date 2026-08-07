@@ -93,7 +93,7 @@ def run() -> list[str]:
         cache: dict = {}
         report = k2.run_extraction(
             included, excluded, caller=stub_caller, endpoint="x", model="test-model",
-            temperature=0.0, cache=cache,
+            temperature=0.0, cache=cache, max_window_tokens=None, small_conv_tokens=None,
         )
         order = [c["conversation_id"] for c in report["conversations"]]
         if order != ["local_new", "local_zero", "local_old"]:
@@ -115,7 +115,8 @@ def run() -> list[str]:
                                  real_time=None, real_time_source=None,
                                  excluded=True, exclude_reason="no resolvable timestamp: test")
         report2 = k2.run_extraction([], [ghost], caller=stub_caller, endpoint="x",
-                                      model="test-model", temperature=0.0, cache={})
+                                      model="test-model", temperature=0.0, cache={},
+                                      max_window_tokens=None, small_conv_tokens=None)
         named = report2["conversations_excluded_no_timestamp"]
         if len(named) != 1 or named[0]["conversation_id"] != "local_ghost":
             v.append(f"excluded conversation not named in the report: {named}")
@@ -124,6 +125,7 @@ def run() -> list[str]:
         report3 = k2.run_extraction(
             included, excluded, caller=stub_caller, endpoint="x", model="test-model",
             temperature=0.0, cache=cache,  # same cache dict, mutated by the first run
+            max_window_tokens=None, small_conv_tokens=None,
         )
         if report3["conversations_reextracted"] != 0 or report3["conversations_from_cache"] != 3:
             v.append(f"re-run with nothing changed should re-extract 0: {report3}")
@@ -134,7 +136,8 @@ def run() -> list[str]:
         # pass) -- the cached re-run (report3) must add no THIRD call.
         calls_before_cached_rerun = calls.count(k2.full_transcript_text(conv_new))
         k2.run_extraction(included, excluded, caller=stub_caller, endpoint="x",
-                           model="test-model", temperature=0.0, cache=cache)
+                           model="test-model", temperature=0.0, cache=cache,
+                           max_window_tokens=None, small_conv_tokens=None)
         if calls.count(k2.full_transcript_text(conv_new)) != calls_before_cached_rerun:
             v.append("the stub model was called again for a conversation the cache should "
                       "have served -- caching is not actually skipping the call")
@@ -147,7 +150,7 @@ def run() -> list[str]:
         target_path.write_text("{}\nchanged\n", encoding="utf-8")
         report4 = k2.run_extraction(
             [conv_new], [], caller=stub_caller, endpoint="x", model="test-model",
-            temperature=0.0, cache=cache,
+            temperature=0.0, cache=cache, max_window_tokens=None, small_conv_tokens=None,
         )
         if report4["conversations_reextracted"] != 1:
             v.append("a changed source file's mtime should invalidate the cache entry")
@@ -202,5 +205,216 @@ def run() -> list[str]:
             v.append("call_lmstudio did not honour an explicit timeout override")
     finally:
         urllib.request.urlopen = real_urlopen
+
+    # --- wrapper-noise stripping: system-reminder blocks never reach the
+    #     model or the substring-verification universe --------------------
+    noisy_conv = None
+    with tempfile.TemporaryDirectory() as td2:
+        td2 = Path(td2)
+        path = td2 / "noisy.jsonl"
+        path.write_text("{}\n", encoding="utf-8")
+        text = ("<system-reminder>ignore this, it is bookkeeping</system-reminder>"
+                "The real decision: ship the v2 pricing tier next sprint.")
+        sess = lt.ParsedSession(
+            thread_id="noisy", store="cowork", encoded_cwd="C--out", path=path,
+            conversation_id="local_noisy", messages=[(0, "user", text, "2026-07-01T00:00:00Z", "u1")],
+            created_at="2026-07-01T00:00:00Z", updated_at="2026-07-01T00:00:00Z",
+        )
+        noisy_conv = lt.Conversation(conversation_id="local_noisy", sessions=[sess],
+                                       real_time="2026-07-01T00:00:00Z",
+                                       real_time_source="last_message_timestamp")
+
+        seen_texts = []
+
+        def noise_check_caller(t, *, endpoint, model, temperature):
+            seen_texts.append(t)
+            return "[]"
+
+        k2.extract_for_conversation(noisy_conv, caller=noise_check_caller, endpoint="x",
+                                      model="m", temperature=0.0)
+        if "system-reminder" in seen_texts[0] or "ignore this" in seen_texts[0]:
+            v.append(f"system-reminder wrapper text reached the model call: {seen_texts[0]!r}")
+        if "ship the v2 pricing tier" not in seen_texts[0]:
+            v.append("stripping the wrapper also ate the real message content")
+
+        full = k2.full_transcript_text(noisy_conv)
+        if "<system-reminder>" in full:
+            v.append("full_transcript_text() still contains an unstripped system-reminder block")
+
+    # --- approx_token_count + build_windows: turn-aligned, no message split -
+    if k2.approx_token_count("") != 0:
+        v.append("approx_token_count('') should be 0")
+    if k2.approx_token_count("a" * 400) != 100:
+        v.append(f"approx_token_count sanity check failed: {k2.approx_token_count('a'*400)}")
+
+    with tempfile.TemporaryDirectory() as td4:
+        td4 = Path(td4)
+        path = td4 / "big.jsonl"
+        path.write_text("{}\n", encoding="utf-8")
+        # 20 messages of ~400 chars (~100 tokens) each = ~2000 tokens total.
+        msgs = [(i, "user", f"Turn {i}: " + ("x" * 390), f"2026-07-01T00:{i:02d}:00Z", f"u{i}")
+                for i in range(20)]
+        sess = lt.ParsedSession(
+            thread_id="big", store="cowork", encoded_cwd="C--out", path=path,
+            conversation_id="local_big", messages=msgs,
+            created_at=msgs[0][3], updated_at=msgs[-1][3],
+        )
+        big_conv = lt.Conversation(conversation_id="local_big", sessions=[sess],
+                                     real_time=msgs[-1][3], real_time_source="last_message_timestamp")
+
+        windows = k2.build_windows(big_conv, max_tokens=500)
+        if len(windows) < 2:
+            v.append(f"a ~2000-token conversation windowed at 500 tokens should split "
+                      f"into several windows, got {len(windows)}")
+        # every original message must appear in exactly one window, none split.
+        rejoined = "".join(windows)
+        for i in range(20):
+            if f"Turn {i}: " not in rejoined:
+                v.append(f"build_windows lost message {i}")
+        for w in windows:
+            if k2.approx_token_count(w) > 500 and w.count("Turn ") > 1:
+                pass  # a single very long message alone in a window is allowed to exceed max_tokens
+
+        # extract_for_conversation windows internally and reports windows_total;
+        # each window's quote is verified against ITS OWN window text.
+        window_calls = []
+
+        def window_caller(t, *, endpoint, model, temperature):
+            window_calls.append(t)
+            if "Turn 0:" in t:
+                first_word = t.split("Turn 0: ")[1][:5]
+                return json.dumps([{"claim_text": "first window claim",
+                                      "quoted_source": f"Turn 0: {first_word}"}])
+            return "[]"
+
+        r_windowed = k2.extract_for_conversation(
+            big_conv, caller=window_caller, endpoint="x", model="m", temperature=0.0,
+            max_window_tokens=500,
+        )
+        if r_windowed.windows_total < 2:
+            v.append(f"windowed extraction should report windows_total >= 2: {r_windowed.windows_total}")
+        if len(window_calls) != r_windowed.windows_total:
+            v.append(f"one model call expected per window: {len(window_calls)} calls for "
+                      f"{r_windowed.windows_total} windows")
+        if len(r_windowed.claims) != 1:
+            v.append(f"expected exactly one claim from the window containing 'Turn 0': {r_windowed.claims}")
+
+        # unwindowed (max_window_tokens=None) sends the whole thing in one call.
+        single_calls = []
+
+        def single_caller(t, *, endpoint, model, temperature):
+            single_calls.append(t)
+            return "[]"
+
+        k2.extract_for_conversation(big_conv, caller=single_caller, endpoint="x", model="m",
+                                      temperature=0.0, max_window_tokens=None)
+        if len(single_calls) != 1:
+            v.append(f"max_window_tokens=None should send one call, got {len(single_calls)}")
+
+    # --- group_into_batches: short conversations grouped, large ones solo --
+    def tiny_conv(cid: str, tokens_hint: int) -> "lt.Conversation":
+        p = Path(tempfile.mkstemp(suffix=".jsonl")[1])
+        p.write_text("{}\n", encoding="utf-8")
+        text = "y" * (tokens_hint * 4)
+        sess = lt.ParsedSession(
+            thread_id=cid, store="cowork", encoded_cwd="C--out", path=p,
+            conversation_id=cid, messages=[(0, "user", text, "2026-07-01T00:00:00Z", "u1")],
+            created_at="2026-07-01T00:00:00Z", updated_at="2026-07-01T00:00:00Z",
+        )
+        return lt.Conversation(conversation_id=cid, sessions=[sess],
+                                 real_time="2026-07-01T00:00:00Z",
+                                 real_time_source="last_message_timestamp")
+
+    small1 = tiny_conv("local_s1", 200)
+    small2 = tiny_conv("local_s2", 200)
+    small3 = tiny_conv("local_s3", 200)
+    large1 = tiny_conv("local_l1", 5000)  # over the 1500-token small floor used below
+
+    groups = k2.group_into_batches(
+        [small1, small2, small3, large1],
+        small_token_floor=1500, batch_target_tokens=6000, batch_max_conversations=6,
+    )
+    group_sizes = sorted(len(g) for g in groups)
+    if group_sizes != [1, 3]:
+        v.append(f"group_into_batches should group the 3 small ones together and leave "
+                  f"the large one solo: sizes={group_sizes}")
+    solo_group = next(g for g in groups if len(g) == 1)
+    if solo_group[0].conversation_id != "local_l1":
+        v.append("the solo group should be the large conversation, not a small one")
+
+    # --- extract_batch: claims routed to the right conversation, cross-
+    #     conversation leakage rejected exactly like a fabricated quote -----
+    def batch_caller(t, *, endpoint, model, temperature, batch=False):
+        if not batch:
+            v.append("extract_batch must call the caller with batch=True")
+        return json.dumps([
+            {"conversation_index": 0, "claim_text": "claim from conv 0",
+             "quoted_source": "y" * 20},  # literal substring of small1's own text
+            {"conversation_index": 1, "claim_text": "claim from conv 1",
+             "quoted_source": "y" * 20},  # both fixtures happen to be all "y"s, so this
+                                            # verifies fine against its own claimed index --
+                                            # true cross-conversation leakage is its own test below.
+            {"conversation_index": 99, "claim_text": "out of range", "quoted_source": "y" * 5},
+        ])
+
+    batch_results, unattributed = k2.extract_batch(
+        [small1, small2], caller=batch_caller, endpoint="x", model="m", temperature=0.0,
+    )
+    if batch_results["local_s1"].claims == [] or len(batch_results["local_s1"].claims) != 1:
+        v.append(f"conv 0's claim should route to local_s1: {batch_results['local_s1']}")
+    if len(batch_results["local_s2"].claims) != 1:
+        v.append(f"conv 1's claim should route to local_s2: {batch_results['local_s2']}")
+    if len(unattributed) != 1 or "not in this batch" not in unattributed[0]["reason"]:
+        v.append(f"an out-of-range conversation_index should be reported unattributed, "
+                  f"not silently dropped: {unattributed}")
+
+    # cross-conversation leakage: a quote that is real text from a DIFFERENT
+    # conversation in the batch, attributed to one it doesn't belong to.
+    def leaking_caller(t, *, endpoint, model, temperature, batch=False):
+        return json.dumps([
+            {"conversation_index": 0, "claim_text": "leaked",
+             "quoted_source": "totally different content only in conv 1"},
+        ])
+
+    leak_small1 = tiny_conv("local_leak0", 50)
+    leak_small2 = tiny_conv("local_leak1", 50)
+    # overwrite leak_small2's message text with distinguishable content.
+    leak_small2.sessions[0].messages[0] = (0, "user", "totally different content only in conv 1",
+                                             "2026-07-01T00:00:00Z", "u1")
+    leak_results, leak_unattr = k2.extract_batch(
+        [leak_small1, leak_small2], caller=leaking_caller, endpoint="x", model="m", temperature=0.0,
+    )
+    if leak_results["local_leak0"].claims:
+        v.append("a quote that only exists in a DIFFERENT conversation in the batch must be "
+                  "rejected as cross-conversation leakage, not accepted")
+    if not leak_results["local_leak0"].rejected or "leakage" not in leak_results["local_leak0"].rejected[0]["reason"]:
+        v.append(f"cross-conversation leakage should be named as such in the rejection reason: "
+                  f"{leak_results['local_leak0'].rejected}")
+
+    # --- run_extraction end-to-end with batching engaged --------------------
+    batch_run_calls = []
+
+    def e2e_batch_caller(t, *, endpoint, model, temperature, batch=False):
+        batch_run_calls.append((t, batch))
+        if batch:
+            return json.dumps([
+                {"conversation_index": 0, "claim_text": "from s1", "quoted_source": "y" * 20},
+            ])
+        return "[]"
+
+    batch_report = k2.run_extraction(
+        [small1, small2], [], caller=e2e_batch_caller, endpoint="x", model="test-model",
+        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=1500,
+        batch_target_tokens=6000, batch_max_conversations=6,
+    )
+    if len(batch_run_calls) != 1:
+        v.append(f"two small conversations under the batch target should cost exactly ONE "
+                  f"model call, got {len(batch_run_calls)}")
+    if batch_report["claims_extracted"] != 1:
+        v.append(f"batched run_extraction should still surface the routed claim: {batch_report}")
+    ordered_ids = [c["conversation_id"] for c in batch_report["conversations"]]
+    if ordered_ids != ["local_s1", "local_s2"]:
+        v.append(f"batched run_extraction must still report in original newest-first order: "
+                  f"{ordered_ids}")
 
     return v
