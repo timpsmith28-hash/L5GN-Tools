@@ -159,4 +159,48 @@ def run() -> list[str]:
         if reloaded.keys() != cache.keys():
             v.append("cache did not round-trip through save_cache/load_cache")
 
+    # --- real transport: response_format/timeout wiring, no network touched --
+    # Monkeypatches urllib.request.urlopen so call_lmstudio's actual payload
+    # construction is exercised (not just the stub used everywhere above).
+    import urllib.request
+
+    class _FakeResponse:
+        def __init__(self, body: dict):
+            self._body = json.dumps(body).encode("utf-8")
+        def read(self):
+            return self._body
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["timeout"] = timeout
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse({"choices": [{"message": {"content": "[]"}}]})
+
+    real_urlopen = urllib.request.urlopen
+    try:
+        urllib.request.urlopen = fake_urlopen
+        k2.call_lmstudio("hello transcript", endpoint="http://x", model="m", temperature=0.0)
+        if captured["timeout"] != k2.DEFAULT_TIMEOUT or k2.DEFAULT_TIMEOUT != 900.0:
+            v.append(f"call_lmstudio default timeout should be 900s: "
+                      f"{captured['timeout']!r} (DEFAULT_TIMEOUT={k2.DEFAULT_TIMEOUT!r})")
+        if "response_format" not in captured["payload"]:
+            v.append("call_lmstudio (json_mode default True) did not send response_format")
+        elif captured["payload"]["response_format"]["json_schema"]["schema"] != k2.CLAIMS_JSON_SCHEMA:
+            v.append("call_lmstudio sent a response_format schema that doesn't match CLAIMS_JSON_SCHEMA")
+
+        captured.clear()
+        k2.call_lmstudio("hello transcript", endpoint="http://x", model="m", temperature=0.0,
+                          json_mode=False, timeout=30.0)
+        if "response_format" in captured["payload"]:
+            v.append("call_lmstudio with json_mode=False must not send response_format at all")
+        if captured["timeout"] != 30.0:
+            v.append("call_lmstudio did not honour an explicit timeout override")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
     return v

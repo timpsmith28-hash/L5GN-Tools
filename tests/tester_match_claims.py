@@ -165,4 +165,56 @@ def run() -> list[str]:
         v.append(f"flatten_claims should drop conversations with no project mapping "
                   f"and attach project_id for the rest: {flat}")
 
+    # --- real transport: response_format schema selection by system prompt --
+    import urllib.request
+
+    class _FakeResponse:
+        def __init__(self, body: dict):
+            self._body = json.dumps(body).encode("utf-8")
+        def read(self):
+            return self._body
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["timeout"] = timeout
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+
+    real_urlopen = urllib.request.urlopen
+    try:
+        urllib.request.urlopen = fake_urlopen
+
+        if k4.DEFAULT_TIMEOUT != 900.0:
+            v.append(f"match_claims DEFAULT_TIMEOUT should be 900s: {k4.DEFAULT_TIMEOUT!r}")
+
+        k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                   model="m", temperature=0.0)
+        if captured["timeout"] != k4.DEFAULT_TIMEOUT:
+            v.append("call_lmstudio_generic did not default to DEFAULT_TIMEOUT")
+        rf = captured["payload"].get("response_format")
+        if rf is None or rf["json_schema"]["schema"] != k4.CONFIRM_CHUNK_SCHEMA:
+            v.append("call_lmstudio_generic did not select CONFIRM_CHUNK_SCHEMA for "
+                      "CONFIRM_CHUNK_SYSTEM")
+
+        captured.clear()
+        k4.call_lmstudio_generic("p", system=k4.CONFIRM_SUPERSEDE_SYSTEM, endpoint="http://x",
+                                   model="m", temperature=0.0)
+        rf = captured["payload"].get("response_format")
+        if rf is None or rf["json_schema"]["schema"] != k4.CONFIRM_SUPERSEDE_SCHEMA:
+            v.append("call_lmstudio_generic did not select CONFIRM_SUPERSEDE_SCHEMA for "
+                      "CONFIRM_SUPERSEDE_SYSTEM")
+
+        captured.clear()
+        k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                   model="m", temperature=0.0, json_mode=False)
+        if "response_format" in captured["payload"]:
+            v.append("call_lmstudio_generic with json_mode=False must not send response_format")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
     return v

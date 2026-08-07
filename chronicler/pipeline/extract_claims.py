@@ -38,6 +38,7 @@ import knowledge_index as k1  # noqa: E402
 
 DEFAULT_ENDPOINT = "http://localhost:1234/v1/chat/completions"
 DEFAULT_TEMPERATURE = 0.0
+DEFAULT_TIMEOUT = 900.0
 DEFAULT_CACHE = Path("data/knowledge_curator/claims_cache.json")
 DEFAULT_OUT = Path("data/knowledge_curator/claims.json")
 
@@ -52,32 +53,70 @@ SYSTEM_PROMPT = (
     "no claims worth recording, return an empty array []."
 )
 
+# Grammar-constrained output (llama.cpp / LM Studio's OpenAI-compatible
+# `response_format: json_schema` -- structurally cannot return prose, unlike
+# a prompt instruction the model is free to ignore. Real-run evidence for
+# why this exists: qwen3.5 on a 65k-token transcript ignored the "return
+# ONLY a JSON array" instruction outright and replied with a normal chatty
+# assistant message -- 14 minutes of prompt processing for zero usable
+# claims, correctly caught as parse_failed rather than silently accepted,
+# but wasted all the same. A schema-constrained grammar makes that failure
+# mode structurally impossible rather than something the prompt merely asks
+# the model not to do.
+CLAIMS_JSON_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "claim_text": {"type": "string"},
+            "quoted_source": {"type": "string"},
+        },
+        "required": ["claim_text", "quoted_source"],
+        "additionalProperties": False,
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # LM Studio transport -- stdlib only.
 # ---------------------------------------------------------------------------
 
 def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
-                   temperature: float, timeout: float = 120.0) -> str:
+                   temperature: float, timeout: float = DEFAULT_TIMEOUT,
+                   json_mode: bool = True) -> str:
     """POST to an OpenAI-compatible chat/completions endpoint; returns the
     assistant message content as a raw string. Raises ``OSError`` /
     ``urllib.error.URLError`` on any transport failure -- callers must NOT
-    swallow this (brief: 'loud failure, no partial report')."""
-    payload = json.dumps({
+    swallow this (brief: 'loud failure, no partial report').
+
+    ``json_mode`` requests grammar-constrained output matching
+    ``CLAIMS_JSON_SCHEMA`` via ``response_format``. Not every model runtime
+    honours it (some MLX/GGUF backends silently ignore an unsupported
+    field rather than erroring) -- when it's respected it forecloses the
+    conversational-reply failure mode entirely; when it isn't, behaviour is
+    identical to before. Set ``json_mode=False`` if a given endpoint errors
+    on the field outright."""
+    body: dict = {
         "model": model,
         "temperature": temperature,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": transcript_text},
         ],
-    }).encode("utf-8")
+    }
+    if json_mode:
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "claims", "strict": True, "schema": CLAIMS_JSON_SCHEMA},
+        }
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         endpoint, data=payload, method="POST",
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-    return body["choices"][0]["message"]["content"]
+        response_body = json.loads(resp.read().decode("utf-8"))
+    return response_body["choices"][0]["message"]["content"]
 
 
 # ---------------------------------------------------------------------------
@@ -299,15 +338,24 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
 
 
 def main() -> None:
+    import functools
+
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--map", type=Path, default=k1.DEFAULT_MAP)
     ap.add_argument("--host", help="census as if run on this hostname")
     ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     ap.add_argument("--model", required=True, help="LM Studio model id (recorded as provenance)")
     ap.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT,
+                     help="per-request timeout in seconds (default 900)")
+    ap.add_argument("--no-json-mode", dest="json_mode", action="store_false",
+                     help="disable response_format grammar constraint, if the "
+                          "endpoint errors on it")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
+
+    bound_caller = functools.partial(call_lmstudio, timeout=args.timeout, json_mode=args.json_mode)
 
     map_rows = k1.load_map(args.map)
     mapped_ids = {r.session_id for r in map_rows}
@@ -323,7 +371,7 @@ def main() -> None:
 
     cache = load_cache(args.cache)
     report = run_extraction(
-        included, excluded, caller=call_lmstudio, endpoint=args.endpoint,
+        included, excluded, caller=bound_caller, endpoint=args.endpoint,
         model=args.model, temperature=args.temperature, cache=cache,
     )
     save_cache(cache, args.cache)

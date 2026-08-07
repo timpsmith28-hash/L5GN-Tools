@@ -40,6 +40,7 @@ import extract_claims as k2  # noqa: E402
 
 DEFAULT_ENDPOINT = k2.DEFAULT_ENDPOINT
 DEFAULT_TEMPERATURE = 0.0
+DEFAULT_TIMEOUT = k2.DEFAULT_TIMEOUT
 SHORTLIST_SIZE = 5
 SHORTLIST_FLOOR = 0.15          # below this, not even worth a confirm call
 SUPERSEDE_TOPIC_FLOOR = 0.5     # claim-vs-claim similarity to even ask "does this conflict?"
@@ -63,6 +64,34 @@ CONFIRM_SUPERSEDE_SYSTEM = (
     "belief is. If the older claim merely agrees or is unrelated, conflicts "
     "is false."
 )
+
+# Grammar-constrained response_format schemas, keyed by system prompt so the
+# transport can pick the right one without the caller having to say so
+# separately (see extract_claims.CLAIMS_JSON_SCHEMA for why this exists at
+# all: a model that ignores a prompt-only format instruction on a long
+# input is a real, observed failure mode, not a hypothetical one).
+CONFIRM_CHUNK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "confirmed": {"type": "boolean"},
+        "matched_span": {"type": "string"},
+    },
+    "required": ["confirmed", "matched_span"],
+    "additionalProperties": False,
+}
+CONFIRM_SUPERSEDE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "conflicts": {"type": "boolean"},
+        "matched_span": {"type": "string"},
+    },
+    "required": ["conflicts", "matched_span"],
+    "additionalProperties": False,
+}
+_SCHEMA_BY_SYSTEM = {
+    CONFIRM_CHUNK_SYSTEM: ("confirm_chunk", CONFIRM_CHUNK_SCHEMA),
+    CONFIRM_SUPERSEDE_SYSTEM: ("confirm_supersede", CONFIRM_SUPERSEDE_SCHEMA),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -291,20 +320,36 @@ def flatten_claims(claims_report: dict, session_to_project: dict) -> list[dict]:
 
 
 def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str,
-                            temperature: float, timeout: float = 60.0) -> str:
+                            temperature: float, timeout: float = DEFAULT_TIMEOUT,
+                            json_mode: bool = True) -> str:
+    """As extract_claims.call_lmstudio, but for K4's two confirm shapes --
+    ``response_format`` is selected by matching ``system`` against the two
+    known prompts (``CONFIRM_CHUNK_SYSTEM`` / ``CONFIRM_SUPERSEDE_SYSTEM``),
+    so callers never have to say which schema applies."""
     import urllib.request
-    payload = json.dumps({
+    body: dict = {
         "model": model, "temperature": temperature,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-    }).encode("utf-8")
+    }
+    if json_mode:
+        entry = _SCHEMA_BY_SYSTEM.get(system)
+        if entry is not None:
+            name, schema = entry
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": name, "strict": True, "schema": schema},
+            }
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(endpoint, data=payload, method="POST",
                                    headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-    return body["choices"][0]["message"]["content"]
+        response_body = json.loads(resp.read().decode("utf-8"))
+    return response_body["choices"][0]["message"]["content"]
 
 
 def main() -> None:
+    import functools
+
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--claims", type=Path, default=k2.DEFAULT_OUT)
     ap.add_argument("--corpus", type=Path, default=Path("data/knowledge_curator/corpus_index.json"))
@@ -312,8 +357,15 @@ def main() -> None:
     ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     ap.add_argument("--model", required=True)
     ap.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT,
+                     help="per-request timeout in seconds (default 900)")
+    ap.add_argument("--no-json-mode", dest="json_mode", action="store_false",
+                     help="disable response_format grammar constraint, if the "
+                          "endpoint errors on it")
     ap.add_argument("--out", type=Path, default=Path("data/knowledge_curator/matches.json"))
     args = ap.parse_args()
+
+    bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout, json_mode=args.json_mode)
 
     import knowledge_index as k1
     claims_report = json.loads(args.claims.read_text(encoding="utf-8"))
@@ -322,7 +374,7 @@ def main() -> None:
     session_to_project = {r.session_id: r.project_id for r in map_rows}
 
     flat = flatten_claims(claims_report, session_to_project)
-    result = match_claims(flat, corpus_index, caller=call_lmstudio_generic, endpoint=args.endpoint,
+    result = match_claims(flat, corpus_index, caller=bound_caller, endpoint=args.endpoint,
                             model=args.model, temperature=args.temperature)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
