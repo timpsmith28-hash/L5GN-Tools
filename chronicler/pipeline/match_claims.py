@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
@@ -41,6 +42,8 @@ import extract_claims as k2  # noqa: E402
 DEFAULT_ENDPOINT = k2.DEFAULT_ENDPOINT
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_TIMEOUT = k2.DEFAULT_TIMEOUT
+DEFAULT_CACHE = Path("data/knowledge_curator/matches_cache.json")
+CHECKPOINT_EVERY = 20           # claims between on-disk checkpoints (cache + partial --out)
 SHORTLIST_SIZE = 5
 SHORTLIST_FLOOR = 0.15          # below this, not even worth a confirm call
 SUPERSEDE_TOPIC_FLOOR = 0.5     # claim-vs-claim similarity to even ask "does this conflict?"
@@ -169,6 +172,42 @@ class ClaimRecord:
     supersedes: dict | None = None      # {older matched a newer established claim}
 
 
+# ---------------------------------------------------------------------------
+# Cache -- keyed per claim, so an interrupted run resumes without re-paying
+# any confirm calls for claims it already decided. Unlike K2's cache (which
+# invalidates per-conversation, on source file identity), a claim's outcome
+# also depends on the WHOLE corpus it was checked against, so the cache
+# carries a single whole-corpus fingerprint: any corpus change invalidates
+# every entry, deliberately coarse rather than trying to track which chunks
+# a given claim's shortlist could have touched.
+#
+# Caveat (documented, not auto-detected): if claims.json itself changes
+# between runs -- e.g. a newer claim on an existing topic gets added to a
+# project some of whose OLDER claims are already cached -- those older
+# cached decisions (gap/captured/cross-project/superseded) were computed
+# against the established-claims state as it stood at the time, which the
+# new claim could change. The claim-identity key means the new claim itself
+# is always computed fresh (it has no cache entry), but a stale cache is
+# not automatically detected here. If claims.json changes in a way that
+# could affect an already-cached project's supersession chain, clear
+# --cache for that run to be safe.
+# ---------------------------------------------------------------------------
+
+def _claim_key(rec: dict) -> str:
+    """Stable identity for one claim -- (conversation_id, claim_text,
+    quoted_source) is what K2 guarantees stays the same for an unchanged
+    conversation, regardless of processing order."""
+    basis = json.dumps([rec["conversation_id"], rec["claim_text"], rec["quoted_source"]],
+                         ensure_ascii=False)
+    return hashlib.sha256(basis.encode("utf-8")).hexdigest()
+
+
+def _corpus_fingerprint(corpus_index: dict) -> str:
+    return hashlib.sha256(
+        json.dumps(corpus_index, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+
+
 def _project_chunks(corpus_index: dict, project_id: str) -> list[dict]:
     for p in corpus_index.get("projects", []):
         if p["project_id"] == project_id:
@@ -194,17 +233,62 @@ def match_against_corpus(claim_text: str, chunks: list[dict], *, caller, endpoin
     return None, short_report, (None if not short else result)
 
 
+def _claims_out(out: list[ClaimRecord]) -> list[dict]:
+    return [
+        {
+            "project_id": c.project_id, "conversation_id": c.conversation_id,
+            "real_time": c.real_time, "claim_text": c.claim_text,
+            "quoted_source": c.quoted_source, "outcome": c.outcome,
+            "shortlist": c.shortlist, "confirm": c.confirm, "supersedes": c.supersedes,
+        }
+        for c in out
+    ]
+
+
+def _build_result(out: list[ClaimRecord], *, model: str, endpoint: str, temperature: float) -> dict:
+    return {
+        "model_id": model, "endpoint": endpoint, "temperature": temperature,
+        "run_timestamp": datetime.now(timezone.utc).isoformat(),
+        "claims": _claims_out(out),
+    }
+
+
 def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: str,
-                   model: str, temperature: float, progress=None) -> dict:
+                   model: str, temperature: float, progress=None,
+                   cache: dict | None = None, on_checkpoint=None,
+                   checkpoint_every: int = CHECKPOINT_EVERY) -> dict:
     """`claims_report` is K2's output (already newest-first per its own
     conversation order). Groups claims by project via the caller-supplied
     conversation->project map baked into each claim record before this is
-    called (see `flatten_claims`)."""
+    called (see `flatten_claims`).
+
+    ``cache`` (mutated in place), if given, makes an interrupted run
+    resumable: each claim's full decision (outcome/shortlist/confirm/
+    supersedes) is looked up by identity before doing any network calls for
+    it, and stored after. Reusing a cached decision still walks it through
+    the same ``established``-list bookkeeping a freshly computed one would
+    -- see the module-level cache docstring for why that keeps supersession
+    correct across a resumed run. The cache is invalidated wholesale if
+    ``corpus_index`` doesn't match the fingerprint it was built against.
+
+    ``on_checkpoint(partial_result_dict)``, if given, is called every
+    ``checkpoint_every`` claims (and once more at the end) with the
+    in-progress result in the same shape as this function's return value,
+    so a caller can persist both the cache and a partial ``--out`` to disk
+    without waiting for the whole run to finish."""
     corpora_by_project = {
         p["project_id"]: _project_chunks(corpus_index, p["project_id"])
         for p in corpus_index.get("projects", [])
     }
     other_projects = {pid: chunks for pid, chunks in corpora_by_project.items()}
+
+    if cache is not None:
+        fp = _corpus_fingerprint(corpus_index)
+        if cache.get("corpus_fingerprint") != fp:
+            cache.clear()
+            cache["corpus_fingerprint"] = fp
+            cache["results"] = {}
+        cache.setdefault("results", {})
 
     established: dict[str, list[ClaimRecord]] = {}  # project_id -> newest-first established claims
     out: list[ClaimRecord] = []
@@ -216,96 +300,101 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
             real_time=rec["real_time"], claim_text=rec["claim_text"],
             quoted_source=rec["quoted_source"],
         )
-        own_chunks = corpora_by_project.get(cr.project_id, [])
-        matched_key, short_report, confirm = match_against_corpus(
-            cr.claim_text, own_chunks, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
-        )
-        cr.shortlist = short_report
-        cr.confirm = confirm
+        key = _claim_key(rec) if cache is not None else None
+        cached_entry = cache["results"].get(key) if cache is not None else None
 
-        if matched_key is not None:
-            cr.outcome = "captured"
-            out.append(cr)
-            established.setdefault(cr.project_id, []).append(cr)
-            if progress:
-                progress(i + 1, total)
-            continue
-
-        # Not in its own corpus -- check supersession against established
-        # (newer) claims in the SAME project first.
-        proj_established = established.get(cr.project_id, [])
-        topic_matches = sorted(
-            proj_established, key=lambda e: similarity(cr.claim_text, e.claim_text), reverse=True,
-        )
-        superseded = False
-        for newer in topic_matches:
-            if similarity(cr.claim_text, newer.claim_text) < SUPERSEDE_TOPIC_FLOOR:
-                break
-            verdict = confirm_supersede(
-                cr.claim_text, newer.claim_text, newer.quoted_source,
-                caller=caller, endpoint=endpoint, model=model, temperature=temperature,
+        if cached_entry is not None:
+            cr.outcome = cached_entry["outcome"]
+            cr.shortlist = cached_entry["shortlist"]
+            cr.confirm = cached_entry["confirm"]
+            cr.supersedes = cached_entry["supersedes"]
+        else:
+            own_chunks = corpora_by_project.get(cr.project_id, [])
+            matched_key, short_report, confirm = match_against_corpus(
+                cr.claim_text, own_chunks, caller=caller, endpoint=endpoint, model=model,
+                temperature=temperature,
             )
-            if verdict["conflicts"]:
-                cr.outcome = "superseded"
-                cr.supersedes = {
-                    "newer_conversation_id": newer.conversation_id,
-                    "newer_real_time": newer.real_time,
-                    "newer_claim_text": newer.claim_text,
-                    "newer_quoted_source": newer.quoted_source,
-                    "matched_span": verdict["matched_span"],
+            cr.shortlist = short_report
+            cr.confirm = confirm
+
+            if matched_key is not None:
+                cr.outcome = "captured"
+            else:
+                # Not in its own corpus -- check supersession against
+                # established (newer) claims in the SAME project first.
+                proj_established = established.get(cr.project_id, [])
+                topic_matches = sorted(
+                    proj_established, key=lambda e: similarity(cr.claim_text, e.claim_text), reverse=True,
+                )
+                superseded = False
+                for newer in topic_matches:
+                    if similarity(cr.claim_text, newer.claim_text) < SUPERSEDE_TOPIC_FLOOR:
+                        break
+                    verdict = confirm_supersede(
+                        cr.claim_text, newer.claim_text, newer.quoted_source,
+                        caller=caller, endpoint=endpoint, model=model, temperature=temperature,
+                    )
+                    if verdict["conflicts"]:
+                        cr.outcome = "superseded"
+                        cr.supersedes = {
+                            "newer_conversation_id": newer.conversation_id,
+                            "newer_real_time": newer.real_time,
+                            "newer_claim_text": newer.claim_text,
+                            "newer_quoted_source": newer.quoted_source,
+                            "matched_span": verdict["matched_span"],
+                        }
+                        superseded = True
+                        break
+
+                if not superseded:
+                    # Cross-project: confirmed in another MCF project's corpus.
+                    cross_found = False
+                    for other_pid, chunks in other_projects.items():
+                        if other_pid == cr.project_id or not chunks:
+                            continue
+                        other_key, other_short, other_confirm = match_against_corpus(
+                            cr.claim_text, chunks, caller=caller, endpoint=endpoint, model=model,
+                            temperature=temperature,
+                        )
+                        if other_key is not None:
+                            cr.outcome = "cross-project"
+                            cr.confirm = other_confirm
+                            cr.shortlist = other_short
+                            cr.supersedes = {"found_in_project": other_pid, "chunk": other_key}
+                            cross_found = True
+                            break
+                    if not cross_found:
+                        cr.outcome = "gap"
+
+            if cache is not None:
+                cache["results"][key] = {
+                    "outcome": cr.outcome, "shortlist": cr.shortlist,
+                    "confirm": cr.confirm, "supersedes": cr.supersedes,
                 }
-                superseded = True
-                break
 
-        if superseded:
-            out.append(cr)
-            if progress:
-                progress(i + 1, total)
-            continue
-
-        # Cross-project: confirmed in another MCF project's corpus.
-        cross_found = False
-        for other_pid, chunks in other_projects.items():
-            if other_pid == cr.project_id or not chunks:
-                continue
-            other_key, other_short, other_confirm = match_against_corpus(
-                cr.claim_text, chunks, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
-            )
-            if other_key is not None:
-                cr.outcome = "cross-project"
-                cr.confirm = other_confirm
-                cr.shortlist = other_short
-                cr.supersedes = {"found_in_project": other_pid, "chunk": other_key}
-                cross_found = True
-                break
-
-        if not cross_found:
-            cr.outcome = "gap"
         out.append(cr)
-        # A gap/cross-project claim still ESTABLISHES current truth on its
-        # topic (brief: "the newest claim on a topic establishes current
-        # truth" -- that is not conditional on the corpus already holding
-        # it). It becomes the reference point an even-older, conflicting
-        # claim can be found to supersede. Only a claim that was ITSELF
-        # superseded is excluded -- it lost, so it should not be what a
-        # still-older claim gets compared against.
-        established.setdefault(cr.project_id, []).append(cr)
+        # A gap/cross-project/captured claim still ESTABLISHES current truth
+        # on its topic (brief: "the newest claim on a topic establishes
+        # current truth" -- that is not conditional on the corpus already
+        # holding it). It becomes the reference point an even-older,
+        # conflicting claim can be found to supersede. Only a claim that was
+        # ITSELF superseded is excluded -- it lost, so it should not be what
+        # a still-older claim gets compared against. This applies the same
+        # way whether cr came from a fresh computation or a cache hit, which
+        # is what keeps a resumed run's supersession chain identical to an
+        # uninterrupted one (see the cache docstring above).
+        if cr.outcome != "superseded":
+            established.setdefault(cr.project_id, []).append(cr)
+
         if progress:
             progress(i + 1, total)
+        if cache is not None and on_checkpoint and (i + 1) % checkpoint_every == 0:
+            on_checkpoint(_build_result(out, model=model, endpoint=endpoint, temperature=temperature))
 
-    return {
-        "model_id": model, "endpoint": endpoint, "temperature": temperature,
-        "run_timestamp": datetime.now(timezone.utc).isoformat(),
-        "claims": [
-            {
-                "project_id": c.project_id, "conversation_id": c.conversation_id,
-                "real_time": c.real_time, "claim_text": c.claim_text,
-                "quoted_source": c.quoted_source, "outcome": c.outcome,
-                "shortlist": c.shortlist, "confirm": c.confirm, "supersedes": c.supersedes,
-            }
-            for c in out
-        ],
-    }
+    result = _build_result(out, model=model, endpoint=endpoint, temperature=temperature)
+    if cache is not None and on_checkpoint:
+        on_checkpoint(result)
+    return result
 
 
 def flatten_claims(claims_report: dict, session_to_project: dict) -> list[dict]:
@@ -395,6 +484,15 @@ def main() -> None:
                           "Result is merged into --out rather than overwriting it.")
     ap.add_argument("--no-progress", dest="progress", action="store_false",
                      help="suppress the 'matching: done/total' terminal progress line")
+    ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE,
+                     help="per-claim decision cache -- makes an interrupted run resumable "
+                          "without re-paying confirm calls for claims already decided "
+                          "(default data/knowledge_curator/matches_cache.json)")
+    ap.add_argument("--no-cache", dest="use_cache", action="store_false",
+                     help="disable the per-claim cache entirely (always recompute)")
+    ap.add_argument("--checkpoint-every", type=int, default=CHECKPOINT_EVERY,
+                     help=f"claims between on-disk checkpoints of cache + partial --out "
+                          f"(default {CHECKPOINT_EVERY})")
     args = ap.parse_args()
 
     bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout, json_mode=args.json_mode)
@@ -418,8 +516,27 @@ def main() -> None:
         flat = [c for c in flat if c["project_id"] in project_filter]
 
     reporter = k2.make_progress_reporter("matching") if args.progress else None
+    cache = k2.load_cache(args.cache) if args.use_cache else None
+
+    def _checkpoint(partial_result: dict) -> None:
+        if cache is not None:
+            k2.save_cache(cache, args.cache)
+        out_to_write = partial_result
+        if project_filter:
+            old = None
+            if args.out.exists():
+                try:
+                    old = json.loads(args.out.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    old = None
+            out_to_write = merge_matches(old, partial_result, project_filter)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(out_to_write, indent=2), encoding="utf-8")
+
     result = match_claims(flat, corpus_index, caller=bound_caller, endpoint=args.endpoint,
-                            model=args.model, temperature=args.temperature, progress=reporter)
+                            model=args.model, temperature=args.temperature, progress=reporter,
+                            cache=cache, on_checkpoint=_checkpoint if cache is not None else None,
+                            checkpoint_every=args.checkpoint_every)
 
     if project_filter:
         old = None
@@ -439,6 +556,8 @@ def main() -> None:
         counts[c["outcome"]] = counts.get(c["outcome"], 0) + 1
     print("outcomes (in --out, all projects):", counts)
     print(f"\nmatches written: {args.out}")
+    if cache is not None:
+        print(f"cache written:   {args.cache}")
 
 
 if __name__ == "__main__":

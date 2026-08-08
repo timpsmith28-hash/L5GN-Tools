@@ -256,4 +256,83 @@ def run() -> list[str]:
         v.append(f"match_claims's progress callback should fire exactly once per claim: "
                   f"{len(progress_calls)} calls for {len(claims)} claims")
 
+    # --- resumable cache: a second run against the SAME claims + corpus
+    #     should reuse every decision from the cache and make ZERO network
+    #     calls, while producing byte-identical outcomes (including the
+    #     supersession chain, which depends on established-list state) -----
+    call_count = {"n": 0}
+
+    def counting_caller(prompt, *, system, endpoint, model, temperature):
+        call_count["n"] += 1
+        return stub_caller(prompt, system=system, endpoint=endpoint, model=model, temperature=temperature)
+
+    cache: dict = {}
+    first = k4.match_claims(claims, corpus_index, caller=counting_caller, endpoint="x",
+                              model="test-model", temperature=0.0, cache=cache)
+    first_calls = call_count["n"]
+    if first_calls == 0:
+        v.append("first cached run should still have made network calls (cache was empty)")
+    if "results" not in cache or len(cache["results"]) != len(claims):
+        v.append(f"cache should hold one entry per claim after a full run: {cache.get('results')}")
+
+    call_count["n"] = 0
+    second = k4.match_claims(claims, corpus_index, caller=counting_caller, endpoint="x",
+                               model="test-model", temperature=0.0, cache=cache)
+    if call_count["n"] != 0:
+        v.append(f"a second run against an unchanged corpus should reuse the cache entirely "
+                  f"and make zero network calls, made {call_count['n']}")
+    if [c["outcome"] for c in second["claims"]] != [c["outcome"] for c in first["claims"]]:
+        v.append("a fully cached re-run should reproduce the same outcomes as the original "
+                  "(supersession chain must survive being replayed from cache)")
+    by_conv2 = {c["conversation_id"]: c for c in second["claims"]}
+    if by_conv2["c-old"]["outcome"] != "superseded" or \
+       (by_conv2["c-old"]["supersedes"] or {}).get("newer_conversation_id") != "c-new2":
+        v.append(f"cached re-run lost the supersession chain: {by_conv2['c-old']}")
+
+    # A claim NOT in the cache (e.g. from a newly re-extracted conversation)
+    # is still computed fresh even though the cache is otherwise fully
+    # populated -- new claims are never blocked by an unrelated cache.
+    call_count["n"] = 0
+    extra_claim = {"project_id": "proj-b", "conversation_id": "c-brand-new",
+                     "real_time": "2026-08-05T00:00:00Z", "claim_text": "Renewal notices fire 30 days ahead",
+                     "quoted_source": "renewal reminder at 30 days"}
+    third = k4.match_claims(claims + [extra_claim], corpus_index, caller=counting_caller, endpoint="x",
+                              model="test-model", temperature=0.0, cache=cache)
+    if call_count["n"] == 0:
+        v.append("a brand-new claim not in the cache should still trigger network calls")
+    if len(third["claims"]) != len(claims) + 1:
+        v.append("a new claim alongside cached ones should appear in the result")
+
+    # Corpus change invalidates the ENTIRE cache (coarse, deliberately) --
+    # confirm the fingerprint mismatch clears prior entries rather than
+    # silently reusing stale decisions against a different corpus.
+    changed_corpus = json.loads(json.dumps(corpus_index))
+    changed_corpus["projects"][0]["files"][0]["chunks"][0]["text"] += " -- edited"
+    call_count["n"] = 0
+    k4.match_claims(claims, changed_corpus, caller=counting_caller, endpoint="x",
+                      model="test-model", temperature=0.0, cache=cache)
+    if call_count["n"] == 0:
+        v.append("a changed corpus should invalidate the cache and trigger fresh network calls")
+
+    # --- on_checkpoint: fires every `checkpoint_every` claims and once more
+    #     at the end, receiving a result-shaped dict each time ---------------
+    checkpoints = []
+    fresh_cache: dict = {}
+    k4.match_claims(claims, corpus_index, caller=stub_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cache=fresh_cache, on_checkpoint=checkpoints.append,
+                      checkpoint_every=2)
+    if len(checkpoints) < 2:
+        v.append(f"on_checkpoint should fire more than once for 5 claims at checkpoint_every=2: "
+                  f"{len(checkpoints)} checkpoints")
+    if "claims" not in checkpoints[0]:
+        v.append("on_checkpoint should receive a result-shaped dict (with a 'claims' key)")
+    if len(checkpoints[-1]["claims"]) != len(claims):
+        v.append("the final on_checkpoint call should carry the complete result")
+    # on_checkpoint must never fire when no cache is supplied (nothing to
+    # checkpoint, and no caller should be required to handle it).
+    def _boom(_):
+        raise AssertionError("on_checkpoint must not be called without a cache")
+    k4.match_claims(claims, corpus_index, caller=stub_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cache=None, on_checkpoint=_boom)
+
     return v
