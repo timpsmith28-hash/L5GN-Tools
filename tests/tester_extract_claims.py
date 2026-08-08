@@ -498,4 +498,56 @@ def run() -> list[str]:
     if merged3 is not new_report2:
         v.append("merge_report with old=None should return the new report unchanged")
 
+    # --- make_progress_reporter: writes "label: done/total", overwritten via
+    #     \r (no scrolling spam), and is a plain optional callback -- passing
+    #     none must not change run_extraction's behavior or output at all ---
+    import io
+    buf = io.StringIO()
+    reporter = k2.make_progress_reporter("extracting", stream=buf)
+    reporter(1, 3)
+    reporter(3, 3)
+    written = buf.getvalue()
+    if "extracting: 1/3" not in written or "extracting: 3/3" not in written:
+        v.append(f"make_progress_reporter did not write the expected done/total text: {written!r}")
+    if not written.startswith("\r"):
+        v.append("make_progress_reporter should overwrite in place (\\r prefix), not scroll")
+    if not written.rstrip("\n").endswith("3/3") or not written.endswith("\n"):
+        v.append("make_progress_reporter should emit a trailing newline only once done == total")
+    buf0 = io.StringIO()
+    k2.make_progress_reporter("x", stream=buf0)(0, 0)
+    if buf0.getvalue():
+        v.append("make_progress_reporter with total=0 should write nothing (nothing to report)")
+
+    # progress callback actually fires during run_extraction, once per
+    # conversation, ending at (n, n) -- and is purely additive: omitting it
+    # (progress=None, the default used everywhere else in this file) must
+    # leave results identical, which every earlier run_extraction assertion
+    # in this file already covers since none of them pass progress=.
+    def _mk_conv(cid: str, ts: str, text: str) -> "lt.Conversation":
+        p = Path(tempfile.mkstemp(suffix=".jsonl")[1])
+        p.write_text("{}\n", encoding="utf-8")
+        sess = lt.ParsedSession(
+            thread_id=cid, store="cowork", encoded_cwd="C--out", path=p,
+            conversation_id=cid, messages=[(0, "user", text, ts, "u1")],
+            created_at=ts, updated_at=ts,
+        )
+        return lt.Conversation(conversation_id=cid, sessions=[sess], real_time=ts,
+                                 real_time_source="last_message_timestamp")
+
+    calls = []
+    stub_progress = lambda done, total: calls.append((done, total))
+    convs_p = [
+        _mk_conv("local_p1", "2026-08-01T00:00:00Z", "hello there this is p1"),
+        _mk_conv("local_p2", "2026-07-01T00:00:00Z", "hello there this is p2"),
+    ]
+
+    def empty_caller(t, *, endpoint, model, temperature, **kw):
+        return "[]"
+
+    k2.run_extraction(convs_p, [], caller=empty_caller, endpoint="x", model="m",
+                        temperature=0.0, cache={}, max_window_tokens=None,
+                        small_conv_tokens=None, progress=stub_progress)
+    if not calls or calls[-1] != (2, 2):
+        v.append(f"run_extraction's progress callback should end at (n, n): {calls}")
+
     return v

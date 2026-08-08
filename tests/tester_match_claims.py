@@ -245,4 +245,15 @@ def run() -> list[str]:
     if merged_m_none is not new_matches:
         v.append("merge_matches with old=None should return the new report unchanged")
 
+    # --- progress callback: fires once per claim, ends at (n, n); a run
+    #     with no callback (every match_claims() call above) is unaffected --
+    progress_calls = []
+    k4.match_claims(claims, corpus_index, caller=stub_caller, endpoint="x", model="test-model",
+                      temperature=0.0, progress=lambda done, total: progress_calls.append((done, total)))
+    if not progress_calls or progress_calls[-1] != (len(claims), len(claims)):
+        v.append(f"match_claims's progress callback should end at (n, n): {progress_calls}")
+    if len(progress_calls) != len(claims):
+        v.append(f"match_claims's progress callback should fire exactly once per claim: "
+                  f"{len(progress_calls)} calls for {len(claims)} claims")
+
     return v

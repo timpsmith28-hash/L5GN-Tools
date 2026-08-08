@@ -195,7 +195,7 @@ def match_against_corpus(claim_text: str, chunks: list[dict], *, caller, endpoin
 
 
 def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: str,
-                   model: str, temperature: float) -> dict:
+                   model: str, temperature: float, progress=None) -> dict:
     """`claims_report` is K2's output (already newest-first per its own
     conversation order). Groups claims by project via the caller-supplied
     conversation->project map baked into each claim record before this is
@@ -208,8 +208,9 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
 
     established: dict[str, list[ClaimRecord]] = {}  # project_id -> newest-first established claims
     out: list[ClaimRecord] = []
+    total = len(claims_report)
 
-    for rec in claims_report:  # already newest-first, per project interleaved as given
+    for i, rec in enumerate(claims_report):  # already newest-first, per project interleaved as given
         cr = ClaimRecord(
             project_id=rec["project_id"], conversation_id=rec["conversation_id"],
             real_time=rec["real_time"], claim_text=rec["claim_text"],
@@ -226,6 +227,8 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
             cr.outcome = "captured"
             out.append(cr)
             established.setdefault(cr.project_id, []).append(cr)
+            if progress:
+                progress(i + 1, total)
             continue
 
         # Not in its own corpus -- check supersession against established
@@ -256,6 +259,8 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
 
         if superseded:
             out.append(cr)
+            if progress:
+                progress(i + 1, total)
             continue
 
         # Cross-project: confirmed in another MCF project's corpus.
@@ -285,6 +290,8 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
         # superseded is excluded -- it lost, so it should not be what a
         # still-older claim gets compared against.
         established.setdefault(cr.project_id, []).append(cr)
+        if progress:
+            progress(i + 1, total)
 
     return {
         "model_id": model, "endpoint": endpoint, "temperature": temperature,
@@ -386,6 +393,8 @@ def main() -> None:
                      help="limit to this MCF project_id (repeatable); refresh a single "
                           "project's matches without re-matching every other project. "
                           "Result is merged into --out rather than overwriting it.")
+    ap.add_argument("--no-progress", dest="progress", action="store_false",
+                     help="suppress the 'matching: done/total' terminal progress line")
     args = ap.parse_args()
 
     bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout, json_mode=args.json_mode)
@@ -408,8 +417,9 @@ def main() -> None:
     if project_filter:
         flat = [c for c in flat if c["project_id"] in project_filter]
 
+    reporter = k2.make_progress_reporter("matching") if args.progress else None
     result = match_claims(flat, corpus_index, caller=bound_caller, endpoint=args.endpoint,
-                            model=args.model, temperature=args.temperature)
+                            model=args.model, temperature=args.temperature, progress=reporter)
 
     if project_filter:
         old = None

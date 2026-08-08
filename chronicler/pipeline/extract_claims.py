@@ -512,6 +512,26 @@ def _result_from_cache(conv, entry: dict) -> ExtractionResult:
 
 
 # ---------------------------------------------------------------------------
+# Progress reporting -- a plain "label: done/total" line, overwritten in
+# place via \r rather than scrolling. Opt-in via a callback so hermetic
+# tests (which pass none) are completely unaffected; the cost of the writes
+# themselves is unmeasurable next to a several-hundred-ms-or-slower LM
+# Studio call, so there is no real pace tradeoff here.
+# ---------------------------------------------------------------------------
+
+def make_progress_reporter(label: str, *, stream=None):
+    stream = stream if stream is not None else sys.stderr
+
+    def report(done: int, total: int) -> None:
+        if total <= 0:
+            return
+        end = "\n" if done >= total else ""
+        stream.write(f"\r{label}: {done}/{total}{end}")
+        stream.flush()
+    return report
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -520,7 +540,8 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                      max_window_tokens: int | None = DEFAULT_MAX_WINDOW_TOKENS,
                      small_conv_tokens: int | None = DEFAULT_SMALL_CONV_TOKENS,
                      batch_target_tokens: int = DEFAULT_BATCH_TARGET_TOKENS,
-                     batch_max_conversations: int = DEFAULT_BATCH_MAX_CONVERSATIONS) -> dict:
+                     batch_max_conversations: int = DEFAULT_BATCH_MAX_CONVERSATIONS,
+                     progress=None) -> dict:
     """`conversations` must already be newest-first (lt.order_newest_first's
     first return value). `excluded` are conversations lt.group_conversations
     could not resolve a real timestamp for -- excluded and named here too,
@@ -557,6 +578,10 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
         else:
             needing_extraction.append(conv)
 
+    total = len(conversations)
+    if progress:
+        progress(len(results_by_id), total)
+
     if small_conv_tokens:
         groups = group_into_batches(
             needing_extraction, small_token_floor=small_conv_tokens,
@@ -575,6 +600,8 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
             results_by_id[conv.conversation_id] = result
             cache[conv.conversation_id] = _cache_entry(result, source_identity(conv))
             reextracted += 1
+            if progress:
+                progress(len(results_by_id), total)
         else:
             batch_results, unattributed = extract_batch(
                 group, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
@@ -585,6 +612,8 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                 results_by_id[conv.conversation_id] = result
                 cache[conv.conversation_id] = _cache_entry(result, source_identity(conv))
                 reextracted += 1
+            if progress:
+                progress(len(results_by_id), total)
 
     results = [results_by_id[c.conversation_id] for c in conversations]
 
@@ -701,6 +730,8 @@ def main() -> None:
                      help="max conversations per batch (default 6)")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--no-progress", dest="progress", action="store_false",
+                     help="suppress the 'extracting: done/total' terminal progress line")
     args = ap.parse_args()
 
     bound_caller = functools.partial(call_lmstudio, timeout=args.timeout, json_mode=args.json_mode)
@@ -725,6 +756,7 @@ def main() -> None:
     included, excluded = lt.order_newest_first(mapped_conversations)
 
     cache = load_cache(args.cache)
+    reporter = make_progress_reporter("extracting") if args.progress else None
     report = run_extraction(
         included, excluded, caller=bound_caller, endpoint=args.endpoint,
         model=args.model, temperature=args.temperature, cache=cache,
@@ -732,6 +764,7 @@ def main() -> None:
         small_conv_tokens=args.small_conv_tokens or None,
         batch_target_tokens=args.batch_target_tokens,
         batch_max_conversations=args.batch_max_conversations,
+        progress=reporter,
     )
     save_cache(cache, args.cache)
 
