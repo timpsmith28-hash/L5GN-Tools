@@ -1205,3 +1205,46 @@ what actually makes staging safe, and it is not being touched. The worst case
 remains a working tree the operator must clean up.
 
 ---
+
+## 0034 — The stdlib-only contract is a package boundary, not a repo boundary; the app tier is a declared dependency
+
+**Date:** 2026-08-08 · **Status:** accepted · **Amends:** the stdlib-only
+contract as recorded in ARCHITECTURE §3 and §6 · **Builds on:** 0007, 0025 ·
+**Source:** design thread
+
+**Context.** The read-only/stdlib contract exists to protect the *scanners*:
+they run against folders they must never write to, on machines whose Python
+environment is not guaranteed, and `auditor_stdlib` + `auditor_readonly` police
+that. That reasoning is entirely about `l5gntools/scanners/` and the package
+that carries them.
+
+It was then generalised into a property of the repository, and the review app
+was built as an *optional extra* to preserve it. That was right while the app
+was a bolt-on for applying ~19 rulings. It stops being right when the app is the
+way the system is used at all: `available()` returning False then describes a
+broken install, not a legitimate configuration, and reporting it as a graceful
+skip makes a defect look like a choice.
+
+**Decision.** The contract is scoped to what it was always protecting:
+
+1. **`l5gntools/` — including every scanner — remains stdlib-only and
+   read-only, unchanged and unweakened.** `auditor_stdlib` and
+   `auditor_readonly` keep their present scope. Nothing in this entry permits
+   a scanner to grow a dependency.
+2. **The application tier (`chronicler/review/`, the launcher) declares its
+   dependencies as required, not optional.** FastAPI and uvicorn move out of
+   `[project.optional-dependencies].review` and into the app's declared tier.
+3. **The dependency direction is one-way and auditable: the app imports
+   `l5gntools`; `l5gntools` never imports the app.** This is the property that
+   makes (1) survivable, so it is enforced by an auditor, not remembered.
+4. `available()` and `run.py review`'s loud skip are retired *for the app path*.
+   A missing web stack is an install error with a stated remedy, not a skip.
+
+**Consequences.** The repo can no longer claim "runs on a bare Python" without
+qualification, and ARCHITECTURE §3's boundary paragraph becomes wrong the moment
+this lands — rewriting it is part of the round, not a follow-up. The scanners
+remain independently installable and independently testable, which is the
+property that actually mattered; `verify.py` must keep proving it with no web
+stack present, or (1) is decorative.
+ 
+---
