@@ -1323,3 +1323,69 @@ normally on the target machine before touching the live vault -- that
 check is now a known prerequisite, not an assumption.
 
 ---
+
+## 0036 — The cross-machine mesh stands down; mothballed behind a config flag, not deleted
+
+**Context.** COWORK_BRIEF_unified_app.md Task 6. The mesh (producers scanning
+and pushing `estate.json` snapshots; the knight consuming them, ingesting chat
+exports, and running the interpret sweep) was the estate's original shape and
+ARCHITECTURE §2/§4 still describe it as *the* shape, not *a* shape. It has not
+failed — 0035 explicitly declined to touch it — but a single-machine
+application (Tasks 1-5 of this same brief) and a two-role mesh answer
+different questions, and documentation that asserts both as simultaneously
+current is documentation nobody can trust cold. Something had to give: keep
+the mesh live and let the app-tier docs describe a shape most installs no
+longer run, or say plainly that the mesh is optional now and mean it.
+
+**Decision.**
+
+1. **`deposit`, `consume`, `intake`'s drop zone, and `deploy/`'s auto-ingest
+   trigger are gated behind a `mesh` machine-config flag**
+   (`l5gntools/config.py:mesh_enabled()`, reading `"mesh": true` from
+   `config/machines.json` or `config/local.json` with the same host
+   precedence as every other machine setting). Off by default. Each gated
+   `run.py` command keeps existing, keeps its help text, and refuses with
+   `"<command>: mesh mode is not enabled -- set \"mesh\": true ..."` and exit
+   code 1 rather than a traceback or a silent no-op. `run.py ingest` degrades
+   rather than refuses: its intake sub-step is skipped with a printed notice
+   (equivalent to `--skip-intake`) and the rest of the pipeline still runs,
+   since ingest's backup and pipeline stages are not mesh-specific.
+2. **`mesh` is a `pyproject.toml` extra with an empty dependency list**, not a
+   config-only flag with no `pip install -e .[mesh]` story. This matches the
+   brief's own framing and the shape of every other optional surface in this
+   file (`chronicler`, `scrape`, `viewer`, `review`, `desktop`) even though
+   deposit/consume/intake are stdlib-only and there is genuinely nothing to
+   install — the extra documents the boundary; the config flag enforces it.
+3. **No code is deleted.** `l5gntools/deposit.py`, `l5gntools/consume.py`,
+   the vendored `intake.py`, and everything in `deploy/` are unchanged and
+   fully functional the moment `"mesh": true` is set. Mothballed, not
+   removed — this is a documentation and default-posture change, not a
+   capability change.
+4. **`KNIGHT_PLAYBOOK.md` and `PRODUCER_PLAYBOOK.md` archive** via
+   `docs/README.md` §3 route 2 (superseded), stamped, naming this entry.
+   Both describe a configuration that still works and is not currently in
+   use — the stamp says exactly that, not that they were wrong.
+5. **`ARCHITECTURE.md` §2 and §4 are rewritten** to describe the
+   single-machine application as the default shape, with the mesh recorded
+   as an opt-in mode rather than *the* topology. The root `README.md`'s
+   loop diagram (producer → knight ASCII flow) is removed with it — a
+   diagram of the default path that stopped being the default path is
+   actively misleading, not merely outdated.
+
+**Consequences.** A fresh clone with no `config/local.json` `"mesh"` entry
+now runs as a standalone application out of the box — `run.py app` / `run.py
+window` — with no drop-zone or push/consume step required or expected.
+Re-enabling the mesh on a box that wants the two-role split again is one
+config key, not a code change or a revert; the archived playbooks are the
+correct read for how to do it, their ARCHIVED stamps notwithstanding.
+`SOLO_PLAYBOOK.md` is untouched by this entry — it was never listed in
+`docs/README.md`'s core-doc table and describes a third case (both roles,
+one box) that this entry does not rule on either way; it may need its own
+pass later, but that is a separate, undecided question, same as 0035's
+treatment of the `role` vocabulary. `deploy/`'s systemd units still install
+and still trigger on a delivered zip; what changed is that the `run.py
+ingest` they call now no-ops its intake step by default, so the watcher
+needs the same config flag as everything else in this entry to do anything
+beyond the backup + pipeline stages.
+
+---

@@ -22,6 +22,14 @@ Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
     python run.py scrape [urls.txt] [--force]    # Gemini share-scrape -> intake
     python run.py ingest [--skip-backup] [--skip-intake]   # backup -> intake -> pipeline
+
+Mesh commands (COWORK_BRIEF_unified_app.md Task 6 / DECISIONS 0036 -- the
+cross-machine mesh is mothballed, not deleted; these keep existing and print
+a stated refusal + remedy unless this machine's config sets "mesh": true):
+    python run.py deposit [--push]               # (producer) package + ship estate snapshot
+    python run.py consume                        # (knight) ingest deposits + interpret sweep
+    python run.py intake [--dry-run]              # (knight) unpack export zips only
+                                                  # ('ingest' still runs with intake skipped)
 """
 from __future__ import annotations
 
@@ -33,7 +41,28 @@ from l5gntools.registry import BY_NAME, SCANNERS
 from l5gntools.report import build_all, scan_subset
 
 
+_MESH_REMEDY = ('set "mesh": true for this machine in config/machines.json '
+                '(or config/local.json)')
+
+
+def _require_mesh(label: str) -> bool:
+    """True iff mesh mode is enabled; prints the stated refusal otherwise.
+
+    COWORK_BRIEF_unified_app.md Task 6 / DECISIONS 0036: the cross-machine
+    mesh (deposit, consume, intake's drop zone, deploy/) is mothballed, not
+    deleted. Every command gated by this stays present and callable -- it
+    just refuses with a one-line remedy instead of a traceback or silence
+    when mesh mode is off, which is the default now."""
+    from l5gntools import config
+    if config.mesh_enabled():
+        return True
+    print(f"{label}: mesh mode is not enabled -- {_MESH_REMEDY}.", file=sys.stderr)
+    return False
+
+
 def _cmd_deposit(args: argparse.Namespace) -> int:
+    if not _require_mesh("deposit"):
+        return 1
     from l5gntools import deposit as dep
     try:
         r = dep.deposit(push=args.push, force=args.force)
@@ -83,6 +112,8 @@ def _run_chronicler(script: str, args: list[str], env: dict) -> int:
 
 
 def _cmd_intake(rest: list[str]) -> int:
+    if not _require_mesh("intake"):
+        return 1
     return _run_chronicler("intake.py", rest, _chronicler_env())
 
 
@@ -134,10 +165,16 @@ def _cmd_ingest(rest: list[str]) -> int:
     if do_backup and not _preflight_backup():
         return 3
     if do_intake:
-        print("ingest: [2/3] intake drop zone")
-        rc = _run_chronicler("intake.py", [], env)
-        if rc != 0:
-            return rc
+        from l5gntools import config
+        if config.mesh_enabled():
+            print("ingest: [2/3] intake drop zone")
+            rc = _run_chronicler("intake.py", [], env)
+            if rc != 0:
+                return rc
+        else:
+            print(f"ingest: [2/3] intake skipped -- mesh mode is not enabled "
+                  f"-- {_MESH_REMEDY}. Continuing with whatever is already in "
+                  "the pipeline's raw/ (same as --skip-intake).")
     print("ingest: [3/3] pipeline")
     return _run_chronicler("run_pipeline.py", rest, env)
 
@@ -197,6 +234,8 @@ def _cmd_scrape(rest: list[str]) -> int:
 
 
 def _cmd_consume() -> int:
+    if not _require_mesh("consume"):
+        return 1
     from pathlib import Path
     from l5gntools import config, consume
     m = config.machine()

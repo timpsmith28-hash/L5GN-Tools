@@ -1,8 +1,10 @@
 # L5GN-Tools — Architecture
 
 Design rationale for the toolkit: what it's for, how the pieces fit, and *why*
-the boundaries are drawn where they are. For deploy/operate steps see
-`KNIGHT_PLAYBOOK.md`; for the front-door overview see the root `README.md`.
+the boundaries are drawn where they are. For the front-door overview see the
+root `README.md`; for how to run it, `README.md`'s Setup/Commands sections.
+For the optional cross-machine mesh, see §2 below and the archived
+`docs/archive/KNIGHT_PLAYBOOK.md` / `PRODUCER_PLAYBOOK.md`.
 
 ## 1. The problem
 
@@ -12,7 +14,17 @@ half sees the other. The goal: one honest, queryable picture that reconciles
 **what the code did** against **what was discussed** — assembled on a machine that
 holds everything, without either half being able to corrupt the other.
 
-## 2. Shape: a small mesh with two roles
+## 2. Shape: one application, with an optional mesh mode
+
+The default shape, as of `run.py app` / `run.py window`
+(COWORK_BRIEF_unified_app.md Tasks 1-5, DECISIONS 0035), is **one machine, one
+process**: it scans its own repos, holds its own vault, and serves the deck
+(queue, estate, docs board, UAT, Curator, Datasette) locally. No push, no
+drop zone, no second box required. This is what a fresh clone runs
+out of the box.
+
+**The cross-machine mesh is an opt-in mode, not the default, as of DECISIONS
+0036** (COWORK_BRIEF_unified_app.md Task 6):
 
 - **Producers** (gaming rig, work laptop) scan their own repos into an
   `estate.json` snapshot and **push** it to the consumer.
@@ -20,8 +32,20 @@ holds everything, without either half being able to corrupt the other.
   by side but **walled** (personal vs work never merge), ingests chat exports into
   the vault, and runs the interpret layer over both.
 
-A machine's role and paths come from hostname-keyed config, so the *same repo*
-behaves correctly everywhere.
+It stood down because a single-machine application and a two-role mesh want
+different default postures, not because it failed — the code is unchanged
+and fully functional. A machine opts back in with `"mesh": true` in
+`config/machines.json` or `config/local.json`
+(`l5gntools/config.py:mesh_enabled()`); without that flag, `deposit`,
+`consume`, and `intake`'s drop zone refuse with a stated one-line remedy
+instead of running. `deploy/`'s auto-ingest watcher is likewise inert by
+default: it still triggers on a delivered zip, but the `run.py ingest` it
+calls skips its intake step unless the same flag is set. See the archived
+`docs/archive/KNIGHT_PLAYBOOK.md` / `PRODUCER_PLAYBOOK.md` for the full
+operator's guide to re-enabling it.
+
+A machine's role and paths still come from hostname-keyed config either way,
+so the *same repo* behaves correctly on a standalone box or a mesh member.
 
 ## 3. The load-bearing boundary: two subsystems
 
@@ -57,6 +81,26 @@ it**. All of it is yours; the wall is about capability, not custody.
 
 ## 4. The loop (data flow)
 
+Standalone (the default — one machine, no mesh flag):
+
+```
+run.py build                    walk repos (read-only) -> data/estate.json + history/
+run.py ingest                   intake: unpack export zips -> raw_* -> Chronicler
+                                 pipeline -> chronicler.db (needs "mesh": true --
+                                 see §2 -- for the intake step; the rest of ingest
+                                 runs regardless)
+run.py app / run.py window      serve the deck against the local estate + vault:
+                                 estate_diff, vault_reader, project_trail, drift
+                                 all read the same machine's own data
+```
+
+Two independent feeds still meet on this one machine: the **estate** side
+(code, from `run.py build`) and the **vault** side (chat, from `run.py
+ingest`). `drift` is where they reconcile — same as the mesh shape below,
+just without a network hop between the two feeds.
+
+Mesh mode (opt-in, `"mesh": true` — see §2, DECISIONS 0036):
+
 ```
 PRODUCER                              KNIGHT (consumer)
  run.py build                          run.py ingest
@@ -71,8 +115,9 @@ PRODUCER                              KNIGHT (consumer)
                                           drift         built vs discussed
 ```
 
-Two independent feeds meet on the knight: the **estate** side (code, via deposit)
-and the **vault** side (chat, via ingest). `drift` is where they reconcile.
+Here the estate and vault feeds meet on the knight instead of on the
+producing machine — the same reconciliation, spread across two boxes for
+whoever still wants that split.
 
 ## 5. Key decisions & why
 

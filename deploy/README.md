@@ -1,5 +1,13 @@
 # deploy/ — export auto-delivery
 
+> **Mesh mode.** COWORK_BRIEF_unified_app.md Task 6 / DECISIONS 0036: the
+> cross-machine mesh is mothballed as the default shape, not deleted. Nothing
+> below is broken, but the systemd unit's `run.py ingest` now skips its intake
+> step by default (`config/machines.json` / `local.json` needs `"mesh": true`
+> on the knight for the drop zone to actually unpack anything -- see
+> `l5gntools/config.py:mesh_enabled()`). Re-enable that first if you install
+> the watcher below.
+
 Ship chat-export zips from a rig to the knight and auto-ingest them, using the
 existing key-based ssh alias. Two halves:
 

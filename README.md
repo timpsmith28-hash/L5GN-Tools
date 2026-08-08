@@ -1,10 +1,14 @@
 # L5GN-Tools
 
-One toolkit, installed on every machine in a small mesh, that builds a single
-picture of a **code estate** and reconciles it against a **chat-history vault**
-(Chronicler). Producers scan their repos and push snapshots to a headless
-consumer (the *knight*), which holds every estate side by side — walled
-personal-vs-work — and interprets them against the chat archive.
+One toolkit that builds a single picture of a **code estate** and reconciles
+it against a **chat-history vault** (Chronicler), standalone on one machine
+by default: `run.py app` (or `run.py window` for a desktop shortcut) scans,
+ingests, and serves the deck in one process, one port, no second box.
+
+A cross-machine mesh mode still exists for whoever wants it — producers scan
+their repos and push snapshots to a headless consumer (the *knight*), which
+holds every estate side by side, walled personal-vs-work — but it is opt-in
+now, not the default (DECISIONS 0036): see "Mesh mode" below.
 
 Two subsystems live here, with a deliberate boundary between them:
 
@@ -15,7 +19,25 @@ Two subsystems live here, with a deliberate boundary between them:
   read-only/stdlib contract (its own deps: pyyaml, sentence-transformers). It
   builds and updates the vault the scanners read. See `chronicler/README.md`.
 
-## The loop
+## Running it (standalone, the default)
+
+```
+run.py build      walk your repos (read-only) -> data/estate.json + history/
+run.py ingest     unpack chat export zips -> Chronicler pipeline -> chronicler.db
+run.py app        serve the deck: queue + estate + docs board + UAT + Curator +
+                   Datasette, one process, one port
+run.py window     'app' plus a desktop window (or use the .bat shortcut)
+```
+
+One machine, its own repos, its own vault. No push, no drop zone, no second
+box.
+
+## Mesh mode (opt-in)
+
+The original shape — producers scanning and pushing snapshots to a headless
+consumer (the *knight*) — still exists, mothballed rather than removed
+(DECISIONS 0036). It is off by default; `deposit` / `consume` / `intake`
+refuse with a stated remedy until a machine's config sets `"mesh": true`:
 
 ```
 producer rig                        knight (consumer)
@@ -27,6 +49,9 @@ producer rig                        knight (consumer)
                                         project_trail per-project chat trail (S7)
                                         drift        built-vs-discussed (S8)
 ```
+
+See `docs/archive/KNIGHT_PLAYBOOK.md` / `docs/archive/PRODUCER_PLAYBOOK.md`
+for the full operator's guide to standing this back up.
 
 Each machine knows its **role** (`producer` / `consumer`) and paths from config
 keyed by hostname. `config/machines.json` is a committed template; the real
@@ -51,11 +76,18 @@ python run.py list                         # list scanners
 python run.py build [--all --include-third-party]   # scan -> data/estate.json + snapshot + report.html
 python run.py <tool> --target NAME | --all          # one scanner
 python run.py config                       # this machine's resolved config
+python run.py app [--port N] [--host H]    # the deck: one process, one port
+python run.py window                       # 'app' + a desktop window
+python run.py ingest [--skip-intake]       # unpack the drop zone (mesh only) + run the Chronicler pipeline
+python verify.py                           # the gate
+```
+
+Mesh-only, refuse with a stated remedy unless `"mesh": true` (see "Mesh mode" above):
+
+```
 python run.py deposit [--push]             # (producer) package + ship estate snapshot to the knight
 python run.py consume                      # (knight) ingest deposits + run the interpret sweep
-python run.py ingest [--skip-intake]       # (knight) unpack the drop zone + run the Chronicler pipeline
 python run.py intake [--dry-run]           # (knight) unpack export zips only
-python verify.py                           # the gate
 ```
 
 ## Tools
@@ -85,24 +117,27 @@ python verify.py                           # the gate
 
 ```
 L5GN-Tools/
-  run.py               dispatcher / CLI entry (build, deposit, consume, ingest, intake…)
+  run.py               dispatcher / CLI entry (app, window, build, ingest; mesh-only:
+                        deposit, consume, intake)
   verify.py            the gate (auditors + testers)
   l5gntools/           read-only scanners + config, deposit, consume (stdlib-only)
     scanners/          one module per tool
   chronicler/          vendored ingest pipeline (writer; own deps) -- builds the vault
+    review/            the deck: FastAPI app, module registry, launcher, static/
   config/              machines.json (template) + local.json (real, git-ignored)
-  deploy/              push-exports.ps1 + knight systemd auto-ingest units
-  docs/                the trinity + playbook; see docs/README.md for the map
-    archive/           retired docs, stamped; investigation/ raw thread exchanges
+  deploy/              push-exports.ps1 + knight systemd auto-ingest units (mesh mode)
+  docs/                the trinity; see docs/README.md for the map
+    archive/           retired docs, stamped (incl. the mesh playbooks); investigation/
+                        raw thread exchanges
   data/, report.html   generated output (git-ignored)
 ```
 
 ## More
 
 - **Design rationale / how it fits:** `docs/ARCHITECTURE.md`
-- **Deploy / operate the mesh:** `docs/KNIGHT_PLAYBOOK.md`
+- **Mesh mode (opt-in):** `docs/archive/KNIGHT_PLAYBOOK.md` / `PRODUCER_PLAYBOOK.md`
 - **Ingest subsystem + drop zone:** `chronicler/README.md`
-- **Auto-delivery of exports:** `deploy/README.md`
+- **Auto-delivery of exports (mesh mode):** `deploy/README.md`
 - **Doc map / archiving convention:** `docs/README.md`
 - **Status:** derived, not documented — `python verify.py`, `git log`, the DB
 

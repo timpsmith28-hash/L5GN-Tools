@@ -64,6 +64,18 @@ def machine(host: str | None = None) -> dict:
     return entry
 
 
+def mesh_enabled(host: str | None = None) -> bool:
+    """True iff this machine has opted into mesh mode.
+
+    The cross-machine mesh (deposit / consume / intake's drop zone / deploy/)
+    stood down as the default shape in COWORK_BRIEF_unified_app.md Task 6 --
+    see DECISIONS 0036 and ARCHITECTURE §2. The code is not deleted; a machine
+    that still wants the two-role split opts back in with a ``"mesh": true``
+    entry in ``config/machines.json`` or ``config/local.json`` (same
+    precedence as every other machine setting -- see :func:`machine`)."""
+    return bool(machine(host).get("mesh"))
+
+
 def author_aliases() -> dict:
     """Map of ``alias_name_lowercased -> canonical_name`` for folding git author
     identities. Built from ``config/authors.json`` (canonical -> [aliases]); the

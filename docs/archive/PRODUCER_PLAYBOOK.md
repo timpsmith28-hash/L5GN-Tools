@@ -1,3 +1,14 @@
+> **ARCHIVED** 2026-08-08 · superseded · no report — a runbook, not a brief/report pair
+> Superseded by: DECISIONS 0036 (COWORK_BRIEF_unified_app.md Task 6)
+> This describes a configuration that still works and is not currently in use.
+> The cross-machine mesh it operates is mothballed, not removed — `deposit`
+> still runs once a machine's config sets `"mesh": true` (see
+> `l5gntools/config.py:mesh_enabled()`); it is simply no longer the default
+> shape a fresh clone runs. Read as an accurate operator's guide for a mode
+> that must be deliberately re-enabled, not as the current default path —
+> that path is `run.py app` / `run.py window`, undocumented here because this
+> file predates them.
+
 # L5GN-Tools — Producer Deployment & Operator's Playbook
 
 How to stand up a **producer** rig, deposit its estate to the knight, and run it

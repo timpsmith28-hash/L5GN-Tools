@@ -16,12 +16,21 @@ dependencies = []
 #   pip install -e .[viewer]         # Datasette read surface (DECISIONS 0007 stage 1)
 #   pip install -e .[review]         # narrow write endpoint (DECISIONS 0007 stage 2)
 #   pip install -e .[desktop]        # the window (`run.py window`, COWORK_BRIEF_unified_app.md Task 5)
+#
+# `mesh` is deliberately empty: deposit/consume/intake's drop zone are
+# stdlib-only, so there is no package to install. The gate is a machine
+# config flag ("mesh": true in config/machines.json or config/local.json),
+# not pip -- see l5gntools/config.py:mesh_enabled(). The extra exists so
+# `pip install -e .[mesh]` reads correctly as documentation of the boundary
+# (COWORK_BRIEF_unified_app.md Task 6 / DECISIONS 0036) even though it
+# installs nothing.
 [project.optional-dependencies]
 chronicler = ["pyyaml>=6", "sentence-transformers>=2"]
 scrape = ["playwright>=1.40"]
 viewer = ["datasette>=0.64"]
 review = ["fastapi>=0.110", "uvicorn>=0.29"]
 desktop = ["pywebview>=5"]
+mesh = []
 
 # Only the importable package ships; run.py / verify.py / auditors / tests stay
 # top-level dev scripts. CID depends on the `l5gntools` package alone.

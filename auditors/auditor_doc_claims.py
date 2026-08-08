@@ -73,17 +73,21 @@ _FIELD = re.compile(r"(\w+)\s*=\s*(\S+)")
 # Docs that are *maintained*, not finished -- their claims are present-tense
 # by definition, so a gate-frozen marker in any of them is itself a
 # violation. Mirrors the docs-archivist skill's never-archive list
-# (docs/README.md §1: "Never treat a trinity file ... or KNIGHT_PLAYBOOK.md
-# as a candidate. They are maintained, not finished.") -- keep the two lists
-# in sync; if one changes, check the other.
+# (docs/README.md §1: "Never treat a trinity file ... as a candidate. They
+# are maintained, not finished.") -- keep the two lists in sync; if one
+# changes, check the other.
+#
+# KNIGHT_PLAYBOOK.md / PRODUCER_PLAYBOOK.md archived to docs/archive/ under
+# DECISIONS 0036 (COWORK_BRIEF_unified_app.md Task 6) -- removed from this
+# set because they no longer live at a docs/*.md path this auditor scans;
+# docs/archive/ is exempt by design (see docs/README.md §3, "why the
+# auditor stops at the archive door").
 NEVER_FREEZE = frozenset({
     "README.md",
     "docs/README.md",
     "docs/INTENT.md",
     "docs/ARCHITECTURE.md",
     "docs/DECISIONS.md",
-    "docs/KNIGHT_PLAYBOOK.md",
-    "docs/PRODUCER_PLAYBOOK.md",
 })
 
 

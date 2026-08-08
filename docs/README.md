@@ -18,9 +18,12 @@ These are maintained. If one contradicts the code, that's a bug in the doc.
 | `INTENT.md` | Why the system is worth building. Wants, not facts. | The reason changes — not on a schedule |
 | `ARCHITECTURE.md` | What the system *is*, as built — and **why the boundaries sit where they do** | The shape changes |
 | `DECISIONS.md` | Append-only *why* behind each ruling. Never edited; superseded by a later entry | Never — entries are frozen by construction |
-| `KNIGHT_PLAYBOOK.md` | Deploy + operate the **consumer** (the knight). Operator-facing runbook | The deploy steps change |
-| `PRODUCER_PLAYBOOK.md` | Deploy + operate a **producer** rig. The other half of the runbook | The deploy steps change |
 | `SPEC_Chronicler.md` | The linking/skillset spec for the ingest side | The spec is executed or superseded |
+
+`KNIGHT_PLAYBOOK.md` and `PRODUCER_PLAYBOOK.md` archived 2026-08-08 (DECISIONS
+0036) — the mesh they operate is mothballed, not removed; see
+`archive/KNIGHT_PLAYBOOK.md` / `archive/PRODUCER_PLAYBOOK.md` for how to
+re-enable it.
 
 `INTENT` / `ARCHITECTURE` / `DECISIONS` are **the trinity**. Where a brief, a
 report or an archived doc disagrees with the trinity, the trinity wins.
@@ -139,11 +142,11 @@ above.
 
 The marker is for **finished docs only**. A handful of docs are maintained,
 not finished, and may never carry it — `README.md` (root), `docs/README.md`,
-`docs/INTENT.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`,
-`docs/KNIGHT_PLAYBOOK.md`, `docs/PRODUCER_PLAYBOOK.md`. A marker found in any
-of those is a violation. This is the same list §1 already treats as
+`docs/INTENT.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`. A marker found
+in any of those is a violation. This is the same list §1 already treats as
 maintained and the docs-archivist skill already refuses to archive — keep
-the two in sync.
+the two in sync. (`docs/KNIGHT_PLAYBOOK.md` / `docs/PRODUCER_PLAYBOOK.md`
+were on this list until DECISIONS 0036 archived them — see §1.)
 
 ### Why the auditor stops at the archive door
 
