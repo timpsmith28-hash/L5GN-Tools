@@ -22,7 +22,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from . import core
+from . import core, module_contract, modules
 
 # The request-body model must live at MODULE level (not inside create_app) so
 # pydantic can resolve it when FastAPI builds the route schema -- a closure-local
@@ -146,7 +146,7 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
     state from `curator_estate_gap` (wrong machine) -- both degrade the same
     routes, for different reasons, and both are reported as such.
     """
-    from fastapi import FastAPI, HTTPException
+    from fastapi import Depends, FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
     from fastapi.staticfiles import StaticFiles
@@ -338,20 +338,61 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
                     "indexed": 0, "skipped": 0, "persisted": False}
         return index.status()
 
-    @app.get("/api/estate/timeline")
-    def estate_timeline_route():
-        _need_estate()
-        from . import estate_time
-        return estate_time.estate_timeline(estate.snapshot)
+    # ---- the module registry (COWORK_BRIEF_unified_app.md, Task 1) ---------
+    # Every route above this line is declared inline, the old way, and stays
+    # that way this round. Below it, modules that have been migrated onto the
+    # descriptor registry contribute their own routers and the tab strip is
+    # served as data. Both shapes run in one process on purpose: if they could
+    # not coexist the descriptor would be wrong, and one tab is the cheapest
+    # place to find that out.
+    ctx = module_contract.AppContext(
+        db_path=db_path, registry=registry, account_clause=account_clause,
+        estate=estate, index=index, vault_unavailable=vault_unavailable,
+        curator=curator, curator_estate_gap=curator_estate_gap)
+    caps = module_contract.capabilities(ctx)
 
-    @app.get("/api/estate/changes")
-    def estate_changes():
-        """What moved since the previous build. Names both snapshots by
-        timestamp and toolkit commit, because "what changed" is meaningless
-        without saying changed *between what and what*."""
-        _need_estate()
-        from . import estate_time
-        return estate_time.build_delta()
+    def _gate(descriptor):
+        """One 503 for a whole module, built from its declared `requires`.
+
+        This is the `_need_vault()` / `_need_estate()` pattern hoisted out of
+        the route bodies and into data: the module says what it needs, this
+        resolves it once at app-build time, and the routes below carry no
+        availability question at all. The status is still 503 and the body
+        still names the cause -- the route exists and is correct, its
+        dependency is not present on this machine.
+        """
+        gaps = module_contract.unmet(descriptor, caps)
+
+        def dependency():
+            if gaps:
+                raise HTTPException(status_code=503, detail={
+                    "available": False,
+                    "reason": gaps[0]["reason"],
+                    "module": descriptor.id,
+                    "unmet": gaps,
+                    "detail": "; ".join(g["detail"] for g in gaps)})
+
+        return dependency
+
+    for descriptor in modules.registered():
+        app.include_router(descriptor.router(ctx),
+                           dependencies=[Depends(_gate(descriptor))])
+
+    @app.get("/api/modules")
+    def get_modules():
+        """The tab strip, as data.
+
+        Returns what the browser needs to draw a tab and load a view, plus
+        each module's resolved degradation with a named cause -- so a module
+        whose requirements are absent renders as declared-degraded rather than
+        as an empty pane or an error page. Router factories are Python
+        callables and are not in this response; nothing here addresses server
+        internals by name.
+        """
+        return {
+            "capabilities": caps,
+            "modules": [module_contract.resolve(d, caps) for d in modules.ordered()],
+        }
 
     # ---- the docs board (0027 read-time; 0028 staging is NOT in this slice) --
     # Neither route is gated. The board derives from `docs/` in this checkout,

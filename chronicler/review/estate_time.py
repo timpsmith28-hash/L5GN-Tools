@@ -194,3 +194,40 @@ def build_delta(history_dir=None) -> dict:
     result["to_build"] = _snapshot_stamp(history, result.get("to_snapshot"))
     result["history_dir"] = str(history)
     return result
+
+
+# ---- the module's own routes (COWORK_BRIEF_unified_app.md, Task 1) ----------
+# The Time tab is the one tab migrated onto the descriptor registry in the
+# commit that lands it. Its router lives beside its logic rather than in
+# `app.py`, which is the whole claim being tested: a module declares itself.
+#
+# The FastAPI import is INSIDE the factory on purpose. `modules.py` imports
+# this file to reference the factory, `auditor_module_contract` imports
+# `modules.py`, and `verify.py` must stay green on a machine with no web stack
+# (DECISIONS 0034's consequence paragraph). A top-level `from fastapi import
+# APIRouter` here would make the gate depend on the app tier's dependencies,
+# which is precisely the coupling 0034 clause 3 exists to prevent.
+#
+# Note what is NOT here: no `_need_estate()`. This module declares
+# `requires=("estate",)` in `modules.py` and `create_app` gates the whole
+# router once from that declaration. The routes state what they return and
+# nothing else.
+
+def router(ctx):
+    """Build this module's APIRouter. `ctx` is a `module_contract.AppContext`."""
+    from fastapi import APIRouter
+
+    api = APIRouter()
+
+    @api.get("/api/estate/timeline")
+    def estate_timeline_route():
+        return estate_timeline(ctx.estate.snapshot)
+
+    @api.get("/api/estate/changes")
+    def estate_changes_route():
+        """What moved since the previous build. Names both snapshots by
+        timestamp and toolkit commit, because "what changed" is meaningless
+        without saying changed *between what and what*."""
+        return build_delta()
+
+    return api

@@ -90,6 +90,9 @@
          margin-bottom: -1px; }
   .tab:hover { background: #8881; }
   .tab.active { border-color: #8884; background: #4a90e21a; font-weight: 600; }
+  /* A module whose declared `requires` are absent on this machine. Dimmed,
+     never hidden and never disabled: opening it is how you read the cause. */
+  .tab.unmet { opacity: .6; }
   .pane { display: none; }
   .pane.active { display: block; }
   .degraded { max-width: 68rem; margin: 0 auto; border: 1px solid #d9822b66;
@@ -257,15 +260,13 @@
 
   <div id="stamp"><span class="k">build</span> <span>loading…</span></div>
 
-  <div id="tabs">
-    <div class="tab active" data-pane="queue" onclick="showPane('queue')">Review queue</div>
-    <div class="tab" data-pane="docs" onclick="showPane('docs')">Documents</div>
-    <div class="tab" data-pane="search" onclick="showPane('search')">Search</div>
-    <div class="tab" data-pane="time" onclick="showPane('time')">Time</div>
-    <div class="tab" data-pane="board" onclick="showPane('board')">Docs board</div>
-    <div class="tab" data-pane="uat" onclick="showPane('uat')">UAT sidebar</div>
-    <div class="tab" data-pane="curator" onclick="showPane('curator')">Knowledge Curator</div>
-  </div>
+  <!-- The tab strip is built from /api/modules, not written here. Seven tabs
+       were hardcoded at this spot; the registry (chronicler/review/modules.py)
+       is now the only place a module is declared, and an eighth needs no edit
+       to this file at all. Six of the seven panes below are still markup --
+       deliberately, per Task 1: one tab moved, the other six left on the old
+       path to prove the two shapes coexist. -->
+  <div id="tabs"><div class="nav-empty">Loading modules…</div></div>
 
   <section id="pane-queue" class="pane active">
     <p class="sub" style="max-width:68rem;margin-inline:auto">Personal-estate threads
@@ -303,11 +304,10 @@
     </div>
   </section>
 
-  <section id="pane-time" class="pane">
-    <div style="max-width:68rem;margin-inline:auto">
-      <div id="time-view"><div class="empty">Loading…</div></div>
-    </div>
-  </section>
+  <!-- No #pane-time here on purpose: the Time module's pane is created by the
+       shell from its descriptor and filled by static/views/time.js. That is
+       the migrated shape -- markup for a registered module lives with the
+       module, not in this file. -->
 
   <section id="pane-board" class="pane">
     <div style="max-width:96rem;margin-inline:auto">
@@ -603,15 +603,87 @@ async function rejectOne(btn){
 
 let ESTATE_PROJECTS = [];
 let DOC_PROJECT = null;
-let TIME_LOADED = false;
 let BOARD_LOADED = false;
+
+/* ---- the module registry, client side ----
+   MODULES is whatever /api/modules said, including each module's resolved
+   degradation. The strip is drawn from it; a registered module's pane is
+   created from it; a legacy module's pane is the markup above. */
+let MODULES = [];
+const MOUNTED = {};   // module id -> true once its view module has run
+
+function moduleById(id){ return MODULES.find(m => m.id === id) || null; }
+
+async function loadModules(){
+  const tabs = document.getElementById("tabs");
+  let payload;
+  try { payload = await jget("/api/modules"); }
+  catch(e){
+    // No strip means no way to reach any pane, so say so where the strip was.
+    tabs.innerHTML = `<div class="degraded">Module registry unavailable: ${esc(e.message)}</div>`;
+    return;
+  }
+  MODULES = payload.modules || [];
+  tabs.innerHTML = MODULES.map(m => {
+    // A degraded tab is still a tab you can open -- it opens onto the named
+    // cause. Hiding it would make a missing dependency look like a missing
+    // feature, which is the class of "plausible wrong answer" INTENT §5 names.
+    const why = (m.unmet || []).map(u => u.detail).join(" · ");
+    return `<div class="tab${m.available?"":" unmet"}" data-pane="${esc(m.id)}"` +
+      `${m.available?"":` title="${esc(why)}"`}>${esc(m.label)}` +
+      `${m.available?"":' <span aria-hidden="true">◦</span>'}</div>`;
+  }).join("");
+  tabs.querySelectorAll(".tab").forEach(t =>
+    t.addEventListener("click", () => showPane(t.dataset.pane)));
+  // A registered module owns its pane element; the shell only creates it.
+  for (const m of MODULES){
+    if (m.view && !document.getElementById(`pane-${m.id}`)){
+      const sec = document.createElement("section");
+      sec.id = `pane-${m.id}`;
+      sec.className = "pane";
+      document.body.appendChild(sec);
+    }
+  }
+  if (MODULES.length) showPane(MODULES[0].id);
+}
+
+/* A module whose declared requirements are absent renders the named cause.
+   Not empty, not an error page, not a route-level 503 the user has to read a
+   network tab to find -- the descriptor said what it needed, so the pane can
+   say what is missing. */
+function declaredDegraded(el, m){
+  const causes = (m.unmet || []).map(u =>
+    `<li><strong>${esc(u.requirement)}</strong> — ${esc(u.detail)}</li>`).join("");
+  el.innerHTML = `<div class="degraded" style="max-width:68rem;margin-inline:auto">
+    <strong>${esc(m.label)}</strong> is unavailable on this machine because it
+    declares requirements that are not met here:
+    <ul style="margin:.4rem 0 0">${causes}</ul></div>`;
+}
+
+async function mountModule(m){
+  const el = document.getElementById(`pane-${m.id}`);
+  if (!el || MOUNTED[m.id]) return;
+  MOUNTED[m.id] = true;
+  if (!m.available){ declaredDegraded(el, m); return; }
+  try {
+    // Native ES module, resolved from the descriptor's `view` filename. No
+    // bundler, no import map: the shell knows the directory, the descriptor
+    // knows the file, and neither accepts a path from anywhere else.
+    const mod = await import(`/views/${m.view}`);
+    await mod.mount(el, { esc, jget, degraded });
+  } catch(e){
+    degraded(el, `${m.label}: view failed to load — ${e.message}`);
+  }
+}
 
 function showPane(name){
   document.querySelectorAll(".tab").forEach(t =>
     t.classList.toggle("active", t.dataset.pane === name));
   document.querySelectorAll(".pane").forEach(p =>
     p.classList.toggle("active", p.id === `pane-${name}`));
-  if (name === "time" && !TIME_LOADED) loadTime();
+  const m = moduleById(name);
+  if (m && m.view) mountModule(m);
+  // The six panes still on the old path keep their old loaders, unchanged.
   if (name === "board" && !BOARD_LOADED) loadBoard();
   if (name === "curator" && !CURATOR_LOADED) loadCurator();
 }
@@ -800,89 +872,12 @@ async function jumpToDoc(project, docId){
   openDoc(docId);
 }
 
-/* ---- time ---- */
-
-function fmtDate(iso){ return iso ? String(iso).slice(0,10) : "—"; }
-
-function timelineHtml(tl){
-  if (!tl.has_axis){
-    return `<div class="degraded">${esc(tl.note||"No history to plot.")}</div>` +
-      nohistHtml(tl.without_history);
-  }
-  return `<div class="card">
-    <h3>Estate timeline — ${fmtDate(tl.axis_start)} to ${fmtDate(tl.axis_end)}
-        (${tl.axis_span_days} days)</h3>
-    <div class="tl-axis"><span></span><span class="ends">
-      <span>${fmtDate(tl.axis_start)}</span><span>${fmtDate(tl.axis_end)}</span></span></div>
-    ${tl.projects.map(p => `
-      <div class="tl-row">
-        <span class="tl-name" title="${esc(p.project)}">${esc(p.project)}</span>
-        <span class="tl-track" title="${fmtDate(p.first_commit)} → ${fmtDate(p.last_commit)} · ${p.span_days} days · ${p.commit_count} commits">
-          <span class="tl-bar${p.dirty_files?' dirty':''}"
-                style="left:${(p.offset*100).toFixed(2)}%;width:${(p.width*100).toFixed(2)}%"></span>
-        </span>
-      </div>`).join("")}
-  </div>` + spansHtml(tl.projects) + nohistHtml(tl.without_history);
-}
-
-function spansHtml(projects){
-  return `<div class="card"><h3>Per project</h3>
-    <table class="delta"><tr><th>project</th><th>first</th><th>last</th>
-      <th>days</th><th>commits</th><th>contributors</th></tr>
-    ${projects.map(p => `<tr>
-      <td>${esc(p.project)}${p.dirty_files?` <span class="dirty" title="${p.dirty_files} dirty files at build time">●</span>`:''}</td>
-      <td>${fmtDate(p.first_commit)}</td><td>${fmtDate(p.last_commit)}</td>
-      <td>${p.span_days}</td><td>${p.commit_count ?? "?"}</td>
-      <td>${esc((p.contributors||[]).map(c => c.commits==null?`${c.author} (latest only)`:`${c.author} ${c.commits}`).join(", "))}</td>
-    </tr>`).join("")}</table></div>`;
-}
-
-function nohistHtml(absent){
-  if (!absent || !absent.length) return "";
-  return `<div class="card"><h3>No history — stated, not guessed</h3>
-    ${absent.map(p => `<div class="nohist"><strong>${esc(p.project)}</strong> — ${esc(p.reason)}</div>`).join("")}
-    <div class="meta" style="margin-top:.4rem">These are not given a span from
-      file mtimes. A fabricated window is worse than an absent one.</div></div>`;
-}
-
-function deltaHtml(d){
-  if (d.status !== "ok"){
-    return `<div class="card"><h3>What changed since the last build</h3>
-      <div class="degraded">${esc(d.note || d.status)} (${d.snapshots_available ?? 0} snapshot(s) in ${esc(d.history_dir||"history")})</div></div>`;
-  }
-  const stamp = b => `${esc(b.file||"?")} — ${esc(b.generated_at||"undated")} @ ${esc(b.toolkit_commit||"?")}${b.toolkit_dirty?" (dirty)":""}`;
-  const s = d.summary || {};
-  return `<div class="card">
-    <h3>What changed since the last build</h3>
-    <div class="meta">Comparing <strong>${stamp(d.from_build||{})}</strong>
-      → <strong>${stamp(d.to_build||{})}</strong></div>
-    <p class="note">${s.projects_changed} project(s) changed ·
-      ${s.projects_added} added · ${s.projects_removed} removed ·
-      ${s.new_commits} new commit(s)</p>
-    ${d.projects_added.length?`<div class="note">Appeared: ${esc(d.projects_added.join(", "))}</div>`:""}
-    ${d.projects_removed.length?`<div class="note">Vanished: ${esc(d.projects_removed.join(", "))}</div>`:""}
-    ${d.changed.length?`<table class="delta">
-      <tr><th>project</th><th>git</th><th>documents</th></tr>
-      ${d.changed.map(c => `<tr>
-        <td>${esc(c.project)}</td>
-        <td>${c.git?`${c.git.new_commit_count} new commit(s)`:"—"}</td>
-        <td>${c.docs?esc(["added","removed","changed"].map(k =>
-              (c.docs[k]||[]).length?`${k}: ${(c.docs[k]||[]).length}`:"").filter(Boolean).join(" · ")||"—"):"—"}</td>
-      </tr>`).join("")}</table>`:`<div class="empty">Nothing moved between these two builds.</div>`}
-  </div>`;
-}
-
-async function loadTime(){
-  const el = document.getElementById("time-view");
-  try {
-    const [tl, delta] = await Promise.all([
-      jget("/api/estate/timeline"), jget("/api/estate/changes")]);
-    el.innerHTML = timelineHtml(tl) + deltaHtml(delta);
-    TIME_LOADED = true;
-  } catch(e){
-    degraded(el, `Time views unavailable: ${e.message}`);
-  }
-}
+/* ---- time ----
+   Moved out. The Time module is the one tab migrated onto the descriptor
+   registry this round (COWORK_BRIEF_unified_app.md, Task 1): its render
+   functions now live in static/views/time.js and the shell loads them from
+   the descriptor. `fmtDate` went with them -- nothing else in this file
+   used it. */
 
 /* ---- docs board ---- */
 
@@ -1607,6 +1602,10 @@ async function loadCuratorCoverage(){
 // estate half, and vice versa -- which is the whole point of the preflight
 // split. So each loader reports its own gap and neither aborts the other.
 async function boot(){
+  // The strip first: until /api/modules answers there is no tab to click, and
+  // a module's declared degradation is part of that answer rather than
+  // something each loader discovers for itself.
+  await loadModules();
   loadStamp();
   loadEstateProjects();
   try {

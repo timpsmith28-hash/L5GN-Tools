@@ -179,6 +179,16 @@ An auditor — `auditor_module_contract.py`, modelled on `auditor_tool_contract`
 proves it: every registered module carries every declared field, every view file
 has a registration, no orphans in either direction.
 
+**A second, distinct auditor is a required deliverable of this task, not a UAT
+afterthought:** `auditor_dependency_direction.py` proves 0034 clause 3 — it walks
+`l5gntools/`'s imports and fails on any import of `chronicler.review` or any other
+app-tier module. It is not a variant of `auditor_module_contract`; that one proves
+the descriptor is complete, this one proves the direction that makes 0034 clause 1
+(scanners stay stdlib-only) survivable at all. Build it in the same commit that
+first makes both tiers importable side by side — the UAT check on line "an auditor
+fails a deliberate import of the app tier" is this auditor's proof, not a separate
+thing to build later.
+
 **Migrate exactly one tab in the same commit as the registry, and leave the other
 six on the old path.** If both shapes cannot coexist, the descriptor is wrong and
 the round has found that out cheaply.
@@ -289,6 +299,13 @@ of this task. The README's loop diagram goes with them.
   Stop, report the shape that resisted, re-argue before continuing.
 - **0034 is ruled against.** Task 5 grows a missing-web-stack case; do not proceed
   as if it landed.
+- **`auditor_dependency_direction.py` (0034 clause 3) does not land.** Clause 3 is
+  what keeps clause 1 from rotting — it is the whole reason a stdlib-only scanner
+  package can sit beside a dependency-heavy app tier without the boundary being
+  "please don't import that." A round that ships the app split without this
+  auditor has weakened the stdlib contract in exchange for a promise, which is the
+  trade INTENT §5 ("guarantees are structural, not behavioural") rules out. Stop
+  and build it before merging, even if that costs Task 1's day-budget.
 - **Datasette will not mount cleanly.** Drop it and record that — do not restore
   the second process to save the feature.
 - **The data-root move puts the vault at any risk.** Stop. The vault is the one
