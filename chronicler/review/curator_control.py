@@ -50,14 +50,14 @@ STAGE_TABLE: dict[str, dict] = {
            "argv": lambda cfg: ["--out", str(CURATOR_DATA_DIR / "knowledge_index.json")]},
     "K2": {"label": "K2 -- extract claims", "script": "extract_claims.py",
            "deterministic": False, "model_stage": "extraction",
-           "argv": lambda cfg: (["--endpoint", cfg.get("endpoint") or DEFAULT_ENDPOINT,
+           "argv": lambda cfg: (["--endpoint", chat_completions_endpoint(cfg.get("endpoint") or DEFAULT_ENDPOINT),
                                   "--model", cfg["K2"]] if cfg.get("K2") else None)},
     "K3": {"label": "K3 -- corpus index", "script": "corpus_index.py",
            "deterministic": True, "model_stage": None,
            "argv": lambda cfg: []},
     "K4": {"label": "K4 -- match claims", "script": "match_claims.py",
            "deterministic": False, "model_stage": "confirm",
-           "argv": lambda cfg: (["--endpoint", cfg.get("endpoint") or DEFAULT_ENDPOINT,
+           "argv": lambda cfg: (["--endpoint", chat_completions_endpoint(cfg.get("endpoint") or DEFAULT_ENDPOINT),
                                   "--model", cfg["K4"]] if cfg.get("K4") else None)},
     "K5": {"label": "K5 -- compile report", "script": "compile_report.py",
            "deterministic": True, "model_stage": None,
@@ -70,6 +70,22 @@ EXECUTION_ALLOWLIST: frozenset[str] = frozenset(STAGE_TABLE)
 MODEL_SELECTABLE_STAGES: tuple[str, ...] = ("K2", "K4")
 
 DEFAULT_ENDPOINT = "http://localhost:1234"  # chat/completions + /v1/models both hang off this
+
+
+def chat_completions_endpoint(endpoint: str) -> str:
+    """K2/extract_claims.py and K4/match_claims.py both POST to a literal
+    ``--endpoint`` string with no path of their own appended (see
+    ``call_lmstudio`` in extract_claims.py) -- their own CLI default is the
+    full ``.../v1/chat/completions`` URL. The control strip's ``DEFAULT_ENDPOINT``
+    and ``config/local.json``'s stored ``endpoint`` are both base URLs (the
+    same base ``probe_lm_studio`` appends ``/v1/models`` to), so it must be
+    turned into the full chat-completions URL here before being handed to
+    either stage -- passing the base straight through POSTs to ``/`` and LM
+    Studio answers "Unexpected endpoint or method"."""
+    endpoint = endpoint.rstrip("/")
+    if endpoint.endswith("/v1/chat/completions"):
+        return endpoint
+    return endpoint + "/v1/chat/completions"
 
 K2_CACHE_PATH = CURATOR_DATA_DIR / "claims_cache.json"
 K4_CACHE_PATH = CURATOR_DATA_DIR / "matches_cache.json"

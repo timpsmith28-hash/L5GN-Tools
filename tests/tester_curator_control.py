@@ -36,6 +36,24 @@ def run() -> list[str]:
         if exc.reason != "not_allowlisted":
             v.append(f"curator_control: wrong refusal reason for a bad stage key: {exc.reason}")
 
+    # --- K2/K4 argv gets the full chat-completions URL, not the bare host:port
+    # base (extract_claims.py / match_claims.py POST to --endpoint literally;
+    # a bare base like "http://localhost:1234" hits "/" and LM Studio answers
+    # "Unexpected endpoint or method") ---------------------------------------
+    for stage in ("K2", "K4"):
+        argv = ctl.STAGE_TABLE[stage]["argv"]({stage: "gemma-4"})
+        if argv is None or "--endpoint" not in argv:
+            v.append(f"curator_control: {stage} argv must pass --endpoint")
+        else:
+            ep = argv[argv.index("--endpoint") + 1]
+            if not ep.endswith("/v1/chat/completions"):
+                v.append(f"curator_control: {stage} --endpoint must be the full "
+                          f"chat-completions URL, got {ep!r}")
+    already_full = ctl.chat_completions_endpoint("http://localhost:1234/v1/chat/completions")
+    if already_full != "http://localhost:1234/v1/chat/completions":
+        v.append("curator_control: chat_completions_endpoint must not double-append "
+                  f"the suffix, got {already_full!r}")
+
     # --- K0/K1/K3/K5 offer no model selector --------------------------------
     for stage in ("K0", "K1", "K3", "K5"):
         if stage in ctl.MODEL_SELECTABLE_STAGES:
