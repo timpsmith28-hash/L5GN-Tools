@@ -30,6 +30,7 @@ import difflib
 import hashlib
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,6 +267,43 @@ def _claims_out(out: list[ClaimRecord]) -> list[dict]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Per-conversation timing -- Task 1 of COWORK_BRIEF_conductor.md, K4's half.
+# K4 works at claim granularity, not conversation-object granularity (it
+# never sees a Conversation, just K2's flattened per-claim records), so
+# there is no message_count to report here -- claim_count stands in for it,
+# honestly, rather than a fabricated one. A record is emitted once a
+# conversation_id's run of claims ends (the next claim belongs to a
+# different conversation, or the walk finishes), and only if at least one
+# claim in that run actually made a network call -- an all-cache-hit
+# conversation cost no wall-clock time worth logging.
+# ---------------------------------------------------------------------------
+
+def make_timing_reporter(*, stream=None, jsonl_path=None):
+    """Same shape/contract as extract_claims.make_timing_reporter -- see its
+    docstring. Records here carry ``claim_count`` instead of
+    ``message_count`` and no ``batch_size`` (K4 never batches)."""
+    stream = stream if stream is not None else sys.stderr
+
+    def report(record: dict) -> None:
+        stream.write(
+            "TIMING "
+            f"conversation_id={record['conversation_id']} "
+            f"project_id={record['project_id']} "
+            f"claim_count={record['claim_count']} "
+            f"model_id={record['model_id']} "
+            f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
+        )
+        stream.flush()
+        if jsonl_path is not None:
+            entry = dict(record)
+            entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+            jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+            with jsonl_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+    return report
+
+
 def _build_result(out: list[ClaimRecord], *, model: str, endpoint: str, temperature: float) -> dict:
     return {
         "model_id": model, "endpoint": endpoint, "temperature": temperature,
@@ -277,7 +315,8 @@ def _build_result(out: list[ClaimRecord], *, model: str, endpoint: str, temperat
 def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: str,
                    model: str, temperature: float, progress=None,
                    cache: dict | None = None, on_checkpoint=None,
-                   checkpoint_every: int = CHECKPOINT_EVERY) -> dict:
+                   checkpoint_every: int = CHECKPOINT_EVERY,
+                   cool_down: float = 0.0, sleep_fn=time.sleep, on_timing=None) -> dict:
     """`claims_report` is K2's output (already newest-first per its own
     conversation order). Groups claims by project via the caller-supplied
     conversation->project map baked into each claim record before this is
@@ -296,7 +335,14 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
     ``checkpoint_every`` claims (and once more at the end) with the
     in-progress result in the same shape as this function's return value,
     so a caller can persist both the cache and a partial ``--out`` to disk
-    without waiting for the whole run to finish."""
+    without waiting for the whole run to finish.
+
+    ``cool_down`` (seconds, default 0) sleeps via ``sleep_fn`` BETWEEN
+    conversations (never mid-conversation, never after the last one, never
+    after a conversation whose claims were all cache hits). ``on_timing``,
+    if given, is called once per conversation with a wall-clock timing
+    record (see `make_timing_reporter`) covering only the claims in that
+    conversation that actually made a network call."""
     corpora_by_project = {
         p["project_id"]: _project_chunks(corpus_index, p["project_id"])
         for p in corpus_index.get("projects", [])
@@ -315,7 +361,36 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
     out: list[ClaimRecord] = []
     total = len(claims_report)
 
+    # --- per-conversation timing/cool-down bookkeeping (Task 1 of
+    # COWORK_BRIEF_conductor.md) -- claims arrive newest-first, per project
+    # interleaved, but conversation runs are still contiguous within a
+    # project, so "the conversation_id changed" is a reliable boundary. ---
+    conv_id = None
+    conv_project_id = None
+    conv_claim_count = 0
+    conv_elapsed = 0.0
+    conv_had_network = False
+
+    def _flush_conv(next_conv_id):
+        nonlocal conv_id, conv_project_id, conv_claim_count, conv_elapsed, conv_had_network
+        if conv_id is not None and conv_had_network:
+            if on_timing:
+                on_timing({
+                    "conversation_id": conv_id, "project_id": conv_project_id,
+                    "claim_count": conv_claim_count, "model_id": model,
+                    "wall_clock_seconds": conv_elapsed,
+                })
+            if cool_down and next_conv_id is not None:
+                sleep_fn(cool_down)
+        conv_id, conv_project_id = next_conv_id, None
+        conv_claim_count, conv_elapsed, conv_had_network = 0, 0.0, False
+
     for i, rec in enumerate(claims_report):  # already newest-first, per project interleaved as given
+        if rec["conversation_id"] != conv_id:
+            _flush_conv(rec["conversation_id"])
+        conv_project_id = rec["project_id"]
+        conv_claim_count += 1
+
         cr = ClaimRecord(
             project_id=rec["project_id"], conversation_id=rec["conversation_id"],
             real_time=rec["real_time"], claim_text=rec["claim_text"],
@@ -330,6 +405,7 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
             cr.confirm = cached_entry["confirm"]
             cr.supersedes = cached_entry["supersedes"]
         else:
+            _claim_started = time.perf_counter()
             own_chunks = corpora_by_project.get(cr.project_id, [])
             matched_key, short_report, confirm = match_against_corpus(
                 cr.claim_text, own_chunks, caller=caller, endpoint=endpoint, model=model,
@@ -393,6 +469,9 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
                     "confirm": cr.confirm, "supersedes": cr.supersedes,
                 }
 
+            conv_elapsed += time.perf_counter() - _claim_started
+            conv_had_network = True
+
         out.append(cr)
         # A gap/cross-project/captured claim still ESTABLISHES current truth
         # on its topic (brief: "the newest claim on a topic establishes
@@ -411,6 +490,8 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
             progress(i + 1, total)
         if cache is not None and on_checkpoint and (i + 1) % checkpoint_every == 0:
             on_checkpoint(_build_result(out, model=model, endpoint=endpoint, temperature=temperature))
+
+    _flush_conv(None)  # emit + never sleep after the very last conversation
 
     result = _build_result(out, model=model, endpoint=endpoint, temperature=temperature)
     if cache is not None and on_checkpoint:
@@ -457,11 +538,15 @@ def merge_matches(old: dict | None, new: dict, touched_projects: set) -> dict:
 
 def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str,
                             temperature: float, timeout: float = DEFAULT_TIMEOUT,
-                            json_mode: bool = True) -> str:
+                            json_mode: bool = True, ttl: float | None = None) -> str:
     """As extract_claims.call_lmstudio, but for K4's two confirm shapes --
     ``response_format`` is selected by matching ``system`` against the two
     known prompts (``CONFIRM_CHUNK_SYSTEM`` / ``CONFIRM_SUPERSEDE_SYSTEM``),
-    so callers never have to say which schema applies."""
+    so callers never have to say which schema applies.
+
+    ``ttl``, if given, is passed through verbatim as the payload's ``ttl``
+    field -- see ``extract_claims.call_lmstudio``'s docstring; same LM
+    Studio knob, same semantics."""
     import urllib.request
     body: dict = {
         "model": model, "temperature": temperature,
@@ -475,6 +560,8 @@ def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str
                 "type": "json_schema",
                 "json_schema": {"name": name, "strict": True, "schema": schema},
             }
+    if ttl is not None:
+        body["ttl"] = ttl
     payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(endpoint, data=payload, method="POST",
                                    headers={"Content-Type": "application/json"})
@@ -514,9 +601,24 @@ def main() -> None:
     ap.add_argument("--checkpoint-every", type=int, default=CHECKPOINT_EVERY,
                      help=f"claims between on-disk checkpoints of cache + partial --out "
                           f"(default {CHECKPOINT_EVERY})")
+    ap.add_argument("--cool-down", type=float, default=0.0,
+                     help="seconds to sleep BETWEEN conversations after a network call, "
+                          "never mid-conversation (default 0 -- today's behaviour). See "
+                          "COWORK_BRIEF_conductor.md Task 1.")
+    ap.add_argument("--model-ttl", type=float, default=None,
+                     help="pass `ttl` (seconds) in the chat-completions payload so LM "
+                          "Studio's own idle-TTL/auto-evict can free the model between "
+                          "projects, instead of a manual reload "
+                          "(https://lmstudio.ai/docs/developer/core/ttl-and-auto-evict). "
+                          "Omitted by default.")
+    ap.add_argument("--timing-log", type=Path, default=None,
+                     help="also append per-conversation timing records as JSON lines to "
+                          "this file (Task 2's calibration ledger input); the human-readable "
+                          "TIMING line is always written to stderr regardless")
     args = ap.parse_args()
 
-    bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout, json_mode=args.json_mode)
+    bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout,
+                                      json_mode=args.json_mode, ttl=args.model_ttl)
 
     import knowledge_index as k1
     claims_report = json.loads(args.claims.read_text(encoding="utf-8"))
@@ -554,10 +656,12 @@ def main() -> None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(out_to_write, indent=2), encoding="utf-8")
 
+    timing_reporter = make_timing_reporter(jsonl_path=args.timing_log)
     result = match_claims(flat, corpus_index, caller=bound_caller, endpoint=args.endpoint,
                             model=args.model, temperature=args.temperature, progress=reporter,
                             cache=cache, on_checkpoint=_checkpoint if cache is not None else None,
-                            checkpoint_every=args.checkpoint_every)
+                            checkpoint_every=args.checkpoint_every, cool_down=args.cool_down,
+                            on_timing=timing_reporter)
 
     if project_filter:
         old = None

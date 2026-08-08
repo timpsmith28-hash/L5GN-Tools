@@ -362,4 +362,116 @@ def run() -> list[str]:
     k4.match_claims(claims, corpus_index, caller=stub_caller, endpoint="x", model="test-model",
                       temperature=0.0, cache=None, on_checkpoint=_boom)
 
+    # --- COWORK_BRIEF_conductor.md Task 1: --model-ttl -> payload `ttl` ----
+    captured3 = {}
+
+    def fake_urlopen3(req, timeout=None):
+        captured3["payload"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+
+    try:
+        urllib.request.urlopen = fake_urlopen3
+        k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                   model="m", temperature=0.0)
+        if "ttl" in captured3["payload"]:
+            v.append("call_lmstudio_generic with no ttl given must not send a `ttl` field")
+
+        k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                   model="m", temperature=0.0, ttl=90.0)
+        if captured3["payload"].get("ttl") != 90.0:
+            v.append(f"call_lmstudio_generic(ttl=90.0) should send payload['ttl']==90.0, "
+                      f"got {captured3['payload'].get('ttl')!r}")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # --- COWORK_BRIEF_conductor.md Task 1: cool-down sleeps BETWEEN
+    #     conversations (never mid-conversation, never after the last one),
+    #     and a per-conversation timing line carries claim_count (K4 has no
+    #     message_count -- it never sees a Conversation object). Two claims
+    #     share "c-tl1", one is alone in "c-tl2"; an empty corpus makes every
+    #     claim a fast, deterministic "gap" so this stays about the pacing
+    #     mechanics, not outcome correctness (already covered above). -------
+    empty_corpus = {"projects": []}
+    tl_claims = [
+        {"project_id": "proj-a", "conversation_id": "c-tl1", "real_time": "2026-08-01T00:00:00Z",
+         "claim_text": "claim 1a", "quoted_source": "q1a"},
+        {"project_id": "proj-a", "conversation_id": "c-tl1", "real_time": "2026-08-01T00:00:00Z",
+         "claim_text": "claim 1b", "quoted_source": "q1b"},
+        {"project_id": "proj-a", "conversation_id": "c-tl2", "real_time": "2026-07-01T00:00:00Z",
+         "claim_text": "claim 2a", "quoted_source": "q2a"},
+    ]
+
+    def gap_caller(prompt, *, system, endpoint, model, temperature):
+        if system == k4.CONFIRM_CHUNK_SYSTEM:
+            return json.dumps({"confirmed": False, "matched_span": ""})
+        return json.dumps({"conflicts": False, "matched_span": ""})
+
+    tl_sleeps: list[float] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cool_down=7.0, sleep_fn=tl_sleeps.append)
+    if tl_sleeps != [7.0]:
+        v.append(f"2 conversations (c-tl1 x2 claims, c-tl2 x1) with cool_down=7.0 should "
+                  f"sleep exactly once, between conversations, never mid-conversation and "
+                  f"never after the last: {tl_sleeps}")
+
+    tl_sleeps_zero: list[float] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cool_down=0.0, sleep_fn=tl_sleeps_zero.append)
+    if tl_sleeps_zero:
+        v.append(f"cool_down=0.0 (the default) must never sleep: {tl_sleeps_zero}")
+
+    tl_timing: list[dict] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="timing-model",
+                      temperature=0.0, on_timing=tl_timing.append)
+    if len(tl_timing) != 2:
+        v.append(f"expected one timing record per CONVERSATION (not per claim): {len(tl_timing)}")
+    else:
+        by_id = {r["conversation_id"]: r for r in tl_timing}
+        if by_id["c-tl1"]["claim_count"] != 2:
+            v.append(f"c-tl1 has 2 claims -- timing record claim_count should say so: {by_id['c-tl1']}")
+        if by_id["c-tl2"]["claim_count"] != 1:
+            v.append(f"c-tl2 has 1 claim -- timing record claim_count should say so: {by_id['c-tl2']}")
+        if by_id["c-tl1"]["project_id"] != "proj-a" or by_id["c-tl1"]["model_id"] != "timing-model":
+            v.append(f"timing record missing project_id/model_id: {by_id['c-tl1']}")
+        if not isinstance(by_id["c-tl1"]["wall_clock_seconds"], float) or by_id["c-tl1"]["wall_clock_seconds"] < 0:
+            v.append(f"timing record wall_clock_seconds should be a non-negative float: {by_id['c-tl1']}")
+
+    # a conversation whose claims are ALL cache hits made no network call --
+    # it should get neither a timing record nor a cool-down sleep.
+    warm_cache: dict = {}
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cache=warm_cache)
+    cached_sleeps: list[float] = []
+    cached_timing: list[dict] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cache=warm_cache, cool_down=3.0, sleep_fn=cached_sleeps.append,
+                      on_timing=cached_timing.append)
+    if cached_sleeps or cached_timing:
+        v.append(f"an all-cache-hit re-run should emit no timing records and never sleep: "
+                  f"sleeps={cached_sleeps} timing={cached_timing}")
+
+    # omitting cool_down/on_timing entirely (every match_claims() call above
+    # this point) must leave behaviour and results completely unchanged --
+    # already implicitly proven by every earlier assertion in this file.
+
+    # --- make_timing_reporter: human line to stream + optional JSONL file --
+    import io
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        buf = io.StringIO()
+        jsonl_path = td_path / "timing.jsonl"
+        reporter = k4.make_timing_reporter(stream=buf, jsonl_path=jsonl_path)
+        reporter({"conversation_id": "c1", "project_id": "p1", "claim_count": 2,
+                   "model_id": "m1", "wall_clock_seconds": 2.25})
+        written = buf.getvalue()
+        if "TIMING" not in written or "conversation_id=c1" not in written or "claim_count=2" not in written:
+            v.append(f"make_timing_reporter did not write the expected TIMING line: {written!r}")
+        if not jsonl_path.exists():
+            v.append("make_timing_reporter with jsonl_path given should create the file")
+        else:
+            lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
+            if len(lines) != 1 or "timestamp" not in json.loads(lines[0]):
+                v.append(f"JSONL timing record missing fields: {lines}")
+
     return v

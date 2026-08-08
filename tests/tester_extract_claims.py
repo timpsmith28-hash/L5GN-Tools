@@ -596,4 +596,143 @@ def run() -> list[str]:
         v.append("run_extraction should report the matching-fingerprint conversation as "
                   "served from cache")
 
+    # --- COWORK_BRIEF_conductor.md Task 1: --model-ttl -> payload `ttl` ----
+    captured2 = {}
+
+    def fake_urlopen2(req, timeout=None):
+        captured2["payload"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse({"choices": [{"message": {"content": "[]"}}]})
+
+    try:
+        urllib.request.urlopen = fake_urlopen2
+        k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0)
+        if "ttl" in captured2["payload"]:
+            v.append("call_lmstudio with no ttl given must not send a `ttl` field at all")
+
+        k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0, ttl=120.0)
+        if captured2["payload"].get("ttl") != 120.0:
+            v.append(f"call_lmstudio(ttl=120.0) should send payload['ttl']==120.0, "
+                      f"got {captured2['payload'].get('ttl')!r}")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # --- COWORK_BRIEF_conductor.md Task 1: --cool-down sleeps BETWEEN
+    #     conversations (never after the last one), and --cool-down 0 (the
+    #     default) reproduces today's behaviour exactly (no sleep at all) --
+    conv_cd1 = _mk_conv("local_cd1", "2026-08-03T00:00:00Z", "cool-down conversation one")
+    conv_cd2 = _mk_conv("local_cd2", "2026-08-02T00:00:00Z", "cool-down conversation two")
+    conv_cd3 = _mk_conv("local_cd3", "2026-08-01T00:00:00Z", "cool-down conversation three")
+
+    sleeps: list[float] = []
+    k2.run_extraction(
+        [conv_cd1, conv_cd2, conv_cd3], [], caller=empty_caller, endpoint="x", model="m",
+        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=None,
+        cool_down=5.0, sleep_fn=sleeps.append,
+    )
+    if sleeps != [5.0, 5.0]:
+        v.append(f"3 conversations with cool_down=5.0 should sleep exactly twice (between "
+                  f"1-2 and 2-3, never after the last): {sleeps}")
+
+    sleeps_zero: list[float] = []
+    k2.run_extraction(
+        [conv_cd1, conv_cd2], [], caller=empty_caller, endpoint="x", model="m",
+        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=None,
+        cool_down=0.0, sleep_fn=sleeps_zero.append,
+    )
+    if sleeps_zero:
+        v.append(f"cool_down=0.0 (the default) must never sleep -- reproduces today's "
+                  f"behaviour exactly: {sleeps_zero}")
+
+    # A cached (no-network) re-run must not sleep either -- cool-down only
+    # applies between groups that actually did a model call.
+    warm_cache: dict = {}
+    k2.run_extraction([conv_cd1, conv_cd2], [], caller=empty_caller, endpoint="x", model="m",
+                        temperature=0.0, cache=warm_cache, max_window_tokens=None,
+                        small_conv_tokens=None, cool_down=9.0, sleep_fn=lambda s: None)
+    sleeps_cached: list[float] = []
+    k2.run_extraction([conv_cd1, conv_cd2], [], caller=empty_caller, endpoint="x", model="m",
+                        temperature=0.0, cache=warm_cache, max_window_tokens=None,
+                        small_conv_tokens=None, cool_down=9.0, sleep_fn=sleeps_cached.append)
+    if sleeps_cached:
+        v.append(f"an all-cache-hit re-run should never sleep (nothing needed pacing): "
+                  f"{sleeps_cached}")
+
+    # --- COWORK_BRIEF_conductor.md Task 1: per-conversation timing line ---
+    timing_records: list[dict] = []
+    k2.run_extraction(
+        [conv_cd1, conv_cd2], [], caller=empty_caller, endpoint="x", model="timing-model",
+        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=None,
+        session_to_project={"local_cd1": "proj-x", "local_cd2": "proj-y"},
+        on_timing=timing_records.append,
+    )
+    if len(timing_records) != 2:
+        v.append(f"expected one timing record per conversation, got {len(timing_records)}")
+    else:
+        ids = {r["conversation_id"] for r in timing_records}
+        if ids != {"local_cd1", "local_cd2"}:
+            v.append(f"timing records should cover both conversations: {ids}")
+        r1 = next(r for r in timing_records if r["conversation_id"] == "local_cd1")
+        if r1["project_id"] != "proj-x":
+            v.append(f"timing record project_id should come from session_to_project: {r1}")
+        if r1["model_id"] != "timing-model":
+            v.append(f"timing record model_id should be the run's model: {r1}")
+        if r1["message_count"] != 1:
+            v.append(f"timing record message_count wrong: {r1}")
+        if r1["batch_size"] != 1:
+            v.append(f"single-conversation path should report batch_size 1: {r1}")
+        if not isinstance(r1["wall_clock_seconds"], float) or r1["wall_clock_seconds"] < 0:
+            v.append(f"timing record wall_clock_seconds should be a non-negative float: {r1}")
+
+    # omitting on_timing/session_to_project must change nothing about results.
+    baseline = k2.run_extraction([conv_cd1, conv_cd2], [], caller=empty_caller, endpoint="x",
+                                   model="timing-model", temperature=0.0, cache={},
+                                   max_window_tokens=None, small_conv_tokens=None)
+    if baseline["claims_extracted"] != 0 or baseline["conversations_scanned"] != 2:
+        v.append("run_extraction with on_timing/session_to_project omitted should behave "
+                  "exactly as before")
+
+    # a batched group shares one wall-clock measurement across its members,
+    # marked with the real batch_size rather than a fabricated per-conversation split.
+    b1 = tiny_conv("local_tb1", 100)
+    b2 = tiny_conv("local_tb2", 100)
+    batch_timing: list[dict] = []
+
+    def batch_empty_caller(t, *, endpoint, model, temperature, **kw):
+        return "[]"
+
+    k2.run_extraction([b1, b2], [], caller=batch_empty_caller, endpoint="x", model="m",
+                        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=1500,
+                        batch_target_tokens=6000, batch_max_conversations=6,
+                        on_timing=batch_timing.append)
+    if len(batch_timing) != 2:
+        v.append(f"a batch of 2 should still emit 2 timing records (one per conversation): "
+                  f"{len(batch_timing)}")
+    elif batch_timing[0]["batch_size"] != 2 or batch_timing[1]["batch_size"] != 2:
+        v.append(f"both members of a batched group should report batch_size 2: {batch_timing}")
+    elif batch_timing[0]["wall_clock_seconds"] != batch_timing[1]["wall_clock_seconds"]:
+        v.append("both members of a batched group should share the SAME measured wall-clock "
+                  "time, not a fabricated split")
+
+    # --- make_timing_reporter: human line to stream + optional JSONL file --
+    with tempfile.TemporaryDirectory() as td5:
+        td5 = Path(td5)
+        buf2 = io.StringIO()
+        jsonl_path = td5 / "timing.jsonl"
+        reporter2 = k2.make_timing_reporter(stream=buf2, jsonl_path=jsonl_path)
+        reporter2({"conversation_id": "c1", "project_id": "p1", "message_count": 3,
+                    "model_id": "m1", "batch_size": 1, "wall_clock_seconds": 1.5})
+        written2 = buf2.getvalue()
+        if "TIMING" not in written2 or "conversation_id=c1" not in written2 or "wall_clock_seconds=1.500" not in written2:
+            v.append(f"make_timing_reporter did not write the expected TIMING line: {written2!r}")
+        if not jsonl_path.exists():
+            v.append("make_timing_reporter with jsonl_path given should create the file")
+        else:
+            lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
+            if len(lines) != 1:
+                v.append(f"expected exactly one JSONL line written: {lines}")
+            else:
+                rec = json.loads(lines[0])
+                if rec["conversation_id"] != "c1" or "timestamp" not in rec:
+                    v.append(f"JSONL timing record missing fields: {rec}")
+
     return v

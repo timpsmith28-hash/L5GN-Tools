@@ -25,6 +25,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -161,7 +162,8 @@ CLAIMS_BATCH_JSON_SCHEMA = {
 
 def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
                    temperature: float, timeout: float = DEFAULT_TIMEOUT,
-                   json_mode: bool = True, batch: bool = False) -> str:
+                   json_mode: bool = True, batch: bool = False,
+                   ttl: float | None = None) -> str:
     """POST to an OpenAI-compatible chat/completions endpoint; returns the
     assistant message content as a raw string. Raises ``OSError`` /
     ``urllib.error.URLError`` on any transport failure -- callers must NOT
@@ -176,7 +178,14 @@ def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
     ``json_mode=False`` if a given endpoint errors on the field outright.
 
     ``batch=True`` selects ``SYSTEM_PROMPT_BATCH`` -- only ``extract_batch``
-    should ever pass it; the single-conversation path never does."""
+    should ever pass it; the single-conversation path never does.
+
+    ``ttl``, if given, is passed through verbatim as the request payload's
+    ``ttl`` field -- LM Studio's own idle-TTL/auto-evict knob
+    (https://lmstudio.ai/docs/developer/core/ttl-and-auto-evict), which
+    unloads a JIT-loaded model after this many idle seconds. Omitted
+    entirely when ``None`` (today's behaviour, and whatever default TTL the
+    server itself is configured with)."""
     system = SYSTEM_PROMPT_BATCH if batch else SYSTEM_PROMPT
     schema = CLAIMS_BATCH_JSON_SCHEMA if batch else CLAIMS_JSON_SCHEMA
     schema_name = "claims_batch" if batch else "claims"
@@ -193,6 +202,8 @@ def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
             "type": "json_schema",
             "json_schema": {"name": schema_name, "strict": True, "schema": schema},
         }
+    if ttl is not None:
+        body["ttl"] = ttl
     payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         endpoint, data=payload, method="POST",
@@ -582,6 +593,47 @@ def make_progress_reporter(label: str, *, stream=None):
 
 
 # ---------------------------------------------------------------------------
+# Per-conversation timing -- Task 1 of COWORK_BRIEF_conductor.md. Emitted
+# once per conversation (not per model call): a batched group's members all
+# share the group's wall-clock time, marked with `batch_size` so a consumer
+# (Task 2's calibration ledger, out of scope here) can tell a true
+# per-conversation measurement from a shared one rather than silently
+# averaging them together. Opt-in via a callback, same shape as
+# `make_progress_reporter`, so passing none changes nothing.
+# ---------------------------------------------------------------------------
+
+def _message_count(conv) -> int:
+    return sum(len(sess.messages) for sess in conv.sessions)
+
+
+def make_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
+    """Writes one human-readable ``TIMING ...`` line per conversation to
+    ``stream`` (default stderr), and -- if ``jsonl_path`` is given -- also
+    appends the same record as a UTC-ISO-8601-stamped JSON line, which is
+    the shape Task 2's ledger is meant to read."""
+    stream = stream if stream is not None else sys.stderr
+
+    def report(record: dict) -> None:
+        stream.write(
+            "TIMING "
+            f"conversation_id={record['conversation_id']} "
+            f"project_id={record['project_id']} "
+            f"message_count={record['message_count']} "
+            f"model_id={record['model_id']} "
+            f"batch_size={record['batch_size']} "
+            f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
+        )
+        stream.flush()
+        if jsonl_path is not None:
+            entry = dict(record)
+            entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+            jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+            with jsonl_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+    return report
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -591,7 +643,8 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                      small_conv_tokens: int | None = DEFAULT_SMALL_CONV_TOKENS,
                      batch_target_tokens: int = DEFAULT_BATCH_TARGET_TOKENS,
                      batch_max_conversations: int = DEFAULT_BATCH_MAX_CONVERSATIONS,
-                     progress=None) -> dict:
+                     progress=None, cool_down: float = 0.0, sleep_fn=time.sleep,
+                     session_to_project: dict | None = None, on_timing=None) -> dict:
     """`conversations` must already be newest-first (lt.order_newest_first's
     first return value). `excluded` are conversations lt.group_conversations
     could not resolve a real timestamp for -- excluded and named here too,
@@ -612,11 +665,22 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     file identity only, not on these settings, by design (brief: an
     unchanged conversation is never re-extracted), so a stale cache entry
     from a differently-windowed prior run would otherwise be served as-is.
+
+    ``cool_down`` (seconds, default 0 -- today's behaviour) sleeps via
+    ``sleep_fn`` (default ``time.sleep``, injectable for hermetic tests)
+    BETWEEN groups that actually did a model call, never mid-conversation
+    and never after the last group. ``on_timing``, if given, is called once
+    per conversation with a wall-clock timing record (see
+    `make_timing_reporter`) -- purely observational, no effect on results.
+    ``session_to_project`` (``{conversation_id: project_id}``) is only used
+    to attribute those timing records; omitting it just leaves
+    ``project_id`` unset in the record.
     """
     results_by_id: dict[str, ExtractionResult] = {}
     reextracted = 0
     from_cache = 0
     batch_unattributed: list[dict] = []
+    session_to_project = session_to_project or {}
 
     fp = prompt_fingerprint()
     if cache.get(_PROMPT_FINGERPRINT_KEY) != fp:
@@ -645,22 +709,34 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     else:
         groups = [[c] for c in needing_extraction]
 
-    for group in groups:
+    for group_idx, group in enumerate(groups):
+        started = time.perf_counter()
         if len(group) == 1:
             conv = group[0]
             result = extract_for_conversation(
                 conv, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
                 max_window_tokens=max_window_tokens,
             )
+            elapsed = time.perf_counter() - started
             results_by_id[conv.conversation_id] = result
             cache[conv.conversation_id] = _cache_entry(result, source_identity(conv))
             reextracted += 1
             if progress:
                 progress(len(results_by_id), total)
+            if on_timing:
+                on_timing({
+                    "conversation_id": conv.conversation_id,
+                    "project_id": session_to_project.get(conv.conversation_id),
+                    "message_count": _message_count(conv),
+                    "model_id": model,
+                    "batch_size": 1,
+                    "wall_clock_seconds": elapsed,
+                })
         else:
             batch_results, unattributed = extract_batch(
                 group, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
             )
+            elapsed = time.perf_counter() - started
             batch_unattributed.extend(unattributed)
             for conv in group:
                 result = batch_results[conv.conversation_id]
@@ -669,6 +745,23 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                 reextracted += 1
             if progress:
                 progress(len(results_by_id), total)
+            if on_timing:
+                # A batch call's wall-clock time is shared, not per-conversation
+                # measured -- every member gets the SAME elapsed figure, plus
+                # batch_size so a consumer can tell the difference rather than
+                # silently averaging a shared cost as if it were N independent
+                # measurements.
+                for conv in group:
+                    on_timing({
+                        "conversation_id": conv.conversation_id,
+                        "project_id": session_to_project.get(conv.conversation_id),
+                        "message_count": _message_count(conv),
+                        "model_id": model,
+                        "batch_size": len(group),
+                        "wall_clock_seconds": elapsed,
+                    })
+        if cool_down and group_idx < len(groups) - 1:
+            sleep_fn(cool_down)
 
     results = [results_by_id[c.conversation_id] for c in conversations]
 
@@ -787,9 +880,24 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--no-progress", dest="progress", action="store_false",
                      help="suppress the 'extracting: done/total' terminal progress line")
+    ap.add_argument("--cool-down", type=float, default=0.0,
+                     help="seconds to sleep BETWEEN conversations after a model call, "
+                          "never mid-conversation (default 0 -- today's behaviour). See "
+                          "COWORK_BRIEF_conductor.md Task 1.")
+    ap.add_argument("--model-ttl", type=float, default=None,
+                     help="pass `ttl` (seconds) in the chat-completions payload so LM "
+                          "Studio's own idle-TTL/auto-evict can free the model between "
+                          "projects, instead of a manual reload "
+                          "(https://lmstudio.ai/docs/developer/core/ttl-and-auto-evict). "
+                          "Omitted by default.")
+    ap.add_argument("--timing-log", type=Path, default=None,
+                     help="also append per-conversation timing records as JSON lines to "
+                          "this file (Task 2's calibration ledger input); the human-readable "
+                          "TIMING line is always written to stderr regardless")
     args = ap.parse_args()
 
-    bound_caller = functools.partial(call_lmstudio, timeout=args.timeout, json_mode=args.json_mode)
+    bound_caller = functools.partial(call_lmstudio, timeout=args.timeout,
+                                      json_mode=args.json_mode, ttl=args.model_ttl)
 
     map_rows = k1.load_map(args.map)
     project_filter = set(args.project) if args.project else None
@@ -812,6 +920,8 @@ def main() -> None:
 
     cache = load_cache(args.cache)
     reporter = make_progress_reporter("extracting") if args.progress else None
+    timing_reporter = make_timing_reporter(jsonl_path=args.timing_log)
+    session_to_project = {r.session_id: r.project_id for r in map_rows}
     report = run_extraction(
         included, excluded, caller=bound_caller, endpoint=args.endpoint,
         model=args.model, temperature=args.temperature, cache=cache,
@@ -819,7 +929,8 @@ def main() -> None:
         small_conv_tokens=args.small_conv_tokens or None,
         batch_target_tokens=args.batch_target_tokens,
         batch_max_conversations=args.batch_max_conversations,
-        progress=reporter,
+        progress=reporter, cool_down=args.cool_down,
+        session_to_project=session_to_project, on_timing=timing_reporter,
     )
     save_cache(cache, args.cache)
 
