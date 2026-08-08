@@ -5,7 +5,8 @@
 
 **Built:** 2026-08-07, on `LucasGoonPC` (no MCF corpus, no Cowork store
 beyond this toolkit's own, no LM Studio reachable). **Gate at build time:**
-`python verify.py` → **GREEN**, 6 auditors + 61 testers, all K0–K5 logic
+`python verify.py` → **GREEN**, 6 auditors + 65 testers (4 added by the
+COWORK_BRIEF_curator_tab.md round, unrelated to K0–K5's own logic), all K0–K5 logic
 covered by hermetic tests against synthetic fixtures and a stub model
 caller. **Nothing walked yet** — every item below needs the real run on
 `10280L` first. This is a skeleton, not a completed walk; do not read the
