@@ -258,7 +258,20 @@
   <p class="sub">Local surface, this machine's own estate (DECISIONS 0025 / 0027).
      Documents are read from disk when you open them and are never cached.</p>
 
-  <div id="stamp"><span class="k">build</span> <span>loading…</span></div>
+  <div style="display:flex;justify-content:space-between;align-items:start;gap:.6rem">
+    <div id="stamp"><span class="k">build</span> <span>loading…</span></div>
+    <!-- The window is chromeless pywebview (no F5, no right-click menu, no
+         address bar) -- COWORK_BRIEF_unified_app.md UAT walk, H1: Tim's only
+         way to "reload" was closing the whole window, which does lose
+         unsubmitted work. This button is a real page reload
+         (`location.reload()`, same as F5 would do in a browser) without
+         needing the OS to provide one, so a page-level reload can actually be
+         tested as its own case, distinct from a full app restart. Kept
+         OUTSIDE #stamp on purpose: loadStamp() replaces #stamp's innerHTML
+         wholesale on every load, which would silently delete this button if
+         it lived inside that div. -->
+    <button class="small" style="flex:none" onclick="location.reload()" title="Reload the page (same as browser F5) -- does not restart the app">&#8635; reload</button>
+  </div>
 
   <!-- Datasette is a mounted sub-app (chronicler/review/datasette_mount.py,
        Task 3), not a module.py registration -- it has its own UI, so it gets
