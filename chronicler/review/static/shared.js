@@ -12,7 +12,17 @@
  */
 
 export function esc(s) {
-  return (s ?? "").replace(/[&<>"]/g, c =>
+  // String(...) coercion is load-bearing, not decoration: `s ?? ""` only
+  // guards null/undefined. A number, boolean, or other non-string truthy
+  // value (a commit count, a bool flag) reaches `.replace` bare and throws
+  // "X.replace is not a function" -- which is exactly what happened here,
+  // caught live against real estate.json data with fields this file's own
+  // synthetic test fixtures never exercised. The frozen `report.py` export
+  // this was ported from already did this coercion
+  // (`String(s==null?'':s).replace(...)`); the port dropped it, silently
+  // narrowing "anything" to "string or nullish" despite this function's own
+  // docstring claiming "same bodies, same behaviour."
+  return String(s ?? "").replace(/[&<>"]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
