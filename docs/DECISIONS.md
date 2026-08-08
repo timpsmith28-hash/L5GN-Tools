@@ -1123,7 +1123,7 @@ convention.
 
 ## 0032 — The Knowledge Curator reads local transcripts, is MCF-scoped, and treats recency as truth order
 
-**Date:** 2026-08-07 · **Status:** proposed · **Builds on:** 0025 (a solo box
+**Date:** 2026-08-07 · **Status:** accepted · **Builds on:** 0025 (a solo box
 reads its own estate), 0026 (knowledge documents), 0030 (derived output is not
 a document) · **Source:** `docs/SPEC_Knowledge_Curator.md` review,
 `docs/COWORK_BRIEF_knowledge_curator.md`
@@ -1150,3 +1150,58 @@ knowledge say this" — the superseded trail — which the vault route could not
 have produced. The cost is that recency is a heuristic: a newer casual remark
 can supersede an older considered one. Accepted, because both are quoted and
 dated in the report, so a wrong ordering is visible rather than silent.
+
+---
+
+## 0033 — Staging is confined by a code-declared path allowlist, not by directory; 0028's `docs/`-only clause is widened once, by name
+
+**Date:** 2026-08-08 · **Status:** accepted · **Amends:** 0028 (does not
+supersede it) · **Builds on:** 0025, 0027, 0032 · **Source:** design thread
+
+**Context.** 0028 permits a local surface to stage a working-tree change and
+forbids it to commit. Its clause (1) confines the change to `docs/`, to a
+`git mv` into `docs/archive/`, and to a prepended stamp — never a body edit.
+That confinement was written around the one action then in view: the docs
+board archiving a completed pair.
+
+The Curator's K0 ratification is a different shape of the same act. It writes
+`config/mcf_conversation_map.tsv` — a curated join surface, one row per
+conversation, each row ratified individually by the operator reading the
+evidence for that row. It is in `config/`, it is not a move, and the body is
+the change.
+
+But the property 0028 was actually protecting is not the directory, and is not
+the `git mv`. It is clause (3): **the human reads `git diff --staged` and
+performs the commit**, so the gate runs on a human act and no unreviewed
+change can enter history. That property is untouched here.
+
+**Decision.** 0028's clause (1) is replaced by:
+
+1. The change is confined to a **path allowlist declared in code**, not in
+   config, each entry carrying a declared shape. Two entries at this ruling:
+   - `docs/**` → `git mv` into `docs/archive/` plus a prepended stamp, never a
+     body edit (0028's original clause, unchanged in substance);
+   - `config/mcf_conversation_map.tsv` → **append a row**, never edit or
+     remove an existing one.
+
+Clauses (2) and (3) stand **unchanged and unweakened**: per-item ratification
+given in that session, never in bulk, never inferred from a green gate; and
+**never `git commit`**.
+
+Additionally, and specific to the map: **every staged row records how it was
+arrived at** — machine-matched by which pass, or human-picked from a refused
+collision, or hand-mapped with no machine candidate. A row resting on the
+operator's memory rather than on a match must say so, permanently, in the
+file. This is the registry's `alias_sources` pattern (S1), for the same
+reason: a curated identity whose provenance is lost becomes indistinguishable
+from a derived one, and 0011 and 0017 spent two rounds cleaning up the
+consequences of that.
+
+**Consequences.** There is now an allowlist where there was a directory
+constant — a knob where 0028 had none. Accepted deliberately, and bounded two
+ways: it is **declared in code**, so widening it is a commit that the gate
+sees and a reviewer reads, not a config edit; and the never-commit rule is
+what actually makes staging safe, and it is not being touched. The worst case
+remains a working tree the operator must clean up.
+
+---
