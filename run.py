@@ -15,6 +15,8 @@ Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py app    [--port N] [--host H]   # the deck: queue + estate + docs
                                                   # board + UAT + curator + Datasette
                                                   # at /db, one process (Task 4)
+    python run.py window                         # 'app' + a desktop window
+                                                  # (ephemeral port, pywebview; Task 5)
     python run.py serve  [--port N] [--host H]   # DEPRECATED alias for 'app'
     python run.py review [--port N] [--host H]   # DEPRECATED alias for 'app'
     python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
@@ -212,6 +214,15 @@ def _cmd_consume() -> int:
         print(f"  [{estate}] ingest={ing['status']} verified={ing.get('manifest_verified')} "
               f"snap={ing.get('snapshot')} | estate_diff={r['estate_diff']} | drift={r['drift']}")
     return 0
+
+
+def _cmd_window() -> int:
+    """The window (COWORK_BRIEF_unified_app.md Task 5). Delegates entirely to
+    `chronicler.review.launcher` -- see that module for the actual logic
+    (ephemeral port, health wait, pywebview, single-instance refusal, the
+    fallback when no window backend exists)."""
+    from chronicler.review import launcher
+    return launcher.run()
 
 
 def _cmd_backup(args: argparse.Namespace) -> int:
@@ -645,9 +656,10 @@ def main(argv: list[str]) -> int:
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'census' / 'config' / "
-                        "'deposit' / 'consume' / 'ingest' / 'app' / 'serve' / "
-                        "'review' / 'backup' / 'scrape' ('serve' and 'review' are "
-                        "deprecated aliases for 'app', kept for one round)")
+                        "'deposit' / 'consume' / 'ingest' / 'app' / 'window' / "
+                        "'serve' / 'review' / 'backup' / 'scrape' ('serve' and "
+                        "'review' are deprecated aliases for 'app', kept for one "
+                        "round)")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -685,6 +697,8 @@ def main(argv: list[str]) -> int:
         return _cmd_backup(args)
     if args.command == "app":
         return _cmd_app(args, argv)
+    if args.command == "window":
+        return _cmd_window()
     if args.command == "serve":
         return _cmd_serve(args)
     if args.command == "review":
