@@ -103,7 +103,28 @@ _SCHEMA_BY_SYSTEM = {
 # ---------------------------------------------------------------------------
 
 def similarity(a: str, b: str) -> float:
-    return difflib.SequenceMatcher(None, a.casefold(), b.casefold()).ratio()
+    """Containment-oriented: what fraction of ``a`` (always the claim in
+    this module's call sites) shows up as contiguous matching runs
+    somewhere in ``b`` -- NOT ``SequenceMatcher.ratio()``'s symmetric
+    ``2*matches/(len(a)+len(b))``, which systematically penalizes a long
+    candidate for no good reason when all we actually want to know is
+    "does b contain something like a".
+
+    Real-run evidence for why this matters (2026-08-08, gemma-4, work
+    rig): shortlisting a code-detail claim against a project's real
+    corpus, the top-ranked candidate by the old ratio() was a 51-character
+    stub heading scoring 0.17, while an 8,000-character section that
+    plausibly held the actual answer scored 0.003 -- two orders of
+    magnitude lower purely because of its length, not its relevance. That
+    kept the real candidate out of the top-``SHORTLIST_SIZE`` entirely, so
+    ``confirm_chunk`` never got a fair look at it -- a likely major
+    contributor to a full run coming back with zero "captured" outcomes.
+    """
+    if not a:
+        return 0.0
+    sm = difflib.SequenceMatcher(None, a.casefold(), b.casefold())
+    matched = sum(block.size for block in sm.get_matching_blocks())
+    return matched / len(a)
 
 
 def shortlist(claim_text: str, chunks: list[dict], k: int = SHORTLIST_SIZE) -> list[dict]:

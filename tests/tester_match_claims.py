@@ -140,6 +140,33 @@ def run() -> list[str]:
     if "shortlist_score" not in short[0]:
         v.append("shortlist() must attach the score, not just the winning chunk")
 
+    # --- similarity() must not penalize a long candidate that genuinely
+    #     contains the answer, against a short irrelevant stub -- this is
+    #     the exact real-run failure mode (a 51-char heading outscoring an
+    #     8,000-char section that actually held the content) that motivated
+    #     switching away from SequenceMatcher.ratio()'s symmetric formula --
+    claim = "The free tier seat cap is 3 seats per workspace"
+    short_stub = "3. How it actually works (the corrected model)"
+    long_real = (
+        "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod "
+        "tempor incididunt ut labore et dolore magna aliqua. " * 20
+        + "The free tier seat cap is 3 seats per workspace, agreed in the pricing "
+          "review. " + "Ut enim ad minim veniam quis nostrud exercitation. " * 20
+    )
+    sim_stub = k4.similarity(claim, short_stub)
+    sim_real = k4.similarity(claim, long_real)
+    if sim_real <= sim_stub:
+        v.append(f"similarity() still penalizes a long chunk that actually contains the "
+                  f"claim: real={sim_real:.4f} vs irrelevant short stub={sim_stub:.4f} "
+                  f"(real should score higher)")
+    ranked = k4.shortlist(claim, [
+        {"file": "f.md", "heading": "stub", "text": short_stub},
+        {"file": "f.md", "heading": "real", "text": long_real},
+    ], k=2)
+    if not ranked or ranked[0]["heading"] != "real":
+        v.append(f"shortlist() should rank the chunk that actually contains the claim "
+                  f"above an irrelevant short stub, regardless of chunk length: {ranked}")
+
     # --- span verification is never trusted from the model's own say-so ----
     def lying_caller(prompt, *, system, endpoint, model, temperature):
         # claims confirmed but the span is NOT actually in the candidate text.

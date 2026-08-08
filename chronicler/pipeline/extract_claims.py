@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -60,6 +61,37 @@ DEFAULT_SMALL_CONV_TOKENS = 1500
 DEFAULT_BATCH_TARGET_TOKENS = 6000
 DEFAULT_BATCH_MAX_CONVERSATIONS = 6
 
+# Real-run evidence (2026-08-08, gemma-4, work rig, 37 conversations): the
+# first full run extracted 1165 claims and confirmed ZERO of them as
+# "captured" against real, populated knowledge files. A significant chunk
+# of those claims were implementation trivia a knowledge doc was never
+# going to restate verbatim -- individual Python constant values, single
+# SQL lines, exact line numbers, ".gitkeep added to an empty folder",
+# "repo initialized on master" -- things a colleague reads straight off the
+# code or git history, not decisions/context that live in a KNOWLEDGE.md.
+# That's a real precision problem distinct from (and on top of) K4's own
+# shortlist-scoring bug: even a well-matched confirm step can't rescue a
+# claim that was never the kind of thing worth curating. The scoping rules
+# below are the fix -- narrower on purpose, so "gap" in the K5 report means
+# "a real decision nobody wrote down yet", not "the code has a constant in
+# it".
+_CLAIM_SCOPE_RULES = (
+    "Extract only claims a colleague would need to be TOLD, not things "
+    "they could read straight off the code or a git log: decisions made, "
+    "the reasoning or tradeoff behind a decision, business/domain rules, "
+    "architecture or design choices, corrections to a previous "
+    "understanding, and open questions or known issues explicitly flagged "
+    "as such. Do NOT extract: individual constant/config values, exact "
+    "line numbers, verbatim code or SQL snippets, or other "
+    "implementation-level facts that are only true because that is "
+    "literally what the code says (extract the DECISION or RULE behind "
+    "such a value instead, if one was actually discussed -- not the value "
+    "itself). Do NOT extract git/filesystem housekeeping (files moved, "
+    "folders created, commits made, .gitignore/.gitkeep additions) unless "
+    "the conversation explicitly frames it as an agreed convention future "
+    "work must follow, not just an action taken."
+)
+
 SYSTEM_PROMPT = (
     "You extract atomic factual or decision claims from a work conversation "
     "transcript. Return ONLY a JSON array, no prose, no markdown fence. Each "
@@ -67,8 +99,9 @@ SYSTEM_PROMPT = (
     "short, self-contained statement of what was established, decided, or "
     "learned) and `quoted_source` (a LITERAL, VERBATIM substring copied "
     "character-for-character from the transcript below that supports the "
-    "claim -- not a paraphrase, not a summary). If the transcript contains "
-    "no claims worth recording, return an empty array []."
+    "claim -- not a paraphrase, not a summary). " + _CLAIM_SCOPE_RULES +
+    " If the transcript contains no claims worth recording under these "
+    "rules, return an empty array []."
 )
 
 SYSTEM_PROMPT_BATCH = (
@@ -79,8 +112,9 @@ SYSTEM_PROMPT_BATCH = (
     "`conversation_index` (the integer n of the section the claim came "
     "from), `claim_text`, and `quoted_source` (a LITERAL, VERBATIM substring "
     "copied character-for-character from THAT SAME numbered section -- "
-    "never from a different section, never a paraphrase). If none of the "
-    "conversations have claims worth recording, return an empty array []."
+    "never from a different section, never a paraphrase). " + _CLAIM_SCOPE_RULES +
+    " If none of the conversations have claims worth recording under these "
+    "rules, return an empty array []."
 )
 
 # Grammar-constrained output (llama.cpp / LM Studio's OpenAI-compatible
@@ -458,7 +492,23 @@ def group_into_batches(conversations: list, *, small_token_floor: int,
 # Cache -- keyed on conversation_id, invalidated on any source file's
 # (path, mtime) changing. A re-run with nothing changed re-extracts zero
 # conversations.
+#
+# ALSO invalidated wholesale if the extraction prompts themselves changed
+# (``_PROMPT_FINGERPRINT_KEY``, checked in ``run_extraction``) -- a source
+# file's identity says nothing about whether the wording that decides what
+# counts as a claim has changed since it was cached. Same failure class as
+# K1's stale ChurnLevelIndicator index (2026-08-08): a downstream stage
+# silently trusting cached output that predates an upstream change. Coarse
+# on purpose -- one prompt edit invalidates the whole cache rather than
+# trying to guess which conversations it would have affected.
 # ---------------------------------------------------------------------------
+
+_PROMPT_FINGERPRINT_KEY = "__prompt_fingerprint__"
+
+
+def prompt_fingerprint() -> str:
+    return hashlib.sha256((SYSTEM_PROMPT + "\x00" + SYSTEM_PROMPT_BATCH).encode("utf-8")).hexdigest()
+
 
 def source_identity(conv) -> list:
     ids = []
@@ -567,6 +617,11 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     reextracted = 0
     from_cache = 0
     batch_unattributed: list[dict] = []
+
+    fp = prompt_fingerprint()
+    if cache.get(_PROMPT_FINGERPRINT_KEY) != fp:
+        cache.clear()
+        cache[_PROMPT_FINGERPRINT_KEY] = fp
 
     needing_extraction: list = []
     for conv in conversations:

@@ -550,4 +550,50 @@ def run() -> list[str]:
     if not calls or calls[-1] != (2, 2):
         v.append(f"run_extraction's progress callback should end at (n, n): {calls}")
 
+    # --- prompt fingerprint invalidation: a cache built under a DIFFERENT
+    #     extraction prompt must be wholesale discarded, not silently served
+    #     -- this is the same failure class as the real-run K1 bug (a
+    #     downstream stage trusting cached output that predates an upstream
+    #     change) that motivated this guard. ------------------------------
+    conv_fp = _mk_conv("local_fp1", "2026-08-01T00:00:00Z", "hello there this is fp1")
+    stale_cache = {
+        "__prompt_fingerprint__": "not-the-real-fingerprint",
+        "local_fp1": {
+            "sources": k2.source_identity(conv_fp),
+            "claims": [{"claim_text": "stale cached claim", "quoted_source": "stale"}],
+            "rejected": [], "parse_failed": False, "scanned_with_zero": False,
+            "real_time": "2026-08-01T00:00:00Z", "windows_total": 1, "windows_parse_failed": 0,
+        },
+    }
+    fresh_calls = []
+
+    def fresh_caller(t, *, endpoint, model, temperature, **kw):
+        fresh_calls.append(t)
+        return "[]"
+
+    report_stale = k2.run_extraction([conv_fp], [], caller=fresh_caller, endpoint="x", model="m",
+                                       temperature=0.0, cache=stale_cache, max_window_tokens=None,
+                                       small_conv_tokens=None)
+    if not fresh_calls:
+        v.append("a cache built under a different prompt fingerprint should be discarded, "
+                  "forcing re-extraction -- but no call was made")
+    if report_stale["conversations"][0]["claims"] and \
+       report_stale["conversations"][0]["claims"][0]["claim_text"] == "stale cached claim":
+        v.append("run_extraction served a stale-prompt cached claim instead of re-extracting")
+    if stale_cache.get("__prompt_fingerprint__") != k2.prompt_fingerprint():
+        v.append("run_extraction should stamp the cache with the CURRENT prompt fingerprint "
+                  "after discarding a stale one")
+
+    # A cache stamped with the CURRENT fingerprint is trusted normally.
+    fresh_calls.clear()
+    report_fresh = k2.run_extraction([conv_fp], [], caller=fresh_caller, endpoint="x", model="m",
+                                       temperature=0.0, cache=stale_cache, max_window_tokens=None,
+                                       small_conv_tokens=None)
+    if fresh_calls:
+        v.append(f"a cache already stamped with the current prompt fingerprint should be "
+                  f"reused, not re-extracted: {fresh_calls}")
+    if report_fresh["conversations_from_cache"] != 1:
+        v.append("run_extraction should report the matching-fingerprint conversation as "
+                  "served from cache")
+
     return v
