@@ -217,4 +217,32 @@ def run() -> list[str]:
     finally:
         urllib.request.urlopen = real_urlopen
 
+    # --- merge_matches: a --project-scoped re-run replaces that project's
+    #     claims wholesale, leaves every other project's claims untouched ----
+    old_matches = {
+        "model_id": "old-model", "claims": [
+            {"project_id": "proj-a", "conversation_id": "c1", "claim_text": "old a", "outcome": "gap"},
+            {"project_id": "proj-b", "conversation_id": "c2", "claim_text": "b claim", "outcome": "captured"},
+        ],
+    }
+    new_matches = {
+        "model_id": "new-model", "claims": [
+            {"project_id": "proj-a", "conversation_id": "c1", "claim_text": "refreshed a", "outcome": "captured"},
+        ],
+    }
+    merged_m = k4.merge_matches(old_matches, new_matches, touched_projects={"proj-a"})
+    by_proj = {(c["project_id"], c["conversation_id"]): c for c in merged_m["claims"]}
+    if by_proj[("proj-a", "c1")]["claim_text"] != "refreshed a":
+        v.append("merge_matches should replace the touched project's claims with this run's")
+    if ("proj-b", "c2") not in by_proj:
+        v.append("merge_matches dropped an untouched project's claims")
+    if merged_m["model_id"] != "new-model":
+        v.append("merge_matches should keep the new run's own provenance")
+    if merged_m["partial_run_projects"] != ["proj-a"]:
+        v.append(f"merge_matches should record which projects were scoped: {merged_m.get('partial_run_projects')}")
+
+    merged_m_none = k4.merge_matches(None, new_matches, touched_projects={"proj-a"})
+    if merged_m_none is not new_matches:
+        v.append("merge_matches with old=None should return the new report unchanged")
+
     return v

@@ -624,11 +624,62 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     }
 
 
+def merge_report(old: dict | None, new: dict, touched_ids: set) -> dict:
+    """Merge a scoped (--project-filtered) run's report into the existing
+    output file, so re-running just one project's conversations doesn't
+    clobber everyone else's already-computed results. Conversations in
+    `touched_ids` come from `new` (this run's own results, even a cache
+    hit counts as "touched" since it was in scope); every other
+    conversation is carried over unchanged from `old`. Aggregate stats are
+    recomputed over the merged set, not just this run's slice, so the
+    persisted file always reads as one coherent whole.
+
+    `old is None` (no prior output, or first-ever run) returns `new`
+    unchanged -- there is nothing to merge into."""
+    if old is None:
+        return new
+
+    by_id = {c["conversation_id"]: c for c in old.get("conversations", [])}
+    for c in new["conversations"]:
+        by_id[c["conversation_id"]] = c
+    merged_conversations = list(by_id.values())
+
+    excluded_by_id = {c["conversation_id"]: c for c in old.get("conversations_excluded_no_timestamp", [])}
+    for c in new["conversations_excluded_no_timestamp"]:
+        excluded_by_id[c["conversation_id"]] = c
+    # An excluded conversation that got resolved and now appears among the
+    # touched, successfully-processed ones must not linger in "excluded" too.
+    for cid in touched_ids:
+        excluded_by_id.pop(cid, None)
+    merged_excluded = list(excluded_by_id.values())
+
+    total_claims = sum(len(c["claims"]) for c in merged_conversations)
+    total_rejected = (sum(len(c["rejected"]) for c in merged_conversations)
+                        + len(new.get("batch_unattributed_rejections", [])))
+    total_offered = total_claims + total_rejected
+    rejection_rate = (total_rejected / total_offered) if total_offered else 0.0
+
+    merged = dict(new)  # keep this run's own provenance (model_id, run_timestamp, etc.)
+    merged["conversations"] = merged_conversations
+    merged["conversations_excluded_no_timestamp"] = merged_excluded
+    merged["conversations_scanned"] = len(merged_conversations)
+    merged["claims_extracted"] = total_claims
+    merged["claims_rejected"] = total_rejected
+    merged["quote_rejection_rate"] = rejection_rate
+    merged["partial_run_projects"] = sorted(new.get("partial_run_projects") or [])
+    return merged
+
+
 def main() -> None:
     import functools
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--map", type=Path, default=k1.DEFAULT_MAP)
+    ap.add_argument("--project", action="append",
+                     help="only (re-)extract conversations mapped to this project_id "
+                          "(repeatable). Omit to process the whole map. Results are "
+                          "merged into --out's existing content, if any, rather than "
+                          "overwriting other projects' data.")
     ap.add_argument("--host", help="census as if run on this hostname")
     ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     ap.add_argument("--model", required=True, help="LM Studio model id (recorded as provenance)")
@@ -655,7 +706,14 @@ def main() -> None:
     bound_caller = functools.partial(call_lmstudio, timeout=args.timeout, json_mode=args.json_mode)
 
     map_rows = k1.load_map(args.map)
+    project_filter = set(args.project) if args.project else None
+    if project_filter:
+        map_rows = [r for r in map_rows if r.project_id in project_filter]
+        unknown = project_filter - {r.project_id for r in k1.load_map(args.map)}
+        if unknown:
+            print(f"** --project value(s) not found in the map: {sorted(unknown)} **", file=sys.stderr)
     mapped_ids = {r.session_id for r in map_rows}
+
     conversations, access_errors = k0.discover_conversations(args.host)
     if access_errors:
         print("** filesystem access errors while discovering the store -- "
@@ -676,12 +734,26 @@ def main() -> None:
         batch_max_conversations=args.batch_max_conversations,
     )
     save_cache(cache, args.cache)
+
+    if project_filter:
+        report["partial_run_projects"] = sorted(project_filter)
+        old = None
+        if args.out.exists():
+            try:
+                old = json.loads(args.out.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                old = None
+        touched_ids = {c["conversation_id"] for c in report["conversations"]}
+        report = merge_report(old, report, touched_ids)
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
+    if project_filter:
+        print(f"scoped to project(s): {sorted(project_filter)}")
     print(f"scanned:            {report['conversations_scanned']} "
-          f"({report['conversations_reextracted']} re-extracted, "
-          f"{report['conversations_from_cache']} from cache)")
+          f"({report['conversations_reextracted']} re-extracted this run, "
+          f"{report['conversations_from_cache']} from cache this run)")
     print(f"excluded (no ts):   {len(report['conversations_excluded_no_timestamp'])}")
     print(f"claims extracted:   {report['claims_extracted']}")
     print(f"claims rejected:    {report['claims_rejected']} "

@@ -319,6 +319,25 @@ def flatten_claims(claims_report: dict, session_to_project: dict) -> list[dict]:
     return flat
 
 
+def merge_matches(old: dict | None, new: dict, touched_projects: set) -> dict:
+    """Merge a scoped (--project-filtered) match_claims() run into the
+    existing --out file. Unlike K2's merge_report (which merges by
+    conversation_id), K4's unit of "ownership" is the project: a scoped run
+    recomputes supersession for one project end-to-end using that project's
+    full claim history (see match_claims -- established/superseded is only
+    ever compared within a project), so every prior claim belonging to a
+    touched project is replaced wholesale by this run's claims for that
+    project, and every claim belonging to an untouched project is carried
+    over unchanged."""
+    if old is None:
+        return new
+    kept = [c for c in old.get("claims", []) if c["project_id"] not in touched_projects]
+    merged = dict(new)
+    merged["claims"] = kept + new["claims"]
+    merged["partial_run_projects"] = sorted(touched_projects)
+    return merged
+
+
 def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str,
                             temperature: float, timeout: float = DEFAULT_TIMEOUT,
                             json_mode: bool = True) -> str:
@@ -363,6 +382,10 @@ def main() -> None:
                      help="disable response_format grammar constraint, if the "
                           "endpoint errors on it")
     ap.add_argument("--out", type=Path, default=Path("data/knowledge_curator/matches.json"))
+    ap.add_argument("--project", action="append",
+                     help="limit to this MCF project_id (repeatable); refresh a single "
+                          "project's matches without re-matching every other project. "
+                          "Result is merged into --out rather than overwriting it.")
     args = ap.parse_args()
 
     bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout, json_mode=args.json_mode)
@@ -373,9 +396,30 @@ def main() -> None:
     map_rows = k1.load_map(args.map)
     session_to_project = {r.session_id: r.project_id for r in map_rows}
 
+    project_filter = set(args.project) if args.project else None
+    if project_filter:
+        known = {r.project_id for r in map_rows}
+        unknown = project_filter - known
+        if unknown:
+            print(f"warning: --project value(s) not found in {args.map}: {sorted(unknown)}",
+                  file=sys.stderr)
+
     flat = flatten_claims(claims_report, session_to_project)
+    if project_filter:
+        flat = [c for c in flat if c["project_id"] in project_filter]
+
     result = match_claims(flat, corpus_index, caller=bound_caller, endpoint=args.endpoint,
                             model=args.model, temperature=args.temperature)
+
+    if project_filter:
+        old = None
+        if args.out.exists():
+            try:
+                old = json.loads(args.out.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                old = None
+        result = merge_matches(old, result, project_filter)
+        print(f"scoped to project(s): {sorted(project_filter)}")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -383,7 +427,7 @@ def main() -> None:
     counts: dict[str, int] = {}
     for c in result["claims"]:
         counts[c["outcome"]] = counts.get(c["outcome"], 0) + 1
-    print("outcomes:", counts)
+    print("outcomes (in --out, all projects):", counts)
     print(f"\nmatches written: {args.out}")
 
 

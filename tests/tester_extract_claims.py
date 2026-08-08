@@ -417,4 +417,85 @@ def run() -> list[str]:
         v.append(f"batched run_extraction must still report in original newest-first order: "
                   f"{ordered_ids}")
 
+    # --- merge_report: a --project-scoped re-run must not clobber other
+    #     projects' already-computed results -------------------------------
+    old_report = {
+        "conversations": [
+            {"conversation_id": "local_a", "real_time": "2026-07-01T00:00:00Z",
+             "claims": [{"claim_text": "old a claim", "quoted_source": "q"}],
+             "rejected": [], "parse_failed": False, "scanned_with_zero": False,
+             "windows_total": 1, "windows_parse_failed": 0},
+            {"conversation_id": "local_b", "real_time": "2026-07-02T00:00:00Z",
+             "claims": [], "rejected": [{"claim_text": "x", "quoted_source": "y", "reason": "r"}],
+             "parse_failed": False, "scanned_with_zero": True,
+             "windows_total": 1, "windows_parse_failed": 0},
+        ],
+        "conversations_excluded_no_timestamp": [
+            {"conversation_id": "local_ghost_old", "reason": "stale"},
+        ],
+        "batch_unattributed_rejections": [],
+    }
+    # This scoped run only touched local_b -- re-extracted with a NEW claim
+    # this time -- and left local_a untouched (not even in its conversations
+    # list, as a --project filter would produce).
+    new_report = {
+        "model_id": "test-model-v2", "endpoint": "x", "temperature": 0.0,
+        "run_timestamp": "2026-08-08T00:00:00Z",
+        "conversations_scanned": 1, "conversations_reextracted": 1, "conversations_from_cache": 0,
+        "conversations_excluded_no_timestamp": [],
+        "claims_extracted": 1, "claims_rejected": 0, "quote_rejection_rate": 0.0,
+        "batch_unattributed_rejections": [],
+        "conversations": [
+            {"conversation_id": "local_b", "real_time": "2026-07-02T00:00:00Z",
+             "claims": [{"claim_text": "new b claim", "quoted_source": "q2"}],
+             "rejected": [], "parse_failed": False, "scanned_with_zero": False,
+             "windows_total": 1, "windows_parse_failed": 0},
+        ],
+    }
+    merged = k2.merge_report(old_report, new_report, touched_ids={"local_b"})
+    merged_ids = {c["conversation_id"] for c in merged["conversations"]}
+    if merged_ids != {"local_a", "local_b"}:
+        v.append(f"merge_report should keep local_a untouched and update local_b: {merged_ids}")
+    a = next(c for c in merged["conversations"] if c["conversation_id"] == "local_a")
+    if a["claims"][0]["claim_text"] != "old a claim":
+        v.append("merge_report altered a conversation outside the scoped run's touched set")
+    b = next(c for c in merged["conversations"] if c["conversation_id"] == "local_b")
+    if b["claims"][0]["claim_text"] != "new b claim":
+        v.append("merge_report did not apply the scoped run's new result for the touched conversation")
+    if merged["conversations_scanned"] != 2 or merged["claims_extracted"] != 2:
+        v.append(f"merge_report should recompute aggregates over the MERGED set, not just "
+                  f"this run's slice: scanned={merged['conversations_scanned']} "
+                  f"claims={merged['claims_extracted']}")
+    # old-style exclusion carried over untouched.
+    if merged["conversations_excluded_no_timestamp"][0]["conversation_id"] != "local_ghost_old":
+        v.append("merge_report dropped a prior exclusion it never touched this run")
+    if merged["model_id"] != "test-model-v2":
+        v.append("merge_report should keep the NEW run's own provenance (model_id/run_timestamp)")
+
+    # A conversation that WAS excluded before, but got resolved and
+    # successfully processed this run, must not linger in the excluded list.
+    old_report2 = {
+        "conversations": [],
+        "conversations_excluded_no_timestamp": [{"conversation_id": "local_c", "reason": "was stale"}],
+        "batch_unattributed_rejections": [],
+    }
+    new_report2 = {
+        "model_id": "m", "endpoint": "x", "temperature": 0.0, "run_timestamp": "t",
+        "conversations_scanned": 1, "conversations_reextracted": 1, "conversations_from_cache": 0,
+        "conversations_excluded_no_timestamp": [],
+        "claims_extracted": 0, "claims_rejected": 0, "quote_rejection_rate": 0.0,
+        "batch_unattributed_rejections": [],
+        "conversations": [{"conversation_id": "local_c", "real_time": "t", "claims": [], "rejected": [],
+                             "parse_failed": False, "scanned_with_zero": True,
+                             "windows_total": 1, "windows_parse_failed": 0}],
+    }
+    merged2 = k2.merge_report(old_report2, new_report2, touched_ids={"local_c"})
+    if merged2["conversations_excluded_no_timestamp"]:
+        v.append("merge_report left a now-resolved conversation in the excluded list")
+
+    # No prior output file at all -- merge_report returns the new report as-is.
+    merged3 = k2.merge_report(None, new_report2, touched_ids={"local_c"})
+    if merged3 is not new_report2:
+        v.append("merge_report with old=None should return the new report unchanged")
+
     return v
