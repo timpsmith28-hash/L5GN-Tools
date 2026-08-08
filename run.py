@@ -332,6 +332,24 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     # --- the estate half: may be absent on a machine that never runs build ---
     estate = estate_data.EstateData.load()
 
+    # --- the curator half: a third route family (COWORK_BRIEF_curator_tab.md,
+    # Task 1). Estate-labelled by construction (0032: MCF-scoped, work
+    # estate only) -- `curator_estate_gap` disables every curator route with
+    # the stated reason on any machine whose declared estate is not 'work',
+    # so the tab renders a stated absence rather than curator data there
+    # (stop condition). Loading data/knowledge_curator/ itself needs no
+    # vault and no estate build -- it is independent of both other halves,
+    # same preflight-split reasoning as the docs board.
+    from chronicler.review import curator_data
+    declared_estate_for_curator = m.get("estate")
+    curator_estate_gap = None
+    if declared_estate_for_curator != "work":
+        curator_estate_gap = (
+            f"this machine's declared estate is {declared_estate_for_curator!r}; "
+            "the Knowledge Curator is scoped to the work/MCF estate only "
+            "(DECISIONS 0032) and renders no data anywhere else.")
+    curator = curator_data.Curator()
+
     if db is None and not estate.available:
         # Both data halves absent. This used to be the refusal case, and was,
         # while every route needed one of them. The docs board needs neither:
@@ -453,13 +471,19 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     else:
         print(f"review: estate={declared_estate!r} -- rendering only that estate's "
               "threads (DECISIONS 0025)")
+    if curator_estate_gap:
+        print(f"review: curator routes DEGRADED -- {curator_estate_gap}")
+    else:
+        print(f"review: curator routes ENABLED -- data_dir={curator.data_dir} "
+              f"available={curator.available}")
     print(f"review: binding {args.host}:{port}")
     print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
           f"on the LAN: http://<knight-192.168.x>:{port}/")
     try:
         return app.run(db, registry, host=args.host, port=port,
                        account_clause=account_clause, estate=estate,
-                       index=index, vault_unavailable=vault_gap)
+                       index=index, vault_unavailable=vault_gap,
+                       curator=curator, curator_estate_gap=curator_estate_gap)
     except KeyboardInterrupt:
         return 0
 

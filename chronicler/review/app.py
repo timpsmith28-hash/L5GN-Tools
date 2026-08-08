@@ -61,12 +61,42 @@ try:
         stem: str
         entries: list[UatEntry]
         mode: str | None = None
+
+    # ---- Curator tab (COWORK_BRIEF_curator_tab.md) ----------------------
+    class CuratorRatifyRow(BaseModel):
+        # One K0 candidate row's fields, exactly as curator_ratify.build_row
+        # needs them. `provenance`/`note` are never inferred -- the caller
+        # (the UI, after a human reads the evidence) states them explicitly.
+        session_id: str
+        local_folder: str
+        project_id: str
+        conversation_name: str
+        provenance: str
+        note: str = ""
+
+    class CuratorRatifyPair(BaseModel):
+        row_a: CuratorRatifyRow
+        row_b: CuratorRatifyRow
+
+    class CuratorModelSelect(BaseModel):
+        stage: str
+        model_id: str
+
+    class CuratorExecute(BaseModel):
+        # The ONLY field an execute request carries -- a stage key, checked
+        # against curator_control.EXECUTION_ALLOWLIST. No argv, no path, no
+        # flag is ever accepted here (Task 3's whole security story).
+        stage: str
 except ImportError:  # pydantic ships with fastapi; absent == web stack not installed
     Ruling = None  # type: ignore
     RulingBatch = None  # type: ignore
     Rejection = None  # type: ignore
     UatEntry = None  # type: ignore
     UatEmit = None  # type: ignore
+    CuratorRatifyRow = None  # type: ignore
+    CuratorRatifyPair = None  # type: ignore
+    CuratorModelSelect = None  # type: ignore
+    CuratorExecute = None  # type: ignore
 
 
 def available() -> bool:
@@ -88,7 +118,8 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 
 
 def create_app(db_path: Path | None, registry: dict, account_clause: str,
-               estate=None, index=None, vault_unavailable=None):
+               estate=None, index=None, vault_unavailable=None,
+               curator=None, curator_estate_gap: str | None = None):
     """Build the FastAPI app. `registry` is the pre-loaded id->entry map so id
     validation never depends on a file read mid-request. `account_clause` is
     the estate wall's SQL clause (DECISIONS 0025), resolved ONCE by the caller
@@ -103,6 +134,17 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
     unavailable `estate` means no build snapshot and the estate routes degrade.
     Both halves absent is a legitimate (if useless) state and still serves --
     the surface says what it hasn't got rather than refusing to start.
+
+    `curator` (a `curator_data.Curator`) is the third half (COWORK_BRIEF_
+    curator_tab.md, Task 1): the Knowledge Curator tab's read-only data layer,
+    plus the ratification/control/findings routes below it. It is
+    estate-labelled by construction (0032: MCF-scoped, work estate only), so
+    `curator_estate_gap`, when set, disables every curator route with the
+    stated reason -- the tab must render an absence, not curator data, on a
+    machine whose declared estate is not work/MCF (stop condition). Passing
+    `curator=None` (no data/knowledge_curator/ at all) is a separate, legal
+    state from `curator_estate_gap` (wrong machine) -- both degrade the same
+    routes, for different reasons, and both are reported as such.
     """
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
@@ -383,6 +425,221 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
             raise HTTPException(status_code=status,
                                 detail={"reason": exc.reason, "detail": exc.message})
 
+    # ---- the Knowledge Curator tab (COWORK_BRIEF_curator_tab.md) -----------
+    # Estate-labelled by construction (0032): every route below is gated on
+    # `curator_estate_gap` FIRST, before anything else, so a machine whose
+    # declared estate is not work/MCF gets a stated absence and never curator
+    # data -- the stop condition this gate exists to make structurally true,
+    # not merely documented. This is also what keeps a populated Chronicler
+    # strip from ever co-rendering with a populated Curator strip (case 0023):
+    # the two are gated on disjoint conditions (account_clause vs
+    # curator_estate_gap) and neither route family reads the other's data.
+    def _need_curator_estate():
+        if curator_estate_gap:
+            raise HTTPException(status_code=503, detail={
+                "available": False, "reason": "not_work_mcf_estate",
+                "detail": curator_estate_gap})
+
+    @app.get("/api/curator/header")
+    def curator_header():
+        # Deliberately NOT behind _need_curator_estate() in the sense of a
+        # blanket 503 with no body: the header is how the tab learns WHY it
+        # is absent, same reasoning as estate_header() above. On the wrong
+        # machine this returns available=False and no stage data at all.
+        if curator_estate_gap:
+            return {"available": False, "reason": "not_work_mcf_estate",
+                    "detail": curator_estate_gap}
+        if curator is None:
+            return {"available": False, "reason": "curator_absent",
+                    "detail": "No data/knowledge_curator/ on this machine yet."}
+        return curator.header()
+
+    @app.get("/api/curator/k0/candidates")
+    def curator_k0_candidates(host: str | None = None):
+        _need_curator_estate()
+        from . import curator_ratify as ratify
+        from .curator_data import CANDIDATE_MAP_PATH, ratified_map_rows, _load_tsv_rows
+        candidate_path = curator.data_dir / "candidate_map.tsv" if curator else CANDIDATE_MAP_PATH
+        ratified_path = curator.ratified_map_path if curator else None
+        candidate_rows = _load_tsv_rows(candidate_path)
+        ratified_ids = {r.get("session_id", "").strip() for r in ratified_map_rows(ratified_path)}
+        claimed = ratified_ids | {r.get("session_id", "").strip()
+                                    for r in candidate_rows if r.get("session_id")}
+        conversations = []
+        access_errors = []
+        try:
+            import bootstrap_conversation_map as k0  # noqa
+            conversations, access_errors = k0.discover_conversations(host)
+        except Exception:  # noqa: BLE001 -- store discovery is best-effort here
+            pass
+        cards = ratify.candidate_cards(candidate_rows, ratified_ids)
+        groups = ratify.group_by_outcome(cards)
+        unmapped = ratify.unmapped_local_folders(conversations, claimed)
+        counts = ratify.six_counts(candidate_rows, len(unmapped))
+        return {
+            "candidate_path": str(candidate_path), "exists": candidate_path.is_file(),
+            "counts": counts, "groups": groups,
+            "unmapped_local_folders": unmapped,
+            "access_errors": access_errors,
+            "ratified_row_count": len(ratified_ids),
+        }
+
+    @app.get("/api/curator/k0/evidence")
+    def curator_k0_evidence(session_id: str, sheet_text: str | None = None,
+                            match_pass: str | None = None, matched_length: int | None = None,
+                            host: str | None = None):
+        _need_curator_estate()
+        from . import curator_ratify as ratify
+        conv_text = None
+        try:
+            from . import curator_findings
+            conversations_by_id, _ = curator_findings.build_conversation_map(host)
+            conv = conversations_by_id.get(session_id)
+            if conv is not None:
+                import local_transcripts as lt  # noqa
+                conv_text = lt.first_user_message(conv)
+        except Exception:  # noqa: BLE001 -- evidence is best-effort, never a 500
+            conv_text = None
+        return ratify.evidence_spans(sheet_text, conv_text, match_pass, matched_length)
+
+    @app.post("/api/curator/k0/ratify")
+    def curator_k0_ratify(payload: CuratorRatifyRow):
+        _need_curator_estate()
+        from . import curator_ratify as ratify
+        from .estate_data import REPO_ROOT
+        try:
+            row = ratify.build_row(**payload.dict())
+            result = ratify.append_ratified_row(row)
+            if result["status"] == "appended":
+                ratify.stage_ratified_map(REPO_ROOT)
+            return result
+        except ratify.RatifyError as exc:
+            raise HTTPException(status_code=400, detail={"reason": exc.reason, "detail": exc.message})
+
+    @app.post("/api/curator/k0/ratify_pair")
+    def curator_k0_ratify_pair(payload: CuratorRatifyPair):
+        _need_curator_estate()
+        from . import curator_ratify as ratify
+        from .estate_data import REPO_ROOT
+        try:
+            row_a = ratify.build_row(**payload.row_a.dict())
+            row_b = ratify.build_row(**payload.row_b.dict())
+            results = ratify.append_ratified_pair(row_a, row_b)
+            if any(r["status"] == "appended" for r in results):
+                ratify.stage_ratified_map(REPO_ROOT)
+            return {"results": results}
+        except ratify.RatifyError as exc:
+            raise HTTPException(status_code=400, detail={"reason": exc.reason, "detail": exc.message})
+
+    @app.get("/api/curator/k0/staged_diff")
+    def curator_k0_staged_diff():
+        _need_curator_estate()
+        from . import curator_ratify as ratify
+        from .estate_data import REPO_ROOT
+        return {"diff": ratify.staged_diff(REPO_ROOT)}
+
+    @app.get("/api/curator/control/preflight")
+    def curator_control_preflight():
+        _need_curator_estate()
+        from . import curator_control as ctl
+        from .curator_data import Curator as _Curator
+        c = curator or _Curator()
+        return ctl.preflight(c)
+
+    @app.get("/api/curator/control/stage_table")
+    def curator_control_stage_table():
+        _need_curator_estate()
+        from . import curator_control as ctl
+        return {
+            "stages": {k: {"label": v["label"], "deterministic": v["deterministic"],
+                           "model_stage": v["model_stage"]}
+                       for k, v in ctl.STAGE_TABLE.items()},
+            "model_selectable_stages": list(ctl.MODEL_SELECTABLE_STAGES),
+            "k4_shortlist_capability": ctl.shortlist_capability(),
+            "allowlist": sorted(ctl.EXECUTION_ALLOWLIST),
+        }
+
+    @app.get("/api/curator/control/models")
+    def curator_control_models():
+        _need_curator_estate()
+        from . import curator_control as ctl
+        return {"selections": ctl.get_curator_models()}
+
+    @app.post("/api/curator/control/model")
+    def curator_control_set_model(payload: CuratorModelSelect):
+        _need_curator_estate()
+        from . import curator_control as ctl
+        try:
+            return ctl.set_curator_model(payload.stage, payload.model_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/api/curator/control/invalidation")
+    def curator_control_invalidation(stage: str):
+        _need_curator_estate()
+        from . import curator_control as ctl
+        if stage == "K2":
+            return ctl.k2_model_change_impact()
+        if stage == "K4":
+            return ctl.k4_model_change_impact()
+        raise HTTPException(status_code=400, detail=f"{stage!r} has no cache-invalidation report")
+
+    @app.post("/api/curator/control/execute")
+    def curator_control_execute(payload: CuratorExecute):
+        _need_curator_estate()
+        from . import curator_control as ctl
+        from dataclasses import asdict
+        try:
+            outcome = ctl.execute_with_lock(payload.stage)
+            return asdict(outcome)
+        except ctl.ExecutionRefused as exc:
+            status = 409 if exc.reason == "already_running" else 400
+            raise HTTPException(status_code=status, detail={"reason": exc.reason, "detail": exc.message})
+
+    @app.get("/api/curator/control/lock")
+    def curator_control_lock():
+        _need_curator_estate()
+        from . import curator_control as ctl
+        return ctl.lock_status()
+
+    @app.get("/api/curator/findings")
+    def curator_findings_route():
+        _need_curator_estate()
+        from . import curator_findings as cf
+        from .curator_data import _load_json, K1_INDEX_PATH, K2_CLAIMS_PATH, K4_MATCHES_PATH
+        data_dir = curator.data_dir if curator else K1_INDEX_PATH.parent
+        claims_report = _load_json(data_dir / "claims.json")
+        matches_report = _load_json(data_dir / "matches.json")
+        knowledge_index = _load_json(data_dir / "knowledge_index.json")
+        by_outcome = cf.claims_by_outcome(matches_report)
+        return {
+            "run_health": cf.run_health(claims_report, matches_report, knowledge_index),
+            "gaps_by_project": cf.gaps_by_project(by_outcome, knowledge_index),
+            "no_knowledge_file_starters": cf.no_knowledge_file_starters(by_outcome, knowledge_index),
+            "cross_project": cf.cross_project(by_outcome),
+            "superseded": cf.superseded(by_outcome),
+            "captured": cf.captured(by_outcome),
+        }
+
+    @app.get("/api/curator/findings/transcript")
+    def curator_findings_transcript(conversation_id: str, host: str | None = None):
+        _need_curator_estate()
+        from . import curator_findings as cf
+        from .estate_data import DocumentRefused as _DR
+        try:
+            conversations_by_id, _ = cf.build_conversation_map(host)
+            return cf.read_transcript_window(conversation_id, conversations_by_id, host)
+        except _DR as exc:
+            status = 404 if exc.reason == "unknown_conversation" else 403
+            raise HTTPException(status_code=status, detail={"reason": exc.reason, "detail": exc.message})
+
+    @app.get("/api/curator/coverage")
+    def curator_coverage():
+        _need_curator_estate()
+        from .curator_data import Curator as _Curator
+        c = curator or _Curator()
+        return c.coverage()
+
     @app.get("/api/health")
     def health():
         # Both halves reported separately -- this endpoint is how you tell a
@@ -402,6 +659,10 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
             "search": (index.status() if index is not None else None),
             # Always available: it depends on this checkout, nothing else.
             "docs_board": {"available": True, "read_only": True},
+            "curator": ({"available": False, "reason": "not_work_mcf_estate",
+                        "detail": curator_estate_gap} if curator_estate_gap
+                       else (curator.header() if curator is not None
+                             else {"available": False, "reason": "curator_absent"})),
         })
 
     static_dir = Path(__file__).resolve().parent / "static"
@@ -410,10 +671,12 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
 
 
 def run(db_path: Path | None, registry: dict, host: str, port: int,
-        account_clause: str, estate=None, index=None, vault_unavailable=None) -> int:
+        account_clause: str, estate=None, index=None, vault_unavailable=None,
+        curator=None, curator_estate_gap: str | None = None) -> int:
     """Boot uvicorn. Returns a process return code."""
     import uvicorn
     app = create_app(db_path, registry, account_clause, estate=estate,
-                     index=index, vault_unavailable=vault_unavailable)
+                     index=index, vault_unavailable=vault_unavailable,
+                     curator=curator, curator_estate_gap=curator_estate_gap)
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0

@@ -83,6 +83,10 @@ TESTERS: list[str] = [
     "tests.tester_review",
     "tests.tester_docs_board",
     "tests.tester_uat_sidebar",
+    "tests.tester_curator_data",
+    "tests.tester_curator_ratify",
+    "tests.tester_curator_control",
+    "tests.tester_curator_findings",
 ]
 
 
