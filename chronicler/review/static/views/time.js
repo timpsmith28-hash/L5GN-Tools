@@ -6,16 +6,18 @@
  * no build step (working rule; the shell imports it with a dynamic `import()`
  * and nothing compiles it on the way).
  *
- * The shell passes its shared helpers in rather than the module reaching for
- * globals: `esc`, `jget` and `degraded` are still defined once in index.html,
- * and Task 2 replaces this argument with a real `import` from the shared
- * module without any change to the code below. Passing them is what lets Task
- * 1 stop at one tab instead of dragging the whole helper split with it.
+ * Task 1 had the shell pass `esc`/`jget`/`degraded` into `mount()` as
+ * arguments rather than importing them, specifically so Task 1 could stop at
+ * one migrated tab without also building the shared-helpers module. Task 2
+ * built that module (`static/shared.js`) for the rest of the split, so this
+ * file now imports from it like every pane does -- the change promised in
+ * that original comment, and no change to the code below it.
  *
  * Every render function here moved verbatim from index.html's inline script.
  * Nothing was rewritten in the move -- a migration that also refactors cannot
  * tell you which change broke the tab.
  */
+import { esc, jget, degraded } from "../shared.js";
 
 const fmtDate = iso => (iso ? String(iso).slice(0, 10) : "—");
 
@@ -89,11 +91,11 @@ function deltaHtml(d, esc) {
   </div>`;
 }
 
-/* The view contract: `mount(el, helpers)`, called once, the first time the tab
-   is opened. `el` is the module's own pane element, created by the shell from
+/* The view contract: `mount(el)`, called once, the first time the tab is
+   opened. `el` is the module's own pane element, created by the shell from
    the descriptor's id -- the view owns everything inside it and touches
    nothing outside it. */
-export async function mount(el, { esc, jget, degraded }) {
+export async function mount(el) {
   el.innerHTML = `<div style="max-width:68rem;margin-inline:auto">
     <div id="time-view"><div class="empty">Loading…</div></div></div>`;
   const view = el.querySelector("#time-view");
