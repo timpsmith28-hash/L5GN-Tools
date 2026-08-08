@@ -126,25 +126,34 @@ def make_serve_snapshot(machine: dict | None = None,
             "taken_at": taken.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
-def staleness_note(taken_at: str) -> str:
+def staleness_note(taken_at: str, refresh_hint: str = "re-launch `run.py serve`") -> str:
     """The one-line honesty note 0013 asks for, used by both the console line and
-    the UI banner so the two can never drift apart."""
-    return (f"showing vault as of {taken_at} (snapshot) -- re-launch `run.py serve` "
+    the UI banner so the two can never drift apart.
+
+    `refresh_hint` names the actual action that takes a fresh snapshot.
+    Defaults to this module's own standalone command; the in-app mount
+    (COWORK_BRIEF_unified_app.md Task 3, `chronicler/review/datasette_mount.py`)
+    passes its own hint, because "re-launch `run.py serve`" is not what
+    refreshes a snapshot taken once at `create_app()` time and served from
+    inside the review app's own process.
+    """
+    return (f"showing vault as of {taken_at} (snapshot) -- {refresh_hint} "
             "to refresh. A ruling made in `run.py review` after that time is saved "
             "in the live vault but not yet in this copy.")
 
 
-def write_metadata(snapshot_dir: Path | str, taken_at: str) -> Path:
+def write_metadata(snapshot_dir: Path | str, taken_at: str,
+                   refresh_hint: str = "re-launch `run.py serve`") -> Path:
     """Write the Datasette metadata file carrying the staleness banner.
 
     Datasette renders ``description_html`` on the index page, so the note is
     visible in the UI itself and not only in the launching terminal -- which
     matters because the usual reader is a phone on the tailnet, nowhere near the
-    console output.
+    console output. ``refresh_hint`` is forwarded to :func:`staleness_note`.
     """
     snapshot_dir = Path(snapshot_dir)
     snapshot_dir.mkdir(parents=True, exist_ok=True)
-    note = staleness_note(taken_at)
+    note = staleness_note(taken_at, refresh_hint=refresh_hint)
     meta = {
         "title": "Chronicler vault (snapshot)",
         "description_html": (

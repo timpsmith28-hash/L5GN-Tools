@@ -22,10 +22,20 @@ writes, no cross-pane calls, and a view whose helpers (`fmtDate` and four
 render functions) are used by nothing else in the file. A tab that shared state
 with another pane would have proved the shell's boundary rather than the
 descriptor's.
+
+**`report` is the eighth module, added whole by Task 3 -- not a migration.**
+It did not exist as a deck tab before this round; it demotes the standalone
+`report.html` from surface to export (0027) by giving the estate scanner
+report a live view, reading `data/estate.json` at request time
+(`estate_report.read_estate`, never cached). Registering a genuinely new
+module here, rather than only flipping a `legacy` one, is the first real
+proof of the claim Task 1's UAT line makes -- "a new module is one
+registration plus one view file" -- ahead of that line's own throwaway-tab
+walk.
 """
 from __future__ import annotations
 
-from . import estate_time
+from . import estate_report, estate_time
 from .module_contract import (
     STATUS_LEGACY,
     STATUS_REGISTRY,
@@ -49,6 +59,10 @@ MODULES: list[ModuleDescriptor] = [
         id="time", label="Time", order=40,
         status=STATUS_REGISTRY, requires=("estate",),
         router=estate_time.router, view="time.js"),
+    ModuleDescriptor(
+        id="report", label="Estate report", order=45,
+        status=STATUS_REGISTRY, requires=("estate",),
+        router=estate_report.router, view="report.js"),
     ModuleDescriptor(
         id="board", label="Docs board", order=50,
         status=STATUS_LEGACY, requires=("repo_docs",)),

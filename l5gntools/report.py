@@ -347,9 +347,19 @@ _TEMPLATE = r"""<!DOCTYPE html>
                    border-radius:6px;padding:4px 8px;font:inherit}
   .scopehon{color:var(--muted)} .scopehon .empty{color:var(--warn)}
   .caveat{color:var(--warn);font-size:12px}
+  .exportban{border:2px solid var(--accent);background:rgba(88,166,255,.10);border-radius:8px;
+             padding:10px 14px;margin:0 0 16px;font-size:13px}
+  .exportban b{color:var(--accent)}
 </style></head>
 <body>
 <h1>L5GN Estate Report</h1>
+<div class="exportban"><b>Frozen export, not the live surface.</b> This file's data was
+  embedded at build time and does not change until the next
+  <code>python run.py build</code>. The live, always-current version of this report is a
+  tab in the deck (<code>python run.py review</code>) -- reads <code>data/estate.json</code>
+  fresh on every visit (COWORK_BRIEF_unified_app.md Task 3). This export exists because a
+  file you can email or open with no application installed is a different, still useful,
+  artefact (0027).</div>
 <div class="sub" id="meta"></div>
 <div id="critical"></div>
 <div id="anomalies"></div>

@@ -119,7 +119,8 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 
 def create_app(db_path: Path | None, registry: dict, account_clause: str,
                estate=None, index=None, vault_unavailable=None,
-               curator=None, curator_estate_gap: str | None = None):
+               curator=None, curator_estate_gap: str | None = None,
+               machine: dict | None = None):
     """Build the FastAPI app. `registry` is the pre-loaded id->entry map so id
     validation never depends on a file read mid-request. `account_clause` is
     the estate wall's SQL clause (DECISIONS 0025), resolved ONCE by the caller
@@ -145,6 +146,12 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
     `curator=None` (no data/knowledge_curator/ at all) is a separate, legal
     state from `curator_estate_gap` (wrong machine) -- both degrade the same
     routes, for different reasons, and both are reported as such.
+
+    `machine` is the config dict (`l5gntools.config.machine()`) the caller
+    already resolved, threaded through only so Datasette's sub-app (Task 3,
+    `datasette_mount.build_asgi_app`) can take its own read snapshot via the
+    same config-driven path resolution every other snapshot in this estate
+    uses (DECISIONS 0007 consequence (a): never hardcode the DB path).
     """
     from fastapi import Depends, FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
@@ -681,9 +688,20 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         c = curator or _Curator()
         return c.coverage()
 
+    # ---- Datasette, mounted (COWORK_BRIEF_unified_app.md Task 3) -----------
+    # Built once, here, at app-construction time -- not per-request -- so the
+    # snapshot it reads has exactly the staleness contract `run.py serve` used
+    # to have: fresh as of the moment the process started, refreshed by
+    # restarting it. See `datasette_mount`'s module docstring for the verdict
+    # (mount, not drop) and why 0013's snapshot-never-live rule is unchanged
+    # by moving from a second process to a sub-app of this one.
+    from . import datasette_mount
+    _datasette_ds, _datasette_note = datasette_mount.build_datasette(machine)
+    _datasette_app = _datasette_ds.app() if _datasette_ds is not None else None
+
     @app.get("/api/health")
     def health():
-        # Both halves reported separately -- this endpoint is how you tell a
+        # Every half reported separately -- this endpoint is how you tell a
         # degraded surface from a broken one at a glance.
         return JSONResponse({
             "ok": True,
@@ -704,7 +722,29 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
                         "detail": curator_estate_gap} if curator_estate_gap
                        else (curator.header() if curator is not None
                              else {"available": False, "reason": "curator_absent"})),
+            "datasette": ({"available": True, "mounted_at": datasette_mount.MOUNT_PATH,
+                          "note": _datasette_note}
+                         if _datasette_app is not None
+                         else {"available": False, "reason": _datasette_note}),
         })
+
+    # Mounted BEFORE the static catch-all below: a `Mount("/", ...)` matches
+    # every path, so anything meant to answer under its own prefix has to be
+    # registered ahead of it or it is never reached.
+    if _datasette_app is not None:
+        app.mount(datasette_mount.MOUNT_PATH, _datasette_app, name="datasette")
+
+        # `Mount()` does not forward this app's ASGI lifespan into the
+        # sub-app (proved by hand, see `datasette_mount`'s docstring) --
+        # without this, Datasette's own database registration never runs
+        # and every route under /db 404s with "Database not found" despite
+        # the snapshot having loaded cleanly. `on_event` is deprecated in
+        # newer FastAPI in favour of a lifespan context manager, but this
+        # app has no lifespan of its own yet and one on_event handler is a
+        # smaller diff than introducing one for a single startup call.
+        @app.on_event("startup")
+        async def _start_datasette():
+            await _datasette_ds.invoke_startup()
 
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="ui")
@@ -713,11 +753,13 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
 
 def run(db_path: Path | None, registry: dict, host: str, port: int,
         account_clause: str, estate=None, index=None, vault_unavailable=None,
-        curator=None, curator_estate_gap: str | None = None) -> int:
+        curator=None, curator_estate_gap: str | None = None,
+        machine: dict | None = None) -> int:
     """Boot uvicorn. Returns a process return code."""
     import uvicorn
     app = create_app(db_path, registry, account_clause, estate=estate,
                      index=index, vault_unavailable=vault_unavailable,
-                     curator=curator, curator_estate_gap=curator_estate_gap)
+                     curator=curator, curator_estate_gap=curator_estate_gap,
+                     machine=machine)
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0

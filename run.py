@@ -479,11 +479,15 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     print(f"review: binding {args.host}:{port}")
     print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
           f"on the LAN: http://<knight-192.168.x>:{port}/")
+    print(f"review: Datasette mounted at /db (sub-app, snapshot per request "
+          f"DECISIONS 0013/0007; COWORK_BRIEF_unified_app.md Task 3) -- "
+          f"see GET /api/health for whether it actually came up on this run.")
     try:
         return app.run(db, registry, host=args.host, port=port,
                        account_clause=account_clause, estate=estate,
                        index=index, vault_unavailable=vault_gap,
-                       curator=curator, curator_estate_gap=curator_estate_gap)
+                       curator=curator, curator_estate_gap=curator_estate_gap,
+                       machine=m)
     except KeyboardInterrupt:
         return 0
 
