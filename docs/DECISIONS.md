@@ -1248,3 +1248,78 @@ property that actually mattered; `verify.py` must keep proving it with no web
 stack present, or (1) is decorative.
  
 ---
+
+## 0035 — `run.py app` is the single entry point; the physical data-root move is deferred to its own round
+
+**Date:** 2026-08-08 · **Status:** accepted · **Source:**
+COWORK_BRIEF_unified_app.md Task 4 · **Builds on:** 0007, 0013, 0025, 0034
+
+**Context.** Task 4 asked for two things bundled as one: (1) `run.py app`
+replacing `serve` + `review` as one process on one port, and (2) moving
+`data/`, `chronicler.db` and `config/local.json` out of the install tree,
+because a packaged application must not write into the folder it was
+installed from. The brief itself names the stop condition for the second
+half: *"The data-root move puts the vault at any risk. Stop. The vault is
+the one irreplaceable thing here; a working app with the DB where it is
+today is a complete success and Task 4 can be its own round."*
+
+That condition is live, not hypothetical, in the environment this round
+was actually built in: the repository is reached through a mounted
+filesystem with observed, reproducible anomalies unrelated to any code in
+this estate -- files that cannot be `rm`'d or `mv`'d across the mount
+boundary immediately after creation (worked around throughout this round
+by renaming within the same directory), and `VACUUM INTO` failing with a
+raw `disk I/O error` when its destination is on that mount rather than a
+normal local disk (confirmed in Task 3's Datasette verification: the exact
+same snapshot call succeeded immediately once retargeted at `/tmp`). A
+data-root migration is, by definition, a write to the one irreplaceable
+artefact in the estate (INTENT §5) performed through a filesystem layer
+already shown to fail silently-in-the-small on ordinary operations. That
+is precisely the condition the stop clause describes, not a reason to
+route around it with extra retries.
+
+**Decision.**
+
+1. **`run.py app` is ratified as the canonical entry point**, replacing
+   the conceptual two-process shape of `serve` + `review`. It is not new
+   code so much as a rename-with-consequences: the same preflight,
+   the same routes, now also carrying Datasette as a sub-app (0013/0034
+   Task 3) in the one process. `run.py serve` and `run.py review` remain
+   fully functional, unchanged in behaviour, for one round -- each now
+   prints a one-line notice naming `app` as where it went, per the
+   brief's own instruction, not silently deprecated.
+2. **The physical data-root relocation is deferred**, invoking the
+   brief's own stop condition rather than forcing it through in an
+   environment that cannot currently be trusted with the operation. The
+   config-driven resolution this estate already has (`l5gntools.config`,
+   `viewer.resolve_db_path`'s env → machine → default chain) is the
+   correct foundation for that move when it happens; nothing about this
+   round weakens or forecloses it. Deferring is a scheduling decision,
+   not a technical one -- the mechanism is understood, the environment
+   to execute it safely was not available here.
+3. **The `role` vocabulary (`producer`/`consumer`, read by `l5gntools/
+   census.py` and asserted in `tests/tester_census.py` /
+   `tests/tester_config.py`) is NOT changed by this entry**, despite the
+   brief's framing that a standalone, unified app "collapses" the role to
+   one value. `census.py`'s producer/consumer domain reporting remains
+   meaningful independent of whether the mesh (DECISIONS-adjacent, Task 6
+   of this same brief) is enabled on a given box, and changing a
+   contract with its own test fixtures is exactly the kind of drive-by
+   widening this estate's own governance treats as a defect. A
+   `standalone` role, if wanted, is Task 6's or a future round's to add
+   deliberately -- recorded here so it is not lost, not decided here so
+   it is not rushed.
+
+**Consequences.** `run.py app` is the answer to "how do I start the deck"
+from this commit forward; documentation and playbooks written after this
+point should say `app`, not `serve`/`review`. The data root -- `data/`,
+`chronicler.db`, `config/local.json` -- stays inside the install tree
+until a round runs in an environment proven safe for the migration (a
+normal local disk, not this session's mount). Task 4's stop condition is
+exercised, not merely quoted: **"a working app with the DB where it is
+today is a complete success."** Whoever picks up the data-root move next
+should start by confirming `VACUUM INTO` and ordinary `rm`/`mv` behave
+normally on the target machine before touching the live vault -- that
+check is now a known prerequisite, not an assumption.
+
+---

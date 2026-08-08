@@ -12,8 +12,11 @@ Usage:
     python run.py census [--target PATH]     # this machine reports its own domain
 
 Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
-    python run.py serve  [--port N] [--host H]   # Datasette read surface (snapshot, --immutable)
-    python run.py review [--port N] [--host H]   # narrow write endpoint (0007 stage 2)
+    python run.py app    [--port N] [--host H]   # the deck: queue + estate + docs
+                                                  # board + UAT + curator + Datasette
+                                                  # at /db, one process (Task 4)
+    python run.py serve  [--port N] [--host H]   # DEPRECATED alias for 'app'
+    python run.py review [--port N] [--host H]   # DEPRECATED alias for 'app'
     python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
     python run.py scrape [urls.txt] [--force]    # Gemini share-scrape -> intake
     python run.py ingest [--skip-backup] [--skip-intake]   # backup -> intake -> pipeline
@@ -255,7 +258,19 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     it simply is not in this copy until the next launch.
 
     Datasette is an optional extra; if it is absent this skips cleanly and loudly
-    with the install hint (never silent-fails)."""
+    with the install hint (never silent-fails).
+
+    **Deprecated (COWORK_BRIEF_unified_app.md Task 4).** `run.py app` mounts
+    Datasette as a sub-app of the one process (Task 3) -- this second,
+    standalone process is no longer necessary. Kept working, unchanged,
+    for one round; it and `run.py app`'s `/db` can both run at once
+    against the same vault without conflict (each takes its own
+    independent snapshot -- see DECISIONS 0013), so there is no ordering
+    requirement while both exist.
+    """
+    print("serve: this command is deprecated. Datasette is now mounted inside "
+          "`run.py app` at /db -- this standalone process is no longer "
+          "necessary. Still works, unchanged, for one round.", file=sys.stderr)
     import subprocess
     from l5gntools import viewer, config
     m = config.machine()
@@ -299,11 +314,22 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         return 0
 
 
-REVIEW_DEFAULT_PORT = 8002  # distinct from serve's 8001 so both can run at once
+APP_DEFAULT_PORT = 8002  # distinct from serve's 8001 (deprecated but still
+                        # runnable alongside 'app' for one round)
+REVIEW_DEFAULT_PORT = APP_DEFAULT_PORT  # old name, kept as an alias
 
 
-def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
-    """Launch the narrow project-link write endpoint (DECISIONS 0007 stage 2).
+def _cmd_app(args: argparse.Namespace, argv: list[str], label: str = "app") -> int:
+    """The single entry point (COWORK_BRIEF_unified_app.md Task 4; DECISIONS 0035).
+
+    One process, one port: the queue/estate/docs-board/UAT/curator routes
+    (DECISIONS 0007 stage 2's narrow write endpoint and everything the local
+    deck grew around it) plus Datasette mounted as a sub-app at `/db`
+    (Task 3) -- what used to be two separate commands (`run.py serve` +
+    `run.py review`) on two separate ports. `run.py serve` and `run.py
+    review` still work -- this function serves both, under a name that
+    prints a deprecation notice first (see `_cmd_review`/`_cmd_serve`
+    below) -- kept for one round per the brief, not deleted.
 
     Writes ONLY threads.project_link + project_confidence='manual' -- the pipeline
     owns every other column, so the two writers touch disjoint column sets and
@@ -311,8 +337,12 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     paths, bound 0.0.0.0 by default for tailnet + LAN on a `personal` estate.
     DECISIONS 0025: the deck renders only the running machine's declared
     estate, and a `work`-estate machine must bind loopback only -- enforced
-    structurally below, not by the default. FastAPI/uvicorn are an OPTIONAL
-    extra; if absent this skips cleanly and loudly with the install hint.
+    structurally below, not by the default. FastAPI/uvicorn are a REQUIRED
+    dependency of this command as of DECISIONS 0034 clause 2 (no longer
+    optional -- `available()` still reports absence and this still skips
+    cleanly and loudly with the install hint, because a missing install is
+    an install error, not a legitimate configuration to silently route
+    around).
 
     The preflight is split by *what each route needs*, not one all-or-nothing
     check (local-deck slice 1). Vault-backed routes (the review queue) need the
@@ -357,17 +387,17 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
         # construction wherever this file is. So the preflight split runs to
         # its conclusion -- the surface serves the one route whose dependency
         # is satisfied and says plainly what it hasn't got.
-        print("review: this machine has neither a vault nor an estate build.",
+        print(f"{label}: this machine has neither a vault nor an estate build.",
               file=sys.stderr)
-        print(f"review:   vault  -- {vault_gap.detail}", file=sys.stderr)
-        print(f"review:   estate -- {estate.reason} at {estate.source}",
+        print(f"{label}:   vault  -- {vault_gap.detail}", file=sys.stderr)
+        print(f"{label}:   estate -- {estate.reason} at {estate.source}",
               file=sys.stderr)
-        print("review: serving the docs board only. Run `python run.py build` "
+        print(f"{label}: serving the docs board only. Run `python run.py build` "
               "for the estate views, or point CHRONICLER_HOME at a vault for "
               "the review queue.", file=sys.stderr)
 
     if not app.available():
-        print("review: FastAPI/uvicorn are not installed. They are an OPTIONAL "
+        print(f"{label}: FastAPI/uvicorn are not installed. They are an OPTIONAL "
               "extra, kept out of the stdlib-only core:\n"
               "         pip install -e .[review]", file=sys.stderr)
         return 2
@@ -410,8 +440,8 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
             f"Thread routes are disabled on this machine: {exc}")
 
     if db is None and estate_clause_gap and not estate.available:
-        print(f"review: {estate_clause_gap}", file=sys.stderr)
-        print("review: and this machine has no estate build either, so there "
+        print(f"{label}: {estate_clause_gap}", file=sys.stderr)
+        print(f"{label}: and this machine has no estate build either, so there "
               "is nothing left to render.", file=sys.stderr)
         return 2
 
@@ -429,7 +459,7 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
     # surface" contradicts the value printed in the same sentence.
     if declared_estate != "personal" and not core.is_loopback_host(args.host):
         print(
-            f"review: refusing to bind {args.host!r} -- this machine's declared "
+            f"{label}: refusing to bind {args.host!r} -- this machine's declared "
             f"estate is {declared_estate!r}, and DECISIONS 0025 requires any "
             "non-personal estate to bind loopback only "
             "(127.0.0.1 / ::1 / localhost). Run with --host 127.0.0.1.",
@@ -442,44 +472,44 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
 
     port = args.port if "--port" in argv else REVIEW_DEFAULT_PORT
     if db is not None:
-        print(f"review: vault DB={db}")
-        print(f"review: registry={core.resolve_registry_path(m)} "
+        print(f"{label}: vault DB={db}")
+        print(f"{label}: registry={core.resolve_registry_path(m)} "
               f"({len(registry)} link-target ids)")
-        print("review: queue routes ENABLED -- writes ONLY project_link + "
+        print(f"{label}: queue routes ENABLED -- writes ONLY project_link + "
               "project_confidence='manual'")
     else:
-        print(f"review: queue routes DEGRADED -- {vault_gap.detail}")
+        print(f"{label}: queue routes DEGRADED -- {vault_gap.detail}")
     if estate.available:
         head = estate.header()
         dirty = " (toolkit dirty)" if head.get("toolkit_dirty") else ""
-        print(f"review: estate build={head.get('generated_at')} "
+        print(f"{label}: estate build={head.get('generated_at')} "
               f"commit={head.get('toolkit_commit')}{dirty}")
-        print(f"review: estate routes ENABLED -- {head.get('project_count')} projects, "
+        print(f"{label}: estate routes ENABLED -- {head.get('project_count')} projects, "
               f"{head.get('authored_document_count')} authored documents, "
               f"search engine={index.status()['engine']}")
         if index is not None and index.notice:
-            print(f"review: {index.notice}")
+            print(f"{label}: {index.notice}")
         for warning in head.get("warnings", []):
-            print(f"review: estate warning -- {warning}")
+            print(f"{label}: estate warning -- {warning}")
     else:
-        print(f"review: estate routes DEGRADED -- {estate.reason} at {estate.source}")
+        print(f"{label}: estate routes DEGRADED -- {estate.reason} at {estate.source}")
     if estate_clause_gap:
-        print(f"review: estate={declared_estate!r} -- NO thread is rendered on "
+        print(f"{label}: estate={declared_estate!r} -- NO thread is rendered on "
               "this machine (DECISIONS 0025: a surface that cannot name one "
               "estate shows none). Document routes are unaffected -- docs/ and "
               "the estate build are not estate-labelled data.")
     else:
-        print(f"review: estate={declared_estate!r} -- rendering only that estate's "
+        print(f"{label}: estate={declared_estate!r} -- rendering only that estate's "
               "threads (DECISIONS 0025)")
     if curator_estate_gap:
-        print(f"review: curator routes DEGRADED -- {curator_estate_gap}")
+        print(f"{label}: curator routes DEGRADED -- {curator_estate_gap}")
     else:
-        print(f"review: curator routes ENABLED -- data_dir={curator.data_dir} "
+        print(f"{label}: curator routes ENABLED -- data_dir={curator.data_dir} "
               f"available={curator.available}")
-    print(f"review: binding {args.host}:{port}")
-    print(f"review: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
+    print(f"{label}: binding {args.host}:{port}")
+    print(f"{label}: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
           f"on the LAN: http://<knight-192.168.x>:{port}/")
-    print(f"review: Datasette mounted at /db (sub-app, snapshot per request "
+    print(f"{label}: Datasette mounted at /db (sub-app, snapshot per request "
           f"DECISIONS 0013/0007; COWORK_BRIEF_unified_app.md Task 3) -- "
           f"see GET /api/health for whether it actually came up on this run.")
     try:
@@ -490,6 +520,22 @@ def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
                        machine=m)
     except KeyboardInterrupt:
         return 0
+
+
+def _cmd_review(args: argparse.Namespace, argv: list[str]) -> int:
+    """Deprecated name for `_cmd_app` (COWORK_BRIEF_unified_app.md Task 4).
+
+    Kept working for one round, per the brief -- printing where it went is
+    the whole job of this wrapper, not a warning nobody reads and an early
+    return. `argv` is still needed (not `args`) because `_cmd_app` checks
+    `"--port" in argv` to tell "the user passed --port" from "argparse's
+    default happened to equal it" -- see `REVIEW_DEFAULT_PORT` below.
+    """
+    print("review: this command moved. `run.py review` and `run.py serve` are "
+          "now one process: `run.py app`. Both old names still work this round "
+          "and print this notice; there is no functional difference below.",
+          file=sys.stderr)
+    return _cmd_app(args, argv, label="review")
 
 
 def _cmd_census(args: argparse.Namespace) -> int:
@@ -599,8 +645,9 @@ def main(argv: list[str]) -> int:
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'census' / 'config' / "
-                        "'deposit' / 'consume' / 'ingest' / 'serve' / 'review' / "
-                        "'backup' / 'scrape'")
+                        "'deposit' / 'consume' / 'ingest' / 'app' / 'serve' / "
+                        "'review' / 'backup' / 'scrape' ('serve' and 'review' are "
+                        "deprecated aliases for 'app', kept for one round)")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -618,9 +665,11 @@ def main(argv: list[str]) -> int:
                    help="backup: take + prune the snapshot but stage the off-box "
                         "push instead of running it")
     p.add_argument("--port", type=int, default=8001,
-                   help="serve: Datasette port (default 8001)")
+                   help="app/review: port (default 8002 unless given here); "
+                        "serve: Datasette port (default 8001)")
     p.add_argument("--host", default="0.0.0.0",
-                   help="serve: bind address (default 0.0.0.0 for Tailscale + LAN)")
+                   help="app/serve/review: bind address (default 0.0.0.0 for "
+                        "Tailscale + LAN)")
     args = p.parse_args(argv)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -634,6 +683,8 @@ def main(argv: list[str]) -> int:
         return _cmd_census(args)
     if args.command == "backup":
         return _cmd_backup(args)
+    if args.command == "app":
+        return _cmd_app(args, argv)
     if args.command == "serve":
         return _cmd_serve(args)
     if args.command == "review":
