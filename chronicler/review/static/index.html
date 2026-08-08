@@ -260,6 +260,13 @@
 
   <div id="stamp"><span class="k">build</span> <span>loading…</span></div>
 
+  <!-- Datasette is a mounted sub-app (chronicler/review/datasette_mount.py,
+       Task 3), not a module.py registration -- it has its own UI, so it gets
+       a plain link rather than a tab and a pane. Populated from /api/health's
+       `datasette` field (COWORK_BRIEF_unified_app.md UAT walk, H3: "not
+       seeing Datasette anywhere" -- it was mounted but never linked to). -->
+  <div id="datasette-link" class="sub" style="margin:-.4rem 0 .8rem"></div>
+
   <!-- The tab strip is built from /api/modules, not written here. Seven tabs
        were hardcoded at this spot; the registry (chronicler/review/modules.py)
        is now the only place a module is declared, and an eighth needs no edit

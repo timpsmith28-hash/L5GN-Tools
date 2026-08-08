@@ -158,6 +158,21 @@ async function loadStamp() {
   }
 }
 
+/* ---- the Datasette link: not a module, a mounted sub-app (Task 3) ---- */
+
+async function loadDatasetteLink() {
+  const el = document.getElementById("datasette-link");
+  try {
+    const h = await jget("/api/health");
+    const ds = h.datasette || {};
+    el.innerHTML = ds.available
+      ? `<span class="k">datasette</span> <a href="${esc(ds.mounted_at)}/" target="_blank" rel="noopener">browse the vault directly &rarr;</a>`
+      : `<span class="k">datasette</span> <span class="stale">not mounted — ${esc(ds.reason || "unavailable")}</span>`;
+  } catch (e) {
+    el.innerHTML = `<span class="k">datasette</span> <span class="stale">status unavailable</span>`;
+  }
+}
+
 /* ---- boot ---- */
 
 // The queue half may be absent (no vault on this machine) without stopping the
@@ -169,6 +184,7 @@ async function boot() {
   // something each loader discovers for itself.
   await loadModules();
   loadStamp();
+  loadDatasetteLink();
   loadEstateProjects();
   try {
     await loadQueueProjects();
