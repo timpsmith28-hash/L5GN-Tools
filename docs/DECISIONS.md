@@ -1389,3 +1389,52 @@ needs the same config flag as everything else in this entry to do anything
 beyond the backup + pipeline stages.
 
 ---
+
+## 0037 — Execution parameters are generated from a ratified plan, never supplied by a caller; and a budgeted run's unit of work is a project, or a newest-first prefix of one
+
+**Date:** 2026-08-08 · **Status:** accepted · **Builds on:** 0032 (recency is
+the truth order), 0033 (propose, ratify, execute), the curator tab's execution
+allowlist · **Source:** design thread, after real K2 runs on the work rig
+
+**Context.** The curator tab's execute route accepts a stage key and nothing
+else: no argv, no path, no flag. That rule made the surface's execution remit
+auditable at a glance. A conductor cannot hold to it literally — pacing a run
+means invoking K2 scoped to one project, with a cool-down, repeatedly.
+
+Separately: 0032 makes recency the truth order. Conversations are processed
+newest-first, and an older conflicting claim is *superseded* rather than a gap.
+That property is established **by the order of processing**. A budget planner
+free to pick any subset of work — "the twenty quickest conversations across the
+estate" — would silently destroy it, and the destruction would be invisible in
+the output, because a wrongly-ordered supersession looks exactly like a
+correctly-ordered one.
+
+**Decision.**
+
+1. **A caller supplies a plan identifier, never a parameter.** Execution
+   parameters are derived server-side from a **ratified plan**, which is itself
+   generated server-side from a bounded set of policy inputs (budget, policy
+   name, thermal profile). `STAGE_TABLE` remains the single place a runnable
+   stage is declared, and gains a **declared parameter schema** per stage —
+   which parameters that stage accepts, and their permitted ranges. A
+   parameter outside its declared range is a refusal, not a clamp.
+2. **A plan is proposed, shown, and approved before it runs**, in the same
+   posture as 0033's per-row ratification. An unapproved plan does not execute.
+3. **The unit of work in any plan is a whole project, or a newest-first prefix
+   of one.** Never an arbitrary subset, never a cross-project interleaving,
+   never "the cheapest N conversations". Within a project, newest-first is
+   absolute and the planner may not reorder it.
+4. **A plan states its own estimate's provenance**, and where there is no
+   measurement it says so and offers no estimate. A budget plan built on a
+   guessed throughput is a fabricated window.
+
+**Consequences.** (1) is a real weakening: parameters now reach a subprocess
+that previously took none. It is bounded by being schema-declared in code
+rather than config, by the caller never naming a parameter, and by (2) putting
+a human between the plan and the process. (3) costs granularity — an hour that
+cannot fit a whole project fits a prefix of it, and sometimes fits nothing,
+which the planner must say plainly rather than filling the time with work that
+corrupts the ordering. That cost is accepted: a shorter honest run beats a
+fuller one whose supersessions cannot be trusted.
+ 
+---
