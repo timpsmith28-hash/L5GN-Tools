@@ -447,9 +447,19 @@ def _cmd_app(args: argparse.Namespace, argv: list[str], label: str = "app") -> i
               "the review queue.", file=sys.stderr)
 
     if not app.available():
-        print(f"{label}: FastAPI/uvicorn are not installed. They are an OPTIONAL "
-              "extra, kept out of the stdlib-only core:\n"
-              "         pip install -e .[review]", file=sys.stderr)
+        # DECISIONS 0034 clause 2/4: FastAPI/uvicorn are REQUIRED for the app
+        # tier -- this is an install error with a stated remedy, not a
+        # graceful "optional feature" skip. They stay a pip extra (not
+        # [project.dependencies]) only so `l5gntools/` itself stays
+        # stdlib-only and independently installable -- that split is what
+        # `auditor_stdlib`/`auditor_dependency_direction` still prove with
+        # no web stack present, not a claim that the app runs without one.
+        print(f"{label}: FastAPI/uvicorn are not installed -- required to run "
+              f"{label}. Kept out of the stdlib-only l5gntools/ core "
+              "(DECISIONS 0034), but not optional for this command:\n"
+              "         pip install -e .[review]\n"
+              "         (or .[desktop] if you're launching `run.py window`)",
+              file=sys.stderr)
         return 2
 
     # DECISIONS 0025: the estate wall is config-derived, resolved ONCE here and

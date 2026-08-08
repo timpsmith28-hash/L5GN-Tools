@@ -14,8 +14,14 @@ dependencies = []
 #   pip install -e .[chronicler]     # ingest pipeline (pyyaml + embeddings)
 #   pip install -e .[scrape]         # gemini share-scraper (playwright)
 #   pip install -e .[viewer]         # Datasette read surface (DECISIONS 0007 stage 1)
-#   pip install -e .[review]         # narrow write endpoint (DECISIONS 0007 stage 2)
-#   pip install -e .[desktop]        # the window (`run.py window`, COWORK_BRIEF_unified_app.md Task 5)
+#   pip install -e .[review]         # the app tier (FastAPI/uvicorn) -- REQUIRED to run
+#                                     # `run.py app`/`window`, not a truly optional bolt-on;
+#                                     # kept as an extra (not [project.dependencies]) so the
+#                                     # stdlib-only `l5gntools` package itself stays
+#                                     # unweakened -- see DECISIONS 0034 clause 2.
+#   pip install -e .[desktop]        # `run.py window` -- pulls in .[review]'s deps too,
+#                                     # since the window has nothing to open without them
+#                                     # (COWORK_BRIEF_unified_app.md Task 5)
 #
 # `mesh` is deliberately empty: deposit/consume/intake's drop zone are
 # stdlib-only, so there is no package to install. The gate is a machine
@@ -29,7 +35,7 @@ chronicler = ["pyyaml>=6", "sentence-transformers>=2"]
 scrape = ["playwright>=1.40"]
 viewer = ["datasette>=0.64"]
 review = ["fastapi>=0.110", "uvicorn>=0.29"]
-desktop = ["pywebview>=5"]
+desktop = ["pywebview>=5", "fastapi>=0.110", "uvicorn>=0.29"]
 mesh = []
 
 # Only the importable package ships; run.py / verify.py / auditors / tests stay
