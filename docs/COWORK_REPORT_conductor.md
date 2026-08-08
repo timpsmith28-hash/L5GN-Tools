@@ -58,9 +58,10 @@ calls `sleep_fn` and that omitting `ttl` never adds the payload field.
 Nothing else about K2 or K4 changed: no claim, no verdict, no cache key is
 touched by any of the three flags.
 
-**Commit:** `<pending>` — see below.
+**Commit:** `0873d02`.
 **Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
-including the extended `tester_extract_claims` and `tester_match_claims`.
+including the extended `tester_extract_claims` and `tester_match_claims`
+(verified again by the pre-commit hook at commit time).
 
 ## The TTL question — evidence, and what is still missing
 
