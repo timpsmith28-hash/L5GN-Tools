@@ -682,6 +682,8 @@ def run() -> list[str]:
             v.append(f"single-conversation path should report batch_size 1: {r1}")
         if not isinstance(r1["wall_clock_seconds"], float) or r1["wall_clock_seconds"] < 0:
             v.append(f"timing record wall_clock_seconds should be a non-negative float: {r1}")
+        if r1["cool_down_preceded"] is not False:
+            v.append(f"no cool_down was configured -- cool_down_preceded should be False: {r1}")
 
     # omitting on_timing/session_to_project must change nothing about results.
     baseline = k2.run_extraction([conv_cd1, conv_cd2], [], caller=empty_caller, endpoint="x",
@@ -720,7 +722,8 @@ def run() -> list[str]:
         jsonl_path = td5 / "timing.jsonl"
         reporter2 = k2.make_timing_reporter(stream=buf2, jsonl_path=jsonl_path)
         reporter2({"conversation_id": "c1", "project_id": "p1", "message_count": 3,
-                    "model_id": "m1", "batch_size": 1, "wall_clock_seconds": 1.5})
+                    "model_id": "m1", "batch_size": 1, "cool_down_preceded": False,
+                    "wall_clock_seconds": 1.5})
         written2 = buf2.getvalue()
         if "TIMING" not in written2 or "conversation_id=c1" not in written2 or "wall_clock_seconds=1.500" not in written2:
             v.append(f"make_timing_reporter did not write the expected TIMING line: {written2!r}")
@@ -734,5 +737,152 @@ def run() -> list[str]:
                 rec = json.loads(lines[0])
                 if rec["conversation_id"] != "c1" or "timestamp" not in rec:
                     v.append(f"JSONL timing record missing fields: {rec}")
+
+    # =========================================================================
+    # COWORK_BRIEF_conductor_governor.md Task 1: finer timing records
+    # =========================================================================
+
+    # --- item 1: a per-WINDOW record alongside the per-conversation one,
+    #     the only way decay WITHIN a conversation is observable -------------
+    with tempfile.TemporaryDirectory() as td6:
+        td6 = Path(td6)
+        path = td6 / "wide.jsonl"
+        path.write_text("{}\n", encoding="utf-8")
+        msgs = [(i, "user", f"Turn {i}: " + ("z" * 390), f"2026-08-01T00:{i:02d}:00Z", f"u{i}")
+                for i in range(12)]
+        wide_conv = lt.Conversation(
+            conversation_id="local_wide", real_time=msgs[-1][3],
+            real_time_source="last_message_timestamp",
+            sessions=[lt.ParsedSession(
+                thread_id="wide", store="cowork", encoded_cwd="C--out", path=path,
+                conversation_id="local_wide", messages=msgs,
+                created_at=msgs[0][3], updated_at=msgs[-1][3],
+            )],
+        )
+
+        window_records: list[dict] = []
+
+        def wide_caller(t, *, endpoint, model, temperature, **kw):
+            return "[]"
+
+        result_wide = k2.extract_for_conversation(
+            wide_conv, caller=wide_caller, endpoint="x", model="m", temperature=0.0,
+            max_window_tokens=500, on_window_timing=window_records.append,
+        )
+        if len(window_records) != result_wide.windows_total or result_wide.windows_total < 2:
+            v.append(f"expected one on_window_timing record per window "
+                      f"({result_wide.windows_total} windows): {len(window_records)} records")
+        else:
+            indices = [r["window_index"] for r in window_records]
+            if indices != list(range(result_wide.windows_total)):
+                v.append(f"window_index should run 0..windows_total-1 in order: {indices}")
+            if any(r["windows_total"] != result_wide.windows_total for r in window_records):
+                v.append(f"every window record should carry the same windows_total: {window_records}")
+            if any(not isinstance(r["token_count"], int) or r["token_count"] <= 0 for r in window_records):
+                v.append(f"window record token_count should be a positive int: {window_records}")
+            if any(not isinstance(r["wall_clock_seconds"], float) or r["wall_clock_seconds"] < 0
+                    for r in window_records):
+                v.append(f"window record wall_clock_seconds should be a non-negative float: {window_records}")
+
+        # omitting on_window_timing must change nothing about the result.
+        result_wide2 = k2.extract_for_conversation(
+            wide_conv, caller=wide_caller, endpoint="x", model="m", temperature=0.0,
+            max_window_tokens=500,
+        )
+        if result_wide2.windows_total != result_wide.windows_total:
+            v.append("extract_for_conversation with on_window_timing omitted should behave "
+                      "exactly as with it given")
+
+        # run_extraction wires on_window_timing through, attaching
+        # project_id/model_id/cool_down_preceded that extract_for_conversation
+        # itself has no way to know.
+        run_window_records: list[dict] = []
+        k2.run_extraction(
+            [wide_conv], [], caller=wide_caller, endpoint="x", model="wide-model",
+            temperature=0.0, cache={}, max_window_tokens=500, small_conv_tokens=None,
+            session_to_project={"local_wide": "proj-wide"},
+            on_window_timing=run_window_records.append,
+        )
+        if len(run_window_records) < 2:
+            v.append(f"run_extraction should forward one on_window_timing call per window: "
+                      f"{len(run_window_records)}")
+        else:
+            wr = run_window_records[0]
+            if wr["project_id"] != "proj-wide" or wr["model_id"] != "wide-model":
+                v.append(f"run_extraction's window records should carry project_id/model_id "
+                          f"like the per-conversation ones do: {wr}")
+            # no cool-down configured on this run -> never preceded.
+            if any(r["cool_down_preceded"] for r in run_window_records):
+                v.append(f"no cool_down configured -- no window record should be "
+                          f"cool_down_preceded: {run_window_records}")
+
+        # a batched group (extract_batch) makes ONE call for the whole batch --
+        # there is no window concept there, so on_window_timing must never fire.
+        wb1 = tiny_conv("local_wb1", 100)
+        wb2 = tiny_conv("local_wb2", 100)
+        batch_window_records: list[dict] = []
+
+        def wb_caller(t, *, endpoint, model, temperature, **kw):
+            return "[]"
+
+        k2.run_extraction([wb1, wb2], [], caller=wb_caller, endpoint="x", model="m",
+                            temperature=0.0, cache={}, max_window_tokens=None,
+                            small_conv_tokens=1500, batch_target_tokens=6000,
+                            batch_max_conversations=6, on_window_timing=batch_window_records.append)
+        if batch_window_records:
+            v.append(f"a batched group has no window concept -- on_window_timing should "
+                      f"never fire for it: {batch_window_records}")
+
+    # --- item 2: cool_down_preceded is True only for the group immediately
+    #     after a cool-down sleep, and (at window granularity) only that
+    #     group's FIRST window -- the JIT-reload cost lands on ONE call ------
+    def _multi_msg_conv(cid: str, ts: str, n: int) -> "lt.Conversation":
+        p = Path(tempfile.mkstemp(suffix=".jsonl")[1])
+        p.write_text("{}\n", encoding="utf-8")
+        msgs = [(i, "user", f"Turn {i}: " + ("z" * 390), f"{ts[:10]}T00:{i:02d}:00Z", f"u{i}")
+                for i in range(n)]
+        sess = lt.ParsedSession(
+            thread_id=cid, store="cowork", encoded_cwd="C--out", path=p,
+            conversation_id=cid, messages=msgs, created_at=msgs[0][3], updated_at=msgs[-1][3],
+        )
+        return lt.Conversation(conversation_id=cid, sessions=[sess], real_time=ts,
+                                 real_time_source="last_message_timestamp")
+
+    cd_a = _multi_msg_conv("local_gov_a", "2026-08-05T00:00:00Z", 12)
+    cd_b = _multi_msg_conv("local_gov_b", "2026-08-04T00:00:00Z", 12)
+    cd_c = _mk_conv("local_gov_c", "2026-08-03T00:00:00Z", "governor conversation c")
+
+    def gov_caller(t, *, endpoint, model, temperature, **kw):
+        return "[]"
+
+    gov_conv_timing: list[dict] = []
+    gov_window_timing: list[dict] = []
+    k2.run_extraction(
+        [cd_a, cd_b, cd_c], [], caller=gov_caller, endpoint="x", model="m",
+        temperature=0.0, cache={}, max_window_tokens=500, small_conv_tokens=None,
+        cool_down=1.0, sleep_fn=lambda s: None,
+        on_timing=gov_conv_timing.append, on_window_timing=gov_window_timing.append,
+    )
+    by_conv = {r["conversation_id"]: r for r in gov_conv_timing}
+    if by_conv["local_gov_a"]["cool_down_preceded"] is not False:
+        v.append("the FIRST conversation of a run is never preceded by a cool-down")
+    if by_conv["local_gov_b"]["cool_down_preceded"] is not True:
+        v.append("local_gov_b immediately follows a cool-down sleep -- should be flagged")
+    if by_conv["local_gov_c"]["cool_down_preceded"] is not True:
+        v.append("local_gov_c immediately follows a cool-down sleep -- should be flagged")
+
+    a_windows = [r for r in gov_window_timing if r["conversation_id"] == "local_gov_a"]
+    if len(a_windows) < 2:
+        v.append(f"local_gov_a's long text should have windowed into >=2 windows: {len(a_windows)}")
+    elif any(w["cool_down_preceded"] for w in a_windows):
+        v.append(f"local_gov_a is the first conversation -- no window should be "
+                  f"cool_down_preceded: {a_windows}")
+
+    b_windows = [r for r in gov_window_timing if r["conversation_id"] == "local_gov_b"]
+    if not b_windows or b_windows[0]["cool_down_preceded"] is not True:
+        v.append(f"local_gov_b's FIRST window follows a cool-down -- should be flagged: {b_windows}")
+    if any(w["cool_down_preceded"] for w in b_windows[1:]):
+        v.append(f"only local_gov_b's FIRST window should carry the reload flag, not "
+                  f"later ones in the same conversation: {b_windows}")
 
     return v

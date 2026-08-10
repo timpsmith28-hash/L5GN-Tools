@@ -282,7 +282,11 @@ def _claims_out(out: list[ClaimRecord]) -> list[dict]:
 def make_timing_reporter(*, stream=None, jsonl_path=None):
     """Same shape/contract as extract_claims.make_timing_reporter -- see its
     docstring. Records here carry ``claim_count`` instead of
-    ``message_count`` and no ``batch_size`` (K4 never batches)."""
+    ``message_count`` and no ``batch_size`` (K4 never batches).
+
+    ``record['cool_down_preceded']`` (COWORK_BRIEF_conductor_governor.md
+    Task 1, item 2) is True when a ``--cool-down`` sleep happened
+    immediately before this conversation's run of claims started."""
     stream = stream if stream is not None else sys.stderr
 
     def report(record: dict) -> None:
@@ -292,6 +296,36 @@ def make_timing_reporter(*, stream=None, jsonl_path=None):
             f"project_id={record['project_id']} "
             f"claim_count={record['claim_count']} "
             f"model_id={record['model_id']} "
+            f"cool_down_preceded={record['cool_down_preceded']} "
+            f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
+        )
+        stream.flush()
+        if jsonl_path is not None:
+            entry = dict(record)
+            entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+            jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+            with jsonl_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+    return report
+
+
+def make_claim_timing_reporter(*, stream=None, jsonl_path=None):
+    """As `make_timing_reporter`, but for the finer per-CLAIM record
+    (COWORK_BRIEF_conductor_governor.md Task 1, item 1) -- K4 makes a
+    shortlist-plus-confirm network call per claim, so this is the unit
+    decay within a conversation's run of claims is observable at.
+    ``cool_down_preceded`` is True only for the FIRST claim of a
+    conversation that made a network call after a gap -- the JIT-reload
+    cost lands on that one call, not on every claim in the conversation."""
+    stream = stream if stream is not None else sys.stderr
+
+    def report(record: dict) -> None:
+        stream.write(
+            "TIMING_CLAIM "
+            f"conversation_id={record['conversation_id']} "
+            f"project_id={record['project_id']} "
+            f"model_id={record['model_id']} "
+            f"cool_down_preceded={record['cool_down_preceded']} "
             f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
         )
         stream.flush()
@@ -316,7 +350,8 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
                    model: str, temperature: float, progress=None,
                    cache: dict | None = None, on_checkpoint=None,
                    checkpoint_every: int = CHECKPOINT_EVERY,
-                   cool_down: float = 0.0, sleep_fn=time.sleep, on_timing=None) -> dict:
+                   cool_down: float = 0.0, sleep_fn=time.sleep, on_timing=None,
+                   on_claim_timing=None) -> dict:
     """`claims_report` is K2's output (already newest-first per its own
     conversation order). Groups claims by project via the caller-supplied
     conversation->project map baked into each claim record before this is
@@ -339,10 +374,29 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
 
     ``cool_down`` (seconds, default 0) sleeps via ``sleep_fn`` BETWEEN
     conversations (never mid-conversation, never after the last one, never
-    after a conversation whose claims were all cache hits). ``on_timing``,
+    after a conversation whose claims were all cache hits). **What this does
+    NOT do**: a claims stream covering a single conversation never sleeps at
+    all (there is only ever one boundary, and it is the last one); the
+    conductor drives K4 once per project, so the pause BETWEEN projects has
+    to come entirely from the conductor's own pacing, exactly as documented
+    on `extract_claims.run_extraction`'s ``cool_down`` parameter. ``on_timing``,
     if given, is called once per conversation with a wall-clock timing
     record (see `make_timing_reporter`) covering only the claims in that
-    conversation that actually made a network call."""
+    conversation that actually made a network call, carrying
+    ``cool_down_preceded`` (COWORK_BRIEF_conductor_governor.md Task 1, item
+    2). ``on_claim_timing``, if given, is called once per CLAIM that made a
+    network call -- the finer unit Task 1 item 1 asks for, since K4 has no
+    window concept, only shortlist-plus-confirm-per-claim.
+
+    **Conversation-boundary assumption, asserted (Task 1 item 3):**
+    ``claims_report`` is assumed newest-first with each conversation's
+    claims run CONTIGUOUS within their project -- "the conversation_id
+    changed" is trusted as a real boundary. If a conversation_id ever
+    reappears after its run has already been closed out, that assumption
+    has broken (the input is non-contiguous) and continuing would silently
+    double-count that conversation's timing and insert an extra cool-down
+    -- so this raises ``ValueError`` naming the conversation rather than
+    proceeding on a broken assumption."""
     corpora_by_project = {
         p["project_id"]: _project_chunks(corpus_index, p["project_id"])
         for p in corpus_index.get("projects", [])
@@ -362,28 +416,53 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
     total = len(claims_report)
 
     # --- per-conversation timing/cool-down bookkeeping (Task 1 of
-    # COWORK_BRIEF_conductor.md) -- claims arrive newest-first, per project
-    # interleaved, but conversation runs are still contiguous within a
-    # project, so "the conversation_id changed" is a reliable boundary. ---
+    # COWORK_BRIEF_conductor.md, extended by conductor_governor.md's Task
+    # 1) -- claims arrive newest-first, per project interleaved, but
+    # conversation runs are assumed contiguous within a project, so "the
+    # conversation_id changed" is trusted as a reliable boundary. `seen_ids`
+    # is the assertion that trust is earned (item 3): a conversation_id that
+    # reappears after its run already closed out means the assumption broke,
+    # and this must fail loudly rather than silently double-count. ---
     conv_id = None
     conv_project_id = None
     conv_claim_count = 0
     conv_elapsed = 0.0
     conv_had_network = False
+    conv_cool_down_preceded = False   # whole-conversation flag (item 2)
+    conv_first_network_claim = True   # only the FIRST network call of a
+                                        # conversation pays the reload cost
+    seen_ids: set[str] = set()
 
     def _flush_conv(next_conv_id):
-        nonlocal conv_id, conv_project_id, conv_claim_count, conv_elapsed, conv_had_network
+        nonlocal conv_id, conv_project_id, conv_claim_count, conv_elapsed, \
+            conv_had_network, conv_cool_down_preceded, conv_first_network_claim
+        slept = False
         if conv_id is not None and conv_had_network:
             if on_timing:
                 on_timing({
                     "conversation_id": conv_id, "project_id": conv_project_id,
                     "claim_count": conv_claim_count, "model_id": model,
+                    "cool_down_preceded": conv_cool_down_preceded,
                     "wall_clock_seconds": conv_elapsed,
                 })
             if cool_down and next_conv_id is not None:
                 sleep_fn(cool_down)
+                slept = True
+        if next_conv_id is not None:
+            if next_conv_id in seen_ids:
+                raise ValueError(
+                    f"match_claims: conversation_id {next_conv_id!r} reappeared "
+                    f"non-contiguously in the claims stream -- conversation runs "
+                    f"are assumed contiguous within a project "
+                    f"(COWORK_BRIEF_conductor_governor.md Task 1, item 3). "
+                    f"Continuing would silently double-count this conversation's "
+                    f"timing and insert an extra cool-down."
+                )
+            seen_ids.add(next_conv_id)
         conv_id, conv_project_id = next_conv_id, None
         conv_claim_count, conv_elapsed, conv_had_network = 0, 0.0, False
+        conv_cool_down_preceded = slept
+        conv_first_network_claim = True
 
     for i, rec in enumerate(claims_report):  # already newest-first, per project interleaved as given
         if rec["conversation_id"] != conv_id:
@@ -469,8 +548,20 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
                     "confirm": cr.confirm, "supersedes": cr.supersedes,
                 }
 
-            conv_elapsed += time.perf_counter() - _claim_started
+            _claim_elapsed = time.perf_counter() - _claim_started
+            conv_elapsed += _claim_elapsed
             conv_had_network = True
+            if on_claim_timing:
+                on_claim_timing({
+                    "conversation_id": cr.conversation_id,
+                    "project_id": cr.project_id,
+                    "model_id": model,
+                    # Only the FIRST network call of this conversation pays
+                    # the JIT-reload cost, not every claim in it.
+                    "cool_down_preceded": conv_cool_down_preceded and conv_first_network_claim,
+                    "wall_clock_seconds": _claim_elapsed,
+                })
+            conv_first_network_claim = False
 
         out.append(cr)
         # A gap/cross-project/captured claim still ESTABLISHES current truth
@@ -615,6 +706,12 @@ def main() -> None:
                      help="also append per-conversation timing records as JSON lines to "
                           "this file (Task 2's calibration ledger input); the human-readable "
                           "TIMING line is always written to stderr regardless")
+    ap.add_argument("--claim-timing-log", type=Path, default=None,
+                     help="also append per-CLAIM timing records as JSON lines to this "
+                          "file -- the finer unit decay within a conversation's run of "
+                          "claims is observable at (COWORK_BRIEF_conductor_governor.md "
+                          "Task 1); the human-readable TIMING_CLAIM line is always "
+                          "written to stderr regardless")
     args = ap.parse_args()
 
     bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout,
@@ -657,11 +754,12 @@ def main() -> None:
         args.out.write_text(json.dumps(out_to_write, indent=2), encoding="utf-8")
 
     timing_reporter = make_timing_reporter(jsonl_path=args.timing_log)
+    claim_timing_reporter = make_claim_timing_reporter(jsonl_path=args.claim_timing_log)
     result = match_claims(flat, corpus_index, caller=bound_caller, endpoint=args.endpoint,
                             model=args.model, temperature=args.temperature, progress=reporter,
                             cache=cache, on_checkpoint=_checkpoint if cache is not None else None,
                             checkpoint_every=args.checkpoint_every, cool_down=args.cool_down,
-                            on_timing=timing_reporter)
+                            on_timing=timing_reporter, on_claim_timing=claim_timing_reporter)
 
     if project_filter:
         old = None

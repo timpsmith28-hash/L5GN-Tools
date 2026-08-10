@@ -350,12 +350,22 @@ def build_windows(conv, max_tokens: int) -> list[str]:
 
 def extract_for_conversation(conv, *, caller, endpoint: str, model: str,
                               temperature: float,
-                              max_window_tokens: int | None = None) -> ExtractionResult:
+                              max_window_tokens: int | None = None,
+                              on_window_timing=None) -> ExtractionResult:
     """Single-conversation path (used when a conversation is too large to
     batch with others, or batching is disabled). Windows internally when
     ``max_window_tokens`` is set and the conversation exceeds it; each
     window gets its own model call and its own literal-substring check
-    against ITS OWN text, never the full transcript."""
+    against ITS OWN text, never the full transcript.
+
+    ``on_window_timing(record)``, if given, is called once per window with a
+    wall-clock measurement of THAT window's own model call -- the only way
+    decay WITHIN a conversation is observable (COWORK_BRIEF_conductor_governor.md
+    Task 1). Purely observational: omitting it changes nothing about the
+    result. The record is minimal (``conversation_id``, ``window_index``,
+    ``windows_total``, ``token_count``, ``wall_clock_seconds``) -- run/
+    project/model provenance and the cool-down flag are added by the caller
+    (``run_extraction``), which is the layer that actually knows them."""
     full_text = full_transcript_text(conv)
     result = ExtractionResult(conversation_id=conv.conversation_id, real_time=conv.real_time)
 
@@ -370,8 +380,17 @@ def extract_for_conversation(conv, *, caller, endpoint: str, model: str,
         windows = [full_text]
     result.windows_total = len(windows)
 
-    for window_text in windows:
+    for window_index, window_text in enumerate(windows):
+        _window_started = time.perf_counter()
         raw = caller(window_text, endpoint=endpoint, model=model, temperature=temperature)
+        if on_window_timing:
+            on_window_timing({
+                "conversation_id": conv.conversation_id,
+                "window_index": window_index,
+                "windows_total": len(windows),
+                "token_count": approx_token_count(window_text),
+                "wall_clock_seconds": time.perf_counter() - _window_started,
+            })
         records = _extract_json_array(raw)
         if records is None:
             result.windows_parse_failed += 1
@@ -610,7 +629,15 @@ def make_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
     """Writes one human-readable ``TIMING ...`` line per conversation to
     ``stream`` (default stderr), and -- if ``jsonl_path`` is given -- also
     appends the same record as a UTC-ISO-8601-stamped JSON line, which is
-    the shape Task 2's ledger is meant to read."""
+    the shape Task 2's ledger is meant to read.
+
+    ``record['cool_down_preceded']`` (COWORK_BRIEF_conductor_governor.md
+    Task 1, item 2) is True when a ``--cool-down`` sleep happened
+    immediately before this conversation's group ran -- with
+    ``--model-ttl`` shorter than ``--cool-down``, the model is evicted in
+    that gap and JIT-reloads on the next call, so the first unit after a
+    gap includes a reload cost the ledger must not silently average in with
+    every other unit."""
     stream = stream if stream is not None else sys.stderr
 
     def report(record: dict) -> None:
@@ -621,6 +648,39 @@ def make_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
             f"message_count={record['message_count']} "
             f"model_id={record['model_id']} "
             f"batch_size={record['batch_size']} "
+            f"cool_down_preceded={record['cool_down_preceded']} "
+            f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
+        )
+        stream.flush()
+        if jsonl_path is not None:
+            entry = dict(record)
+            entry["timestamp"] = datetime.now(timezone.utc).isoformat()
+            jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+            with jsonl_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+    return report
+
+
+def make_window_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
+    """As `make_timing_reporter`, but for the finer per-WINDOW record
+    (COWORK_BRIEF_conductor_governor.md Task 1, item 1) -- the only way
+    throughput decay WITHIN a single conversation is observable. Same
+    ``cool_down_preceded`` semantics, inherited from the window's own
+    conversation/group (windows within one conversation are never
+    themselves separated by a cool-down -- see `run_extraction`'s
+    docstring)."""
+    stream = stream if stream is not None else sys.stderr
+
+    def report(record: dict) -> None:
+        stream.write(
+            "TIMING_WINDOW "
+            f"conversation_id={record['conversation_id']} "
+            f"project_id={record['project_id']} "
+            f"window_index={record['window_index']} "
+            f"windows_total={record['windows_total']} "
+            f"token_count={record['token_count']} "
+            f"model_id={record['model_id']} "
+            f"cool_down_preceded={record['cool_down_preceded']} "
             f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
         )
         stream.flush()
@@ -644,7 +704,8 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                      batch_target_tokens: int = DEFAULT_BATCH_TARGET_TOKENS,
                      batch_max_conversations: int = DEFAULT_BATCH_MAX_CONVERSATIONS,
                      progress=None, cool_down: float = 0.0, sleep_fn=time.sleep,
-                     session_to_project: dict | None = None, on_timing=None) -> dict:
+                     session_to_project: dict | None = None, on_timing=None,
+                     on_window_timing=None) -> dict:
     """`conversations` must already be newest-first (lt.order_newest_first's
     first return value). `excluded` are conversations lt.group_conversations
     could not resolve a real timestamp for -- excluded and named here too,
@@ -669,9 +730,27 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     ``cool_down`` (seconds, default 0 -- today's behaviour) sleeps via
     ``sleep_fn`` (default ``time.sleep``, injectable for hermetic tests)
     BETWEEN groups that actually did a model call, never mid-conversation
-    and never after the last group. ``on_timing``, if given, is called once
-    per conversation with a wall-clock timing record (see
-    `make_timing_reporter`) -- purely observational, no effect on results.
+    and never after the last group. **What this does NOT do**: a single-group
+    run -- one conversation, or one small-conversation batch -- never sleeps
+    at all (``group_idx < len(groups) - 1`` is false for the only group
+    there is), and windows WITHIN one conversation are never separated by a
+    cool-down either, only groups. `run.py`'s conductor drives K2 once per
+    project, so the pause BETWEEN projects has to come entirely from the
+    conductor's own pacing, not from this flag -- K2's `--cool-down` only
+    ever reaches inside a single invocation's own conversation list.
+
+    ``on_timing``, if given, is called once per conversation with a
+    wall-clock timing record (see `make_timing_reporter`) carrying
+    ``cool_down_preceded`` -- True when a cool-down sleep happened
+    immediately before this conversation's group started, so the ledger can
+    tell a plain measurement from one whose first call paid a JIT-reload
+    cost (COWORK_BRIEF_conductor_governor.md Task 1, item 2).
+    ``on_window_timing``, if given, is called once per WINDOW within the
+    windowed single-conversation path (never for a batched group, which
+    makes one call for the whole batch and has no window concept) -- the
+    only way decay INSIDE a conversation is observable; see
+    `make_window_timing_reporter`. Both callbacks are purely observational:
+    omitting either changes nothing about the result.
     ``session_to_project`` (``{conversation_id: project_id}``) is only used
     to attribute those timing records; omitting it just leaves
     ``project_id`` unset in the record.
@@ -709,13 +788,33 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     else:
         groups = [[c] for c in needing_extraction]
 
+    # True for the group about to be processed iff a cool-down sleep happened
+    # immediately before it (COWORK_BRIEF_conductor_governor.md Task 1, item
+    # 2) -- never true for the very first group, since nothing has slept yet.
+    preceded_by_cool_down = False
+
     for group_idx, group in enumerate(groups):
+        this_group_preceded = preceded_by_cool_down
+        preceded_by_cool_down = False  # reset; set True below iff we sleep after this group
+
+        def _win_adapter(rec, _preceded=this_group_preceded):
+            if on_window_timing:
+                rec = dict(rec)
+                rec["project_id"] = session_to_project.get(rec["conversation_id"])
+                rec["model_id"] = model
+                # Only the group's FIRST window pays the JIT-reload cost --
+                # the eviction happened once, in the gap before this group
+                # started, not before every window inside it.
+                rec["cool_down_preceded"] = _preceded and rec["window_index"] == 0
+                on_window_timing(rec)
+
         started = time.perf_counter()
         if len(group) == 1:
             conv = group[0]
             result = extract_for_conversation(
                 conv, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
                 max_window_tokens=max_window_tokens,
+                on_window_timing=_win_adapter if on_window_timing else None,
             )
             elapsed = time.perf_counter() - started
             results_by_id[conv.conversation_id] = result
@@ -730,9 +829,13 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                     "message_count": _message_count(conv),
                     "model_id": model,
                     "batch_size": 1,
+                    "cool_down_preceded": this_group_preceded,
                     "wall_clock_seconds": elapsed,
                 })
         else:
+            # extract_batch makes ONE call for the whole batch -- there is no
+            # window concept for a batched group, so on_window_timing is
+            # never invoked here (see this function's docstring).
             batch_results, unattributed = extract_batch(
                 group, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
             )
@@ -758,10 +861,12 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                         "message_count": _message_count(conv),
                         "model_id": model,
                         "batch_size": len(group),
+                        "cool_down_preceded": this_group_preceded,
                         "wall_clock_seconds": elapsed,
                     })
         if cool_down and group_idx < len(groups) - 1:
             sleep_fn(cool_down)
+            preceded_by_cool_down = True
 
     results = [results_by_id[c.conversation_id] for c in conversations]
 
@@ -894,6 +999,12 @@ def main() -> None:
                      help="also append per-conversation timing records as JSON lines to "
                           "this file (Task 2's calibration ledger input); the human-readable "
                           "TIMING line is always written to stderr regardless")
+    ap.add_argument("--window-timing-log", type=Path, default=None,
+                     help="also append per-WINDOW timing records as JSON lines to this "
+                          "file -- the only way throughput decay WITHIN a single "
+                          "conversation is observable (COWORK_BRIEF_conductor_governor.md "
+                          "Task 1); the human-readable TIMING_WINDOW line is always "
+                          "written to stderr regardless")
     args = ap.parse_args()
 
     bound_caller = functools.partial(call_lmstudio, timeout=args.timeout,
@@ -921,6 +1032,7 @@ def main() -> None:
     cache = load_cache(args.cache)
     reporter = make_progress_reporter("extracting") if args.progress else None
     timing_reporter = make_timing_reporter(jsonl_path=args.timing_log)
+    window_timing_reporter = make_window_timing_reporter(jsonl_path=args.window_timing_log)
     session_to_project = {r.session_id: r.project_id for r in map_rows}
     report = run_extraction(
         included, excluded, caller=bound_caller, endpoint=args.endpoint,
@@ -931,6 +1043,7 @@ def main() -> None:
         batch_max_conversations=args.batch_max_conversations,
         progress=reporter, cool_down=args.cool_down,
         session_to_project=session_to_project, on_timing=timing_reporter,
+        on_window_timing=window_timing_reporter,
     )
     save_cache(cache, args.cache)
 

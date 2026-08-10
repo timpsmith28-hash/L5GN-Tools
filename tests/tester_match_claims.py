@@ -463,7 +463,7 @@ def run() -> list[str]:
         jsonl_path = td_path / "timing.jsonl"
         reporter = k4.make_timing_reporter(stream=buf, jsonl_path=jsonl_path)
         reporter({"conversation_id": "c1", "project_id": "p1", "claim_count": 2,
-                   "model_id": "m1", "wall_clock_seconds": 2.25})
+                   "model_id": "m1", "cool_down_preceded": False, "wall_clock_seconds": 2.25})
         written = buf.getvalue()
         if "TIMING" not in written or "conversation_id=c1" not in written or "claim_count=2" not in written:
             v.append(f"make_timing_reporter did not write the expected TIMING line: {written!r}")
@@ -473,5 +473,89 @@ def run() -> list[str]:
             lines = jsonl_path.read_text(encoding="utf-8").strip().splitlines()
             if len(lines) != 1 or "timestamp" not in json.loads(lines[0]):
                 v.append(f"JSONL timing record missing fields: {lines}")
+
+    # =========================================================================
+    # COWORK_BRIEF_conductor_governor.md Task 1: finer timing records
+    # =========================================================================
+
+    # --- item 1: a per-CLAIM record, the finer unit K4 has (no window
+    #     concept -- shortlist-plus-confirm per claim IS the unit) ----------
+    gov_claim_timing: list[dict] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, on_claim_timing=gov_claim_timing.append)
+    if len(gov_claim_timing) != len(tl_claims):
+        v.append(f"expected one on_claim_timing record per claim that made a network call "
+                  f"({len(tl_claims)} claims, none cached): {len(gov_claim_timing)}")
+    else:
+        c1a, c1b, c2a = gov_claim_timing
+        if c1a["conversation_id"] != "c-tl1" or c2a["conversation_id"] != "c-tl2":
+            v.append(f"claim timing records out of order or misattributed: {gov_claim_timing}")
+        if c1a["project_id"] != "proj-a" or c1a["model_id"] != "test-model":
+            v.append(f"claim timing record missing project_id/model_id: {c1a}")
+        if not isinstance(c1a["wall_clock_seconds"], float) or c1a["wall_clock_seconds"] < 0:
+            v.append(f"claim timing record wall_clock_seconds should be a non-negative float: {c1a}")
+
+    # a claim served from cache made no network call -- no on_claim_timing
+    # for it, same as the conversation-level on_timing behaviour.
+    warm_cache2: dict = {}
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cache=warm_cache2)
+    cached_claim_timing: list[dict] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cache=warm_cache2, on_claim_timing=cached_claim_timing.append)
+    if cached_claim_timing:
+        v.append(f"an all-cache-hit re-run should emit no on_claim_timing records: "
+                  f"{cached_claim_timing}")
+
+    # --- item 2: cool_down_preceded at claim granularity -- True only for
+    #     the FIRST network-making claim of a conversation immediately after
+    #     a cool-down sleep, never for its later claims or the first run ----
+    gov_conv_timing2: list[dict] = []
+    gov_claim_timing2: list[dict] = []
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0, cool_down=2.0, sleep_fn=lambda s: None,
+                      on_timing=gov_conv_timing2.append, on_claim_timing=gov_claim_timing2.append)
+    conv_by_id = {r["conversation_id"]: r for r in gov_conv_timing2}
+    if conv_by_id["c-tl1"]["cool_down_preceded"] is not False:
+        v.append("c-tl1 is the FIRST conversation of the run -- never cool_down_preceded")
+    if conv_by_id["c-tl2"]["cool_down_preceded"] is not True:
+        v.append("c-tl2 immediately follows a cool-down sleep -- should be flagged")
+
+    claims_for_c1 = [r for r in gov_claim_timing2 if r["conversation_id"] == "c-tl1"]
+    if len(claims_for_c1) != 2 or any(r["cool_down_preceded"] for r in claims_for_c1):
+        v.append(f"c-tl1's claims are the run's first -- neither should be cool_down_preceded: "
+                  f"{claims_for_c1}")
+    claims_for_c2 = [r for r in gov_claim_timing2 if r["conversation_id"] == "c-tl2"]
+    if not claims_for_c2 or claims_for_c2[0]["cool_down_preceded"] is not True:
+        v.append(f"c-tl2's only (and therefore first) claim follows a cool-down -- should be "
+                  f"flagged: {claims_for_c2}")
+
+    # --- item 3: the conversation-boundary assumption is ASSERTED -- a
+    #     conversation_id reappearing after its run already closed out must
+    #     fail loudly (ValueError), never silently double-count -------------
+    non_contiguous_claims = [
+        {"project_id": "proj-a", "conversation_id": "c-x", "real_time": "2026-08-01T00:00:00Z",
+         "claim_text": "x1", "quoted_source": "qx1"},
+        {"project_id": "proj-a", "conversation_id": "c-y", "real_time": "2026-07-25T00:00:00Z",
+         "claim_text": "y1", "quoted_source": "qy1"},
+        {"project_id": "proj-a", "conversation_id": "c-x", "real_time": "2026-08-01T00:00:00Z",
+         "claim_text": "x2", "quoted_source": "qx2"},  # c-x reappears -- non-contiguous
+    ]
+    raised = False
+    try:
+        k4.match_claims(non_contiguous_claims, empty_corpus, caller=gap_caller, endpoint="x",
+                          model="test-model", temperature=0.0)
+    except ValueError as e:
+        raised = True
+        if "c-x" not in str(e):
+            v.append(f"the ValueError should name the conversation that reappeared: {e}")
+    if not raised:
+        v.append("a non-contiguous conversation_id stream should raise ValueError loudly, "
+                  "not silently double-count")
+
+    # A genuinely contiguous stream (the normal case, exercised throughout
+    # this file already) must never raise.
+    k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
+                      temperature=0.0)  # no exception == pass
 
     return v
