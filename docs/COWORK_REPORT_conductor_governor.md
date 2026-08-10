@@ -90,9 +90,10 @@ the new `cool_down_preceded` key added (`make_timing_reporter` is not
 backward-compatible with a record missing that key by design, same as every
 other required field in these record shapes).
 
-**Commit:** see below.
+**Commit:** `7709652`.
 **Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
-including both extended testers.
+including both extended testers (verified again by the pre-commit hook at
+commit time).
 
 ## What was deliberately not done this round
 
