@@ -12,20 +12,28 @@ observation/diagnosis line Task 3 draws, when Task 3 is built).
 **Built:** 2026-08-10, in a Cowork sandbox with no LM Studio instance and no
 real work rig reachable.
 
-## Open question this round did not resolve
+## The trial's four answers, per the design thread
 
-Task 3 (the throughput governor, not built this round) branches materially
-on the thermal trial's Q1: does throughput decay **within** a single
-conversation (`RUNBOOK_conductor_thermal_trial.md` Run 2)? If yes, the
-governor needs an intra-conversation pause — a bigger change to K2 than
-Task 3 as scoped. Tim flagged this as unresolved and is checking the design
-thread before it's answered here; **Task 1's per-window timing (below) is
-exactly what makes Run 2 readable once he does**, so nothing in this round
-was blocked by leaving it open.
-
-Q2 (does `--model-ttl` free/reload the model unattended?) is answered: yes,
-per Tim. Q3 (which lever — cool-down or token dials — preserves throughput
-better) was not run. Neither answer changes what Task 1 needed to build.
+- **Q1 (Run 2 — intra-conversation decay):** **not measured.** The design
+  thread's own words: "It is unreadable until Task 1's per-window timing
+  exists — a single conversation emits one timing record today, so there is
+  no intra-conversation signal." The correct record of this round is "not
+  yet measurable," not "no decay" — nothing licenses the latter. **Task 3
+  stays open pending it.** Task 1's per-window timing (built this round, see
+  below) is exactly what makes Run 2 readable the next time it's attempted.
+- **Q2 (Run 4 — TTL unattended):** **confirmed.** TTL frees and reloads the
+  model unattended during the cool-down gap; the explicit load/unload
+  controller stays dropped, per the original brief's finding. This makes
+  Task 1 item 2 (flagging a unit measured after a cool-down)
+  **mandatory, not precautionary** — real evictions mean real reload time
+  landing inside the first measurement after every gap, which is exactly
+  what `cool_down_preceded` now exists to keep separate from a plain
+  measurement.
+- **Q3 (Run 5 — which lever):** **not run.** A Task 3 input only; does not
+  block Task 1.
+- **Scope confirmation:** Task 1's four items are unconditional and branch
+  on nothing in the trial — building all four regardless of Q1/Q3's status
+  was the right call, confirmed after the fact rather than before it.
 
 ## What was built
 
@@ -103,6 +111,11 @@ scoping decision made before this round started. Task 1's record shapes
 (`cool_down_preceded`, `token_count` on window records, `claim_count` /
 `message_count`) were chosen with Task 2 in mind but Task 2 itself was not
 built.
+
+**Task 3 specifically stays open pending Q1** (per the design thread, above)
+— not a scoping choice this round, a genuine blocker: whether the governor
+needs an intra-conversation pause is unknown until Run 2 is re-attempted
+with this round's per-window timing in place.
 
 ## UAT
 

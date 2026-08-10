@@ -43,9 +43,11 @@ full UAT list that Task 1 actually touches is listed here.
   contiguous case (every other test in the file) never raises.
 
 - [ ] `[W]` Whether throughput decays *within* a single conversation
-  (thermal trial Run 2, Q1) — still open per Tim; checking the design
-  thread. Task 1's per-window timing is what makes that run readable once
-  it's done; nothing here was blocked by leaving it open.
+  (thermal trial Run 2, Q1) — **not measured**, per the design thread: Run 2
+  was unreadable before this round (one timing record per conversation, no
+  intra-conversation signal). Recorded as "not yet measurable," not "no
+  decay." Task 1's per-window timing (built this round) is what makes Run 2
+  readable the next time it's attempted; Task 3 stays open until it is.
 
 ---
 
