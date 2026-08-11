@@ -211,12 +211,13 @@ value:
   needs to be exact"; the real `prompt_tokens`/`completion_tokens` are for
   the ledger's normalisation (Task 2, not built), not for windowing.
 
-**Commit:** `<pending>`.
+**Commit:** `b81357e`.
 **Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
 including new coverage for usage present/absent, multi-call accumulation
 within one claim, the independent-of-output-length property, and that
 omitting `usage_box` entirely still produces well-formed (all-absent)
-fields rather than a `KeyError`.
+fields rather than a `KeyError` (verified again by the pre-commit hook at
+commit time).
 
 ## What this does not resolve
 
