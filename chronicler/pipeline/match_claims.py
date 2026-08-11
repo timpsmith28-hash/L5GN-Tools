@@ -320,12 +320,18 @@ def make_claim_timing_reporter(*, stream=None, jsonl_path=None):
     stream = stream if stream is not None else sys.stderr
 
     def report(record: dict) -> None:
+        gen_ms = record.get("generation_ms_per_token")
+        gen_ms_str = f"{gen_ms:.2f}" if gen_ms is not None else "unavailable"
         stream.write(
             "TIMING_CLAIM "
             f"conversation_id={record['conversation_id']} "
             f"project_id={record['project_id']} "
             f"model_id={record['model_id']} "
             f"cool_down_preceded={record['cool_down_preceded']} "
+            f"usage_available={record.get('usage_available')} "
+            f"prompt_tokens={record.get('prompt_tokens')} "
+            f"completion_tokens={record.get('completion_tokens')} "
+            f"generation_ms_per_token={gen_ms_str} "
             f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
         )
         stream.flush()
@@ -351,7 +357,7 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
                    cache: dict | None = None, on_checkpoint=None,
                    checkpoint_every: int = CHECKPOINT_EVERY,
                    cool_down: float = 0.0, sleep_fn=time.sleep, on_timing=None,
-                   on_claim_timing=None) -> dict:
+                   on_claim_timing=None, usage_box: dict | None = None) -> dict:
     """`claims_report` is K2's output (already newest-first per its own
     conversation order). Groups claims by project via the caller-supplied
     conversation->project map baked into each claim record before this is
@@ -396,7 +402,17 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
     has broken (the input is non-contiguous) and continuing would silently
     double-count that conversation's timing and insert an extra cool-down
     -- so this raises ``ValueError`` naming the conversation rather than
-    proceeding on a broken assumption."""
+    proceeding on a broken assumption.
+
+    ``usage_box``, if given, is a mutable accumulator (see
+    `extract_claims.reset_usage_box`/`usage_from_box`) that ``caller``
+    writes into SIDEWAYS via `call_lmstudio_generic`'s ``on_usage``. Reset
+    before a claim's non-cached work starts and read after -- a single
+    claim can cost SEVERAL underlying calls (up to `SHORTLIST_SIZE` confirm
+    calls, a possible supersede check, a possible cross-project retry), so
+    this accumulates across all of them rather than keeping only the last;
+    ``usage_available`` is true only if every one of those calls returned
+    usage (COWORK_BRIEF_conductor_governor.md Addendum 2)."""
     corpora_by_project = {
         p["project_id"]: _project_chunks(corpus_index, p["project_id"])
         for p in corpus_index.get("projects", [])
@@ -484,6 +500,8 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
             cr.confirm = cached_entry["confirm"]
             cr.supersedes = cached_entry["supersedes"]
         else:
+            if usage_box is not None:
+                k2.reset_usage_box(usage_box)
             _claim_started = time.perf_counter()
             own_chunks = corpora_by_project.get(cr.project_id, [])
             matched_key, short_report, confirm = match_against_corpus(
@@ -552,7 +570,10 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
             conv_elapsed += _claim_elapsed
             conv_had_network = True
             if on_claim_timing:
-                on_claim_timing({
+                usage = (k2.usage_from_box(usage_box) if usage_box is not None
+                          else k2.usage_from_box({"completion_tokens": 0, "prompt_tokens": 0,
+                                                    "calls_with_usage": 0, "calls_total": 0}))
+                record = {
                     "conversation_id": cr.conversation_id,
                     "project_id": cr.project_id,
                     "model_id": model,
@@ -560,7 +581,10 @@ def match_claims(claims_report: dict, corpus_index: dict, *, caller, endpoint: s
                     # the JIT-reload cost, not every claim in it.
                     "cool_down_preceded": conv_cool_down_preceded and conv_first_network_claim,
                     "wall_clock_seconds": _claim_elapsed,
-                })
+                }
+                record.update(usage)
+                record["generation_ms_per_token"] = k2.generation_ms_per_token(_claim_elapsed, usage)
+                on_claim_timing(record)
             conv_first_network_claim = False
 
         out.append(cr)
@@ -629,7 +653,8 @@ def merge_matches(old: dict | None, new: dict, touched_projects: set) -> dict:
 
 def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str,
                             temperature: float, timeout: float = DEFAULT_TIMEOUT,
-                            json_mode: bool = True, ttl: float | None = None) -> str:
+                            json_mode: bool = True, ttl: float | None = None,
+                            on_usage=None) -> str:
     """As extract_claims.call_lmstudio, but for K4's two confirm shapes --
     ``response_format`` is selected by matching ``system`` against the two
     known prompts (``CONFIRM_CHUNK_SYSTEM`` / ``CONFIRM_SUPERSEDE_SYSTEM``),
@@ -637,7 +662,15 @@ def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str
 
     ``ttl``, if given, is passed through verbatim as the payload's ``ttl``
     field -- see ``extract_claims.call_lmstudio``'s docstring; same LM
-    Studio knob, same semantics."""
+    Studio knob, same semantics.
+
+    ``on_usage``, if given, is called exactly once per call with
+    ``{"prompt_tokens": int, "completion_tokens": int}`` or ``None`` if the
+    response carried no ``usage`` block -- same contract as
+    ``extract_claims.call_lmstudio``'s ``on_usage``
+    (COWORK_BRIEF_conductor_governor.md Addendum 2). The return value is
+    unchanged; usage leaves sideways, so ``confirm_chunk``/
+    ``confirm_supersede`` (the two call sites) never change."""
     import urllib.request
     body: dict = {
         "model": model, "temperature": temperature,
@@ -658,6 +691,14 @@ def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str
                                    headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         response_body = json.loads(resp.read().decode("utf-8"))
+    if on_usage is not None:
+        usage = response_body.get("usage")
+        if (isinstance(usage, dict) and "completion_tokens" in usage
+                and "prompt_tokens" in usage):
+            on_usage({"completion_tokens": usage["completion_tokens"],
+                       "prompt_tokens": usage["prompt_tokens"]})
+        else:
+            on_usage(None)
     return response_body["choices"][0]["message"]["content"]
 
 
@@ -714,8 +755,11 @@ def main() -> None:
                           "written to stderr regardless")
     args = ap.parse_args()
 
+    usage_box: dict = {}
+    k2.reset_usage_box(usage_box)
     bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout,
-                                      json_mode=args.json_mode, ttl=args.model_ttl)
+                                      json_mode=args.json_mode, ttl=args.model_ttl,
+                                      on_usage=k2.make_usage_accumulator(usage_box))
 
     import knowledge_index as k1
     claims_report = json.loads(args.claims.read_text(encoding="utf-8"))
@@ -759,7 +803,8 @@ def main() -> None:
                             model=args.model, temperature=args.temperature, progress=reporter,
                             cache=cache, on_checkpoint=_checkpoint if cache is not None else None,
                             checkpoint_every=args.checkpoint_every, cool_down=args.cool_down,
-                            on_timing=timing_reporter, on_claim_timing=claim_timing_reporter)
+                            on_timing=timing_reporter, on_claim_timing=claim_timing_reporter,
+                            usage_box=usage_box)
 
     if project_filter:
         old = None

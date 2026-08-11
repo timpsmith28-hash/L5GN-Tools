@@ -20,6 +20,7 @@ def run() -> list[str]:
     if str(_PIPE) not in sys.path:
         sys.path.insert(0, str(_PIPE))
     import match_claims as k4
+    import extract_claims as k2
 
     corpus_index = {
         "projects": [
@@ -557,5 +558,136 @@ def run() -> list[str]:
     # this file already) must never raise.
     k4.match_claims(tl_claims, empty_corpus, caller=gap_caller, endpoint="x", model="test-model",
                       temperature=0.0)  # no exception == pass
+
+    # =========================================================================
+    # COWORK_BRIEF_conductor_governor.md Addendum 2: usage capture, generation
+    # ms/token in K4's per-claim records. K2's own tester covers the shared
+    # primitives (reset_usage_box/make_usage_accumulator/usage_from_box/
+    # generation_ms_per_token) exhaustively -- this file covers K4-specific
+    # wiring: call_lmstudio_generic's on_usage, and accumulation across
+    # SEVERAL confirm calls that can belong to one claim.
+    # =========================================================================
+
+    # --- call_lmstudio_generic: on_usage present/absent, return value
+    #     unaffected either way -----------------------------------------------
+    usage_calls: list = []
+
+    def usage_urlopen_present(req, timeout=None):
+        return _FakeResponse({
+            "choices": [{"message": {"content": "{}"}}],
+            "usage": {"prompt_tokens": 77, "completion_tokens": 33, "total_tokens": 110},
+        })
+
+    def usage_urlopen_absent(req, timeout=None):
+        return _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+
+    try:
+        urllib.request.urlopen = usage_urlopen_present
+        content = k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                             model="m", temperature=0.0, on_usage=usage_calls.append)
+        if content != "{}":
+            v.append("call_lmstudio_generic's return value must be unaffected by on_usage")
+        if usage_calls != [{"completion_tokens": 33, "prompt_tokens": 77}]:
+            v.append(f"on_usage should fire once with the response's usage block: {usage_calls}")
+
+        usage_calls.clear()
+        urllib.request.urlopen = usage_urlopen_absent
+        k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                   model="m", temperature=0.0, on_usage=usage_calls.append)
+        if usage_calls != [None]:
+            v.append(f"on_usage should fire with None when usage is absent -- never estimated: "
+                      f"{usage_calls}")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # --- accumulation across SEVERAL confirm_chunk calls belonging to ONE
+    #     match_against_corpus call -- a claim can cost more than one
+    #     underlying network call (up to SHORTLIST_SIZE candidates), and the
+    #     box must SUM across all of them, not keep only the last -----------
+    multi_calls: list = []
+    multi_box: dict = {}
+    k2.reset_usage_box(multi_box)
+
+    def multi_confirm_caller(prompt, *, system, endpoint, model, temperature):
+        multi_calls.append(prompt)
+        multi_box["completion_tokens"] += 7
+        multi_box["prompt_tokens"] += 3
+        multi_box["calls_with_usage"] += 1
+        multi_box["calls_total"] += 1
+        return json.dumps({"confirmed": False, "matched_span": ""})
+
+    multi_chunks = [
+        {"file": "f.md", "heading": f"h{i}", "text": "the quick brown fox jumps over the lazy dog"}
+        for i in range(3)
+    ]
+    k4.match_against_corpus("the quick brown fox jumps", multi_chunks, caller=multi_confirm_caller,
+                              endpoint="x", model="m", temperature=0.0)
+    if len(multi_calls) < 2:
+        v.append(f"expected several confirm_chunk calls across multiple shortlisted "
+                  f"candidates (none confirmed): {len(multi_calls)}")
+    multi_usage = k2.usage_from_box(multi_box)
+    if (multi_usage["usage_available"] is not True
+            or multi_usage["completion_tokens"] != 7 * len(multi_calls)
+            or multi_usage["prompt_tokens"] != 3 * len(multi_calls)):
+        v.append(f"usage_box should SUM across every confirm_chunk call for the match, not "
+                  f"just the last one: {multi_usage} over {len(multi_calls)} calls")
+
+    # --- end-to-end: match_claims wires usage_box into on_claim_timing's
+    #     usage_available/prompt_tokens/completion_tokens/
+    #     generation_ms_per_token. One chunk that matches all three claims'
+    #     text confirms immediately (one call per claim, clean 1:1). --------
+    usage_corpus = {
+        "projects": [{
+            "project_id": "proj-a",
+            "files": [{"file": "f.md", "chunks": [
+                {"heading": "h", "text": "claim 1a claim 1b claim 2a shared keywords for matching"},
+            ]}],
+        }],
+    }
+
+    def confirm_always(prompt, *, system, endpoint, model, temperature):
+        run_box["completion_tokens"] += 42
+        run_box["prompt_tokens"] += 10
+        run_box["calls_with_usage"] += 1
+        run_box["calls_total"] += 1
+        return json.dumps({"confirmed": True, "matched_span": "claim"})
+
+    run_box: dict = {}
+    claim_usage_records: list[dict] = []
+    k4.match_claims(tl_claims, usage_corpus, caller=confirm_always, endpoint="x",
+                      model="usage-model", on_claim_timing=claim_usage_records.append,
+                      usage_box=run_box, temperature=0.0)
+    if len(claim_usage_records) != len(tl_claims):
+        v.append(f"expected one on_claim_timing record per claim: {len(claim_usage_records)}")
+    else:
+        for rec in claim_usage_records:
+            if rec["usage_available"] is not True or rec["completion_tokens"] != 42 or rec["prompt_tokens"] != 10:
+                v.append(f"claim record did not carry usage_box's per-claim totals "
+                          f"(reset before each claim, not accumulated across claims): {rec}")
+            expected_ms = rec["wall_clock_seconds"] * 1000.0 / 42
+            if rec["generation_ms_per_token"] is None or abs(rec["generation_ms_per_token"] - expected_ms) > 1e-9:
+                v.append(f"claim record's generation_ms_per_token should derive from THAT "
+                          f"claim's own wall_clock_seconds and completion_tokens: {rec}")
+
+    # a claim served from cache makes no network call and gets no on_claim_timing
+    # record at all (already covered above) -- confirms usage_box is never even
+    # touched for it, consistent with "absent, never estimated."
+
+    # omitting usage_box entirely must still produce well-formed usage fields
+    # (present but empty), never a KeyError, and must not change outcomes.
+    no_box_records: list[dict] = []
+    result_no_box = k4.match_claims(tl_claims, usage_corpus, caller=confirm_always, endpoint="x",
+                                      model="usage-model", on_claim_timing=no_box_records.append,
+                                      temperature=0.0)
+    if not no_box_records or any(
+        "usage_available" not in r or "generation_ms_per_token" not in r for r in no_box_records
+    ):
+        v.append(f"omitting usage_box should still produce usage fields (all absent/False), "
+                  f"not missing keys: {no_box_records}")
+    if any(r["usage_available"] is not False for r in no_box_records):
+        v.append(f"omitting usage_box should leave usage_available False for every claim: "
+                  f"{no_box_records}")
+    if not result_no_box["claims"] or any(c["outcome"] != "captured" for c in result_no_box["claims"]):
+        v.append("omitting usage_box must not change match outcomes")
 
     return v

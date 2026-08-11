@@ -123,3 +123,105 @@ Walk-sheet: `docs/UAT_conductor_governor.md` (Task 1 subset only). The
 `[H]`/`[W]` items — real hour/overnight runs, whether the governor actually
 helps, estimate-vs-actual trust — all depend on Tasks 3–6 and cannot be
 walked yet.
+
+---
+
+# Addendum 2 — Task 1 reopened: the instrument couldn't measure throughput
+
+**Source:** `docs/COWORK_BRIEF_conductor_governor.md`'s own Addendum 2, from
+the trial's first per-window data and the LM Studio server logs for
+10–11 August.
+
+## The standing explanation for the 10 August runs
+
+The trial's early data is not a usable baseline, for two independent
+reasons, both now on record here per the addendum's instruction:
+
+**The instrument was wrong.** `token_count` on a window record is *input*
+tokens only; wall-clock includes generating output the record had no count
+for. Real figures from the trial: one window ran 7,972 input tokens in
+14.6s, another 2,596 in 111.7s — a 24× apparent swing driven by how much the
+model *wrote*, not by machine load. Per-conversation trends of +53%, −30%
+and +81% on three conversations were noise wearing a metric's clothes. A
+governor built on wall-clock-per-window alone would have paused hardest
+exactly when the model was being most productive — this is why the addendum
+reopened Task 1 for one field rather than treating it as done.
+
+**The 10 August run itself was not a thermal signal.** LM Studio's own logs
+carry `eval time` (pure generation speed, independent of output length):
+239 samples across 11.5 hours show a **step change and a plateau** — ~58
+ms/token for the first half of the deciles, ~79–98 ms/token for the second —
+not a thermal ramp (heat accumulates and recovers gradually; it does not
+jump 36% and hold flat). The 11 August log, after an overnight cold start,
+*begins* at ~79.2 ms/token and stays there — degradation that survives the
+machine being off overnight is a **persistent configuration state**, most
+plausibly `Offload KV Cache to GPU: Disabled`, not heat. This explains why
+90-second cool-downs across nine conversations bought only −2.3%: there was
+little actual thermal throttling to recover from that day.
+
+**Two Task 3 design decisions are vindicated by this, not merely justified
+by argument, and are not to be relitigated:** the pause cap is load-bearing
+(a throughput-closed governor would have seen a 36% drop that never
+recovered, and hung without one); the baseline must be per-run, never from
+the ledger (a ledger baseline from the morning of the 10th would have marked
+every later run "degraded" forever, for a config-state reason unrelated to
+any of those runs). And the honesty requirement — the governor names no
+cause — is vindicated twice over: a governor permitted to claim "thermal
+throttling" would have been wrong about both the 26.8%-looking figure and
+this 36% one.
+
+## What was built
+
+`chronicler/pipeline/extract_claims.py` (K2) and
+`chronicler/pipeline/match_claims.py` (K4) already parsed the full LM Studio
+response and threw away its `usage` block. Fixed with the pattern the addendum
+specified — sideways through a callback, never through `caller`'s return
+value:
+
+- **`call_lmstudio` / `call_lmstudio_generic` gain `on_usage`**, bound
+  through the same `functools.partial` that already carries `ttl`. Fires
+  exactly once per HTTP call with `{"prompt_tokens": int, "completion_tokens":
+  int}`, or `None` if the response carried no `usage` block at all — absent,
+  never estimated. The four `caller(...)` call sites
+  (`extract_for_conversation`'s window loop, `extract_batch`, `confirm_chunk`,
+  `confirm_supersede`) are **byte-for-byte unchanged**; every pre-existing
+  test using a stub caller still passes without modification.
+- **A shared accumulator** (`reset_usage_box` / `make_usage_accumulator` /
+  `usage_from_box`, in `extract_claims.py`, imported by `match_claims.py`)
+  because a single record's unit of work can cost more than one HTTP call —
+  K4's shortlist can trigger up to `SHORTLIST_SIZE` confirm calls plus a
+  possible supersede check plus a possible cross-project retry, all for ONE
+  claim. Reset before the unit's work starts, every `on_usage` call adds
+  into it, read back after. `usage_available` is true only if **every** call
+  since the last reset returned usage — a partial aggregate would silently
+  understate the true total, which this module refuses to fabricate (tested:
+  one call returning `None` among several makes the whole unit's usage
+  unavailable, not partially available).
+- **`generation_ms_per_token(elapsed, usage)`**: `None` unless usage was
+  available AND at least one token was actually generated (never a
+  division-by-zero, never a silent 0ms for an unmeasured call). Window
+  records (K2) and claim records (K4) now carry `usage_available`,
+  `prompt_tokens`, `completion_tokens`, `generation_ms_per_token` alongside
+  the existing fields. Verified directly: a long-output call (800 tokens /
+  16.0s) and a short-output call (40 tokens / 0.8s) at the same real
+  generation speed report the identical 20.0ms/token — the exact property
+  wall-clock-alone could not provide.
+- **`approx_token_count` is untouched** — still the pre-call windowing
+  decision the module already documents as "never trusted for anything that
+  needs to be exact"; the real `prompt_tokens`/`completion_tokens` are for
+  the ledger's normalisation (Task 2, not built), not for windowing.
+
+**Commit:** `<pending>`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including new coverage for usage present/absent, multi-call accumulation
+within one claim, the independent-of-output-length property, and that
+omitting `usage_box` entirely still produces well-formed (all-absent)
+fields rather than a `KeyError`.
+
+## What this does not resolve
+
+Re-walking Run 2 with the fixed instrument (`[H]`, per the addendum) is
+Tim's to do on the real rig — this round could not run LM Studio. Q1
+(intra-conversation decay) remains open; Task 3 remains blocked on it, now
+with the correct instrument in hand rather than the wall-clock one that
+could not have answered it regardless.

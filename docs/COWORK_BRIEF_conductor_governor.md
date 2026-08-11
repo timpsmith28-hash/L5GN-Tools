@@ -296,3 +296,282 @@ streaming executor and the lock's stale-detection, walked rather than asserted;
 and the governor's false-positive rate over the round's real runs — because
 closing the loop on an effect rather than a cause is this design's one honest
 weakness and it should be quantified rather than argued about.
+
+---
+
+# Addendum — 2026-08-10 · Tasks 4 and 5 superseded, from the CID chain precedent
+
+**Source:** design thread, after reading `L5GN_Armory_v4`'s forge and chain
+registry. **Status of the rest:** Task 1 is built (`7709652`); Tasks 2, 3 and 6
+are unchanged.
+
+The Task 4 and Task 5 text above **stands as the record of what was asked** and
+is not edited. The versions below replace them for build purposes, in the shape
+`DECISIONS.md` uses — append and supersede, never correct in place
+(`docs/README.md` §2).
+
+## Why — the problem was already solved next door
+
+0037 clause (1) requires a *"declared parameter schema per stage — which
+parameters that stage accepts, and their permitted ranges. A parameter outside
+its declared range is a refusal, not a clamp."* The original Task 4 described
+that in prose. `L5GN_Armory_v4/core/services/chain_registry.py` **has it built**,
+and better than the prose:
+
+- **Closed vocabularies as module-level frozensets** (`_VALID_SKIP`,
+  `_VALID_COMPOSE`, `_VALID_CHUNK`) — immutable globals, the same posture the
+  toolkit's scanners already use.
+- **Accumulate-then-raise validation.** `_validate_stage` returns a *list* of
+  errors rather than raising on the first, so an operator sees every problem at
+  once instead of fixing them one per attempt. This is strictly better than what
+  the original Task 4 asked for.
+- **One error type.** `ChainValidationError`, with `chain_authoring.parse_chain_text`
+  funnelling malformed JSON *and* invalid content into it, so the caller handles
+  exactly one failure.
+- **Validate loudly at load, never fail silently at run** — the module's own
+  stated rule, and already the toolkit's.
+- **A dataclass-derived field table.** `_STAGE_FIELDS = MappingProxyType({f.name:
+  f for f in dataclasses.fields(Stage)})` drives (de)serialisation generically,
+  so adding a field later cannot silently drop it on round-trip. That is 0030 —
+  shape is generated, not hand-maintained — applied to a config schema.
+- **A schema version on the artefact**, `citadel.chain.v1`, present from the
+  start rather than added after the first breaking change.
+
+**Re-derive these patterns. Import nothing.** CID carries `customtkinter`,
+`llama_cpp` and `numpy`; none of that comes near this repo (0034).
+
+## Task 4′ ▸ the planner, and the plan as a validated artefact
+
+Everything in the original Task 4 **carries forward unchanged** — unit of work is
+a project or a newest-first prefix (0037 clause 3), the priority policy is named
+and chosen rather than inferred, the budget must account for pause time, a budget
+too small offers a prefix or says nothing, and approval is explicit and per-plan.
+
+Added to it: **the plan is a validated, serialisable artefact, not an in-memory
+list.**
+
+- A `PlanSpec` / `PlanRegistry` pair in `chain_registry.py`'s mould, carrying
+  schema `l5gn.plan.v1`.
+- **Closed vocabularies as frozensets** for policy names, profile names and stage
+  keys — the stage keys sourced from `curator_control.STAGE_TABLE`, which stays
+  the single declaration point.
+- **Accumulate-then-raise**, one `PlanValidationError`, every violation reported
+  together.
+- **The field table derived from the dataclass**, so a later field addition
+  round-trips without a serialiser edit.
+- **Validated at load *and* immediately before execution.** A plan approved an
+  hour ago against a model that has since been unloaded is not still valid.
+
+**The line CID crosses that this must not.** `plugs/chain_builder.py` and
+`chain_authoring.save_chain_text()` let the operator **author arbitrary chain
+JSON in a text editor and persist it.** That is the right affordance for CID and
+it is precisely what 0037 clause (1) forbids here: the caller supplies a plan
+identifier, never a parameter. **Borrow `parse` and `validate`; do not borrow
+save-whatever-was-typed.** Plans are *generated* server-side from policy inputs
+and *approved* — never authored. If that line blurs, the execution allowlist has
+a back door and the ruling is worthless.
+
+Cycle detection (`_detect_cycles`) is **not needed** while plans are linear. If
+plans ever gain dependencies between steps, that function is the shape to reach
+for — recorded so it is not reinvented.
+
+## Task 5′ ▸ execution, streaming, the lock, and cancellation
+
+Everything in the original Task 5 **carries forward unchanged** — streaming from
+a `Popen` rather than `subprocess.run` (the governor's input is the live timing
+stream), the pid-and-heartbeat lock with an explicit break action that names what
+it breaks, stop-on-failure in `run_pipeline`'s shape, and re-deriving remaining
+work from the caches rather than from the plan.
+
+Added to it: **cancellation, taken from `ForgeEngine` rather than invented.**
+
+- Distinguish cancelling a **queued** step — skipped when the plan reaches it —
+  from cancelling an **in-flight** step, where the subprocess is signalled and
+  stopped. `ForgeEngine` makes exactly this distinction (`_consume_cancel` on
+  dequeue versus after the call returns) and an overnight run needs it: "stop
+  after the current project" and "stop now" are different operator intents.
+- **Atomic test-and-clear**, so a cancellation is one-shot and cannot fire twice.
+- **A cancelled run must leave both caches consistent** — K2's per-conversation
+  and K4's per-claim, the latter checkpointing every `--checkpoint-every` claims.
+  Walk it; do not assert it.
+- The state shape for Task 6 is `ForgeEngine._snapshot()`'s: **depth, active
+  step, paused, pending.** Task 6 is otherwise unchanged.
+
+## Explicitly not borrowed, and why
+
+- **The worker pool and per-endpoint semaphores.** `forge.py`'s docstring gives
+  the same motive this brief has — *"insulate local inference infrastructure from
+  network or context bottleneck crashes"* — but solves it on the **concurrency**
+  axis, where the conductor solves it on the **temporal** one. The conductor is
+  deliberately single-stream (0037's lock, and the entire thermal point). A pool
+  would fight the goal.
+- **The EventBus, `SystemEvents` and the payload classes.** The app is
+  request/response over a file lock, not an event-driven engine. Growing that
+  architecture for this would be a large, unasked-for change.
+- **Any CID import whatsoever.**
+
+## Additional stop conditions
+
+- **A plan is authored rather than generated**, or any route accepts plan JSON →
+  stop. That is 0037 clause (1) via the back door.
+- **A CID module is imported** → stop.
+- **A worker pool, thread pool, or concurrent stage execution appears** → stop.
+- **Validation raises on the first error** rather than reporting all of them →
+  stop; that is the behaviour this addendum exists to import.
+
+## Additional UAT
+
+- `[G]` An invalid plan reports **every** violation at once, not the first.
+- `[G]` An unknown policy name, profile name or stage key is refused at load,
+  and the refusal names the closed vocabulary it failed against.
+- `[G]` Adding a field to the plan dataclass round-trips without a serialiser
+  edit.
+- `[G]` A plan is re-validated immediately before execution, and a plan whose
+  model is no longer loaded is refused at that point.
+- `[G]` Cancelling a **queued** step skips it; cancelling an **in-flight** step
+  stops it, and both caches are consistent afterwards.
+- `[G]` No route accepts plan JSON, and there is no save-what-was-typed path.
+
+## Growth path — recorded, not built
+
+The Forge is what the conductor becomes **if** one runner ever drives both
+Chronicler and the Curator across machines — the Command Deck's eventual "run
+anything" surface. That is premature: 0036 stood the mesh down, 0023's gate is
+unbuilt, and this is one machine.
+
+It is recorded because it is the reason to build the plan as a validated,
+serialisable artefact **now** rather than as an in-memory list. That artefact is
+the seam an engine would later plug into, and building it any other way would
+mean rewriting Task 4 to get there.
+
+## Addendum reporting
+
+In addition to the reporting above, record: which `chain_registry.py` patterns
+were re-derived and which were deliberately left; the plan schema as implemented,
+with its closed vocabularies; and the cancellation walk in both cases (queued and
+in-flight) with the cache state after each.
+
+---
+
+# Addendum 2 — 2026-08-11 · Task 1 reopened: the timing record cannot measure throughput
+
+**Source:** the thermal trial's first per-window data (`run3_windows.jsonl`) and
+the LM Studio server logs for 10–11 August. **Status:** Task 1 is built and
+reported; this reopens it for one missing field. Tasks 2 and 3 are unchanged in
+intent, but **Task 3's unit changes** and two of its design choices are now
+confirmed by evidence rather than argued.
+
+## What the trial proved about the instrument
+
+**`token_count` is input tokens only, so the record cannot express throughput.**
+Wall-clock per window includes generating output the record has no count for. In
+the real data one window ran **7,972 tokens in 14.6s** and another **2,596 tokens
+in 111.7s** — a 24× swing in apparent speed, driven by how much the model *wrote*,
+not by how loaded the machine was. Per-conversation trends came out +53%, −30%
+and +81% on three conversations. That is noise wearing a metric's clothes.
+
+**Consequence: Run 2's question is still unanswered.** Not for want of data, but
+because the instrument cannot separate a slow window from a productive one. A
+governor built on this field would pause hardest exactly when the model was being
+most useful.
+
+## What the trial proved about the run — and why Task 3 was right twice
+
+The LM Studio logs carry `prompt eval time` and `eval time` separately; the
+latter is generation speed, independent of output length. 239 samples across
+11.5 hours on 10 August:
+
+```
+generation ms/token, by decile:
+58.4  60.6  57.4  57.3  58.7 │ 79.0  98.0  79.3  80.2  80.2
+```
+
+A **step change and a plateau**, not a thermal ramp. Heat accumulates and
+recovers; it does not jump 36% and hold flat for five deciles. The 11 August log
+settles it: after an overnight cold start, the median is **79.2 ms/token** —
+it begins at the degraded level and stays. Thermal degradation does not survive
+a night with the machine off.
+
+So the 36% loss is a **persistent configuration state**, most plausibly
+`Offload KV Cache to GPU: Disabled` routing the KV cache to host RAM. Prompt eval
+moved the same way (3.35 → 4.52 ms/token). It also explains the cool-down result:
+90-second pauses across nine conversations bought **−2.3%**, because there was
+little thermal throttling to recover.
+
+**Two Task 3 decisions are now evidence-backed. Do not relitigate them:**
+
+1. **The pause cap is load-bearing, not defensive.** A governor closing on
+   throughput would have seen a 36% drop that *never recovered*. Without the cap
+   and its recorded cap-reached, "pause until throughput returns to baseline"
+   would have hung overnight.
+2. **The baseline is per-run, never from the ledger.** A ledger baseline taken on
+   the morning of the 10th would have marked every later run degraded, forever,
+   for a reason that had nothing to do with any of those runs.
+
+And the honesty requirement has now been vindicated twice: a governor permitted
+to name a cause would have reported "thermal throttling" on both the 26.8%
+figure and this 36% one, and been wrong both times.
+
+## Task 1′ ▸ capture the model's own usage accounting
+
+`call_lmstudio` (K2) and `call_lmstudio_generic` (K4) both parse the full
+response into `response_body` and then return only
+`response_body["choices"][0]["message"]["content"]`. **The `usage` block is
+already in hand and is being thrown away.**
+
+- Capture **`usage.completion_tokens` and `usage.prompt_tokens`** on every call,
+  and derive **generation ms/token** into the timing record. That is the number
+  the governor needs and the only one that separates a loaded machine from a
+  verbose one.
+- **Do not change what `caller` returns.** Four call sites bind it
+  (`extract_claims` lines 385 and 448; `match_claims` lines 151 and 168) and
+  every tester passes a stub caller returning a string. Add an optional
+  **`on_usage` callback**, bound through the same `functools.partial` that
+  already carries `ttl`, `timeout` and `json_mode`. The function keeps returning
+  a string; usage leaves sideways. This is the module's existing pattern —
+  `progress`, `on_timing`, `on_window_timing` all work this way.
+- **A missing `usage` block is recorded as absent, never estimated.** Not every
+  runtime returns it. Capability check, degrade, state it — the same discipline
+  as the embedding-endpoint and FTS5 checks.
+- **Keep `approx_token_count` for windowing.** It is a *pre-call* decision and
+  cannot use post-call data; the module already says it is "never trusted for
+  anything that needs to be exact." The real `prompt_tokens` is for the ledger's
+  normalisation, not for the windowing choice.
+
+## What this changes downstream
+
+- **Task 2's ledger** derives throughput from **generation ms/token**, not
+  wall-clock per window, partitioned on `cool_down_preceded` as already required.
+- **Task 3's governor** closes its loop on that same unit. Wall-clock per window
+  is not a throughput measure and must not be used as one.
+
+## Additional stop conditions
+
+- **Throughput is derived from wall-clock alone**, without an output-token count
+  → stop. That is the defect this addendum exists to fix.
+- **A missing `usage` block is filled with an estimate** → stop.
+- **`caller`'s return type changes**, breaking the four call sites and the
+  testers' stubs → stop; use the callback.
+
+## Additional UAT
+
+- `[G]` `usage` is captured on every call in both K2 and K4; a response carrying
+  no `usage` records it as absent and the run continues.
+- `[G]` Generation ms/token appears in the window and claim records, and is
+  independent of output length — a long-output window and a short-output window
+  of similar input size report similar figures.
+- `[G]` The four `caller(...)` sites are unchanged and every existing tester stub
+  still works.
+- `[W]` **Replay the 10 August series against the governor.** Fed that step
+  change, it must pause, fail to recover, hit its cap, record the cap as reached,
+  and proceed — not wait indefinitely.
+- `[H]` With the new unit, re-walk Run 2: does throughput decay *within* one
+  conversation? This is the question the original instrument could not answer.
+
+## Addendum 2 reporting
+
+Record the `usage` capture as implemented and how a missing block is handled; the
+generation-ms/token figures for a re-run of the trial with the fixed instrument;
+and whether Run 2's intra-conversation question finally resolves. The step-change
+finding above should be carried into `COWORK_REPORT_conductor_governor.md` as the
+standing explanation for why the 10 August runs are not a usable baseline.

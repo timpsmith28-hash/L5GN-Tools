@@ -163,7 +163,7 @@ CLAIMS_BATCH_JSON_SCHEMA = {
 def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
                    temperature: float, timeout: float = DEFAULT_TIMEOUT,
                    json_mode: bool = True, batch: bool = False,
-                   ttl: float | None = None) -> str:
+                   ttl: float | None = None, on_usage=None) -> str:
     """POST to an OpenAI-compatible chat/completions endpoint; returns the
     assistant message content as a raw string. Raises ``OSError`` /
     ``urllib.error.URLError`` on any transport failure -- callers must NOT
@@ -185,7 +185,17 @@ def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
     (https://lmstudio.ai/docs/developer/core/ttl-and-auto-evict), which
     unloads a JIT-loaded model after this many idle seconds. Omitted
     entirely when ``None`` (today's behaviour, and whatever default TTL the
-    server itself is configured with)."""
+    server itself is configured with).
+
+    ``on_usage``, if given, is called exactly once per call with the
+    response's ``usage`` block as ``{"prompt_tokens": int, "completion_tokens":
+    int}``, or ``None`` if the response carried no ``usage`` at all (not
+    every runtime returns it -- recorded as absent, never estimated;
+    COWORK_BRIEF_conductor_governor.md Addendum 2). The function's own return
+    value is UNCHANGED by this -- usage leaves sideways through the
+    callback, the same pattern ``progress``/``on_timing``/``on_window_timing``
+    already use, so the four call sites that bind ``caller`` never have to
+    change and every existing stub-caller-based test is unaffected."""
     system = SYSTEM_PROMPT_BATCH if batch else SYSTEM_PROMPT
     schema = CLAIMS_BATCH_JSON_SCHEMA if batch else CLAIMS_JSON_SCHEMA
     schema_name = "claims_batch" if batch else "claims"
@@ -211,7 +221,67 @@ def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         response_body = json.loads(resp.read().decode("utf-8"))
+    if on_usage is not None:
+        usage = response_body.get("usage")
+        if (isinstance(usage, dict) and "completion_tokens" in usage
+                and "prompt_tokens" in usage):
+            on_usage({"completion_tokens": usage["completion_tokens"],
+                       "prompt_tokens": usage["prompt_tokens"]})
+        else:
+            on_usage(None)
     return response_body["choices"][0]["message"]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Usage accounting -- COWORK_BRIEF_conductor_governor.md Addendum 2. A "unit"
+# a timing record is attached to (one window, one claim) can cost more than
+# one underlying model call (K4's shortlist confirms, for instance), so this
+# is an ACCUMULATOR, not a single-value box: reset it before the unit's work
+# starts, let `on_usage` (bound into `call_lmstudio`/`call_lmstudio_generic`
+# via functools.partial, same as `ttl`) add into it as calls happen, read
+# the total back out afterwards. Available only when EVERY call since the
+# last reset returned a usage block -- a partial aggregate would silently
+# understate the true total, and this module never estimates what it did
+# not measure.
+# ---------------------------------------------------------------------------
+
+def reset_usage_box(box: dict) -> None:
+    box["completion_tokens"] = 0
+    box["prompt_tokens"] = 0
+    box["calls_with_usage"] = 0
+    box["calls_total"] = 0
+
+
+def make_usage_accumulator(box: dict):
+    """Returns an `on_usage` callback that accumulates into `box`."""
+    def on_usage(usage: dict | None) -> None:
+        box["calls_total"] += 1
+        if usage is not None:
+            box["calls_with_usage"] += 1
+            box["completion_tokens"] += usage["completion_tokens"]
+            box["prompt_tokens"] += usage["prompt_tokens"]
+    return on_usage
+
+
+def usage_from_box(box: dict) -> dict:
+    """``{"usage_available": bool, "prompt_tokens": int|None,
+    "completion_tokens": int|None}`` -- ``usage_available`` is True only when
+    every call since the last `reset_usage_box` returned a usage block."""
+    available = box["calls_total"] > 0 and box["calls_with_usage"] == box["calls_total"]
+    return {
+        "usage_available": available,
+        "prompt_tokens": box["prompt_tokens"] if available else None,
+        "completion_tokens": box["completion_tokens"] if available else None,
+    }
+
+
+def generation_ms_per_token(elapsed_seconds: float, usage: dict) -> float | None:
+    """``None`` unless usage was available AND at least one token was
+    actually generated -- a zero-token call would otherwise divide by zero,
+    and a call whose usage is absent must not be silently treated as 0ms."""
+    if not usage["usage_available"] or not usage["completion_tokens"]:
+        return None
+    return elapsed_seconds * 1000.0 / usage["completion_tokens"]
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +421,7 @@ def build_windows(conv, max_tokens: int) -> list[str]:
 def extract_for_conversation(conv, *, caller, endpoint: str, model: str,
                               temperature: float,
                               max_window_tokens: int | None = None,
-                              on_window_timing=None) -> ExtractionResult:
+                              on_window_timing=None, usage_box: dict | None = None) -> ExtractionResult:
     """Single-conversation path (used when a conversation is too large to
     batch with others, or batching is disabled). Windows internally when
     ``max_window_tokens`` is set and the conversation exceeds it; each
@@ -363,9 +433,20 @@ def extract_for_conversation(conv, *, caller, endpoint: str, model: str,
     decay WITHIN a conversation is observable (COWORK_BRIEF_conductor_governor.md
     Task 1). Purely observational: omitting it changes nothing about the
     result. The record is minimal (``conversation_id``, ``window_index``,
-    ``windows_total``, ``token_count``, ``wall_clock_seconds``) -- run/
-    project/model provenance and the cool-down flag are added by the caller
-    (``run_extraction``), which is the layer that actually knows them."""
+    ``windows_total``, ``token_count``, ``wall_clock_seconds``, plus the
+    usage-derived fields below) -- run/project/model provenance and the
+    cool-down flag are added by the caller (``run_extraction``), which is
+    the layer that actually knows them.
+
+    ``usage_box``, if given, is a mutable accumulator (see
+    `reset_usage_box`/`usage_from_box`) that ``caller`` writes into SIDEWAYS
+    via `call_lmstudio`'s ``on_usage`` -- reset before each window's call so
+    the record can carry that window's own ``usage_available``,
+    ``prompt_tokens``, ``completion_tokens`` and ``generation_ms_per_token``
+    (Addendum 2). ``caller`` itself still returns only the content string;
+    a stub caller that never touches ``usage_box`` simply leaves every
+    window's usage fields absent, which is the correct degrade, not an
+    error."""
     full_text = full_transcript_text(conv)
     result = ExtractionResult(conversation_id=conv.conversation_id, real_time=conv.real_time)
 
@@ -381,16 +462,25 @@ def extract_for_conversation(conv, *, caller, endpoint: str, model: str,
     result.windows_total = len(windows)
 
     for window_index, window_text in enumerate(windows):
+        if usage_box is not None:
+            reset_usage_box(usage_box)
         _window_started = time.perf_counter()
         raw = caller(window_text, endpoint=endpoint, model=model, temperature=temperature)
+        _window_elapsed = time.perf_counter() - _window_started
         if on_window_timing:
-            on_window_timing({
+            usage = usage_from_box(usage_box) if usage_box is not None else usage_from_box({
+                "completion_tokens": 0, "prompt_tokens": 0, "calls_with_usage": 0, "calls_total": 0,
+            })
+            record = {
                 "conversation_id": conv.conversation_id,
                 "window_index": window_index,
                 "windows_total": len(windows),
                 "token_count": approx_token_count(window_text),
-                "wall_clock_seconds": time.perf_counter() - _window_started,
-            })
+                "wall_clock_seconds": _window_elapsed,
+            }
+            record.update(usage)
+            record["generation_ms_per_token"] = generation_ms_per_token(_window_elapsed, usage)
+            on_window_timing(record)
         records = _extract_json_array(raw)
         if records is None:
             result.windows_parse_failed += 1
@@ -672,6 +762,8 @@ def make_window_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
     stream = stream if stream is not None else sys.stderr
 
     def report(record: dict) -> None:
+        gen_ms = record.get("generation_ms_per_token")
+        gen_ms_str = f"{gen_ms:.2f}" if gen_ms is not None else "unavailable"
         stream.write(
             "TIMING_WINDOW "
             f"conversation_id={record['conversation_id']} "
@@ -681,6 +773,10 @@ def make_window_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
             f"token_count={record['token_count']} "
             f"model_id={record['model_id']} "
             f"cool_down_preceded={record['cool_down_preceded']} "
+            f"usage_available={record.get('usage_available')} "
+            f"prompt_tokens={record.get('prompt_tokens')} "
+            f"completion_tokens={record.get('completion_tokens')} "
+            f"generation_ms_per_token={gen_ms_str} "
             f"wall_clock_seconds={record['wall_clock_seconds']:.3f}\n"
         )
         stream.flush()
@@ -705,7 +801,7 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                      batch_max_conversations: int = DEFAULT_BATCH_MAX_CONVERSATIONS,
                      progress=None, cool_down: float = 0.0, sleep_fn=time.sleep,
                      session_to_project: dict | None = None, on_timing=None,
-                     on_window_timing=None) -> dict:
+                     on_window_timing=None, usage_box: dict | None = None) -> dict:
     """`conversations` must already be newest-first (lt.order_newest_first's
     first return value). `excluded` are conversations lt.group_conversations
     could not resolve a real timestamp for -- excluded and named here too,
@@ -754,6 +850,14 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     ``session_to_project`` (``{conversation_id: project_id}``) is only used
     to attribute those timing records; omitting it just leaves
     ``project_id`` unset in the record.
+
+    ``usage_box``, if given, is forwarded to `extract_for_conversation` so
+    each window record can carry ``usage_available``/``prompt_tokens``/
+    ``completion_tokens``/``generation_ms_per_token`` (Addendum 2) -- pair
+    it with a ``caller`` bound via ``functools.partial(call_lmstudio, ...,
+    on_usage=make_usage_accumulator(usage_box))``, as `main()` does. Not
+    forwarded to `extract_batch` (a batched group's single call has no
+    per-window record to attach usage to).
     """
     results_by_id: dict[str, ExtractionResult] = {}
     reextracted = 0
@@ -815,6 +919,7 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                 conv, caller=caller, endpoint=endpoint, model=model, temperature=temperature,
                 max_window_tokens=max_window_tokens,
                 on_window_timing=_win_adapter if on_window_timing else None,
+                usage_box=usage_box,
             )
             elapsed = time.perf_counter() - started
             results_by_id[conv.conversation_id] = result
@@ -1007,8 +1112,11 @@ def main() -> None:
                           "written to stderr regardless")
     args = ap.parse_args()
 
+    usage_box: dict = {}
+    reset_usage_box(usage_box)
     bound_caller = functools.partial(call_lmstudio, timeout=args.timeout,
-                                      json_mode=args.json_mode, ttl=args.model_ttl)
+                                      json_mode=args.json_mode, ttl=args.model_ttl,
+                                      on_usage=make_usage_accumulator(usage_box))
 
     map_rows = k1.load_map(args.map)
     project_filter = set(args.project) if args.project else None
@@ -1043,7 +1151,7 @@ def main() -> None:
         batch_max_conversations=args.batch_max_conversations,
         progress=reporter, cool_down=args.cool_down,
         session_to_project=session_to_project, on_timing=timing_reporter,
-        on_window_timing=window_timing_reporter,
+        on_window_timing=window_timing_reporter, usage_box=usage_box,
     )
     save_cache(cache, args.cache)
 

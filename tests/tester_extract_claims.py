@@ -885,4 +885,160 @@ def run() -> list[str]:
         v.append(f"only local_gov_b's FIRST window should carry the reload flag, not "
                   f"later ones in the same conversation: {b_windows}")
 
+    # =========================================================================
+    # COWORK_BRIEF_conductor_governor.md Addendum 2: usage capture, generation
+    # ms/token -- the instrument fix. Wall-clock alone cannot separate a slow
+    # (loaded) window from a verbose (long-output) one; ms/token can.
+    # =========================================================================
+
+    # --- the accumulator primitives, tested directly ------------------------
+    box = {}
+    k2.reset_usage_box(box)
+    if k2.usage_from_box(box)["usage_available"] is not False:
+        v.append("a freshly reset usage box (zero calls) should report usage_available=False")
+    acc = k2.make_usage_accumulator(box)
+    acc({"completion_tokens": 10, "prompt_tokens": 5})
+    acc({"completion_tokens": 20, "prompt_tokens": 15})
+    u = k2.usage_from_box(box)
+    if u != {"usage_available": True, "prompt_tokens": 20, "completion_tokens": 30}:
+        v.append(f"usage_from_box should SUM across all calls since the last reset: {u}")
+
+    k2.reset_usage_box(box)
+    acc({"completion_tokens": 10, "prompt_tokens": 5})
+    acc(None)  # one call in the unit returned no usage at all
+    u2 = k2.usage_from_box(box)
+    if u2["usage_available"] is not False or u2["prompt_tokens"] is not None or u2["completion_tokens"] is not None:
+        v.append(f"ONE call with no usage should make the whole unit's usage unavailable "
+                  f"(never a partial/understated aggregate): {u2}")
+
+    # --- generation_ms_per_token: the derived unit itself --------------------
+    avail = {"usage_available": True, "completion_tokens": 100, "prompt_tokens": 10}
+    if k2.generation_ms_per_token(2.0, avail) != 20.0:
+        v.append(f"generation_ms_per_token(2.0s, 100 completion tokens) should be 20.0ms/tok: "
+                  f"{k2.generation_ms_per_token(2.0, avail)}")
+    zero_tok = {"usage_available": True, "completion_tokens": 0, "prompt_tokens": 10}
+    if k2.generation_ms_per_token(2.0, zero_tok) is not None:
+        v.append("zero completion_tokens should yield None, never a division by zero")
+    unavail = {"usage_available": False, "completion_tokens": None, "prompt_tokens": None}
+    if k2.generation_ms_per_token(2.0, unavail) is not None:
+        v.append("usage_available=False should always yield None, regardless of elapsed time")
+
+    # --- independent of output length: a long-output call and a short-output
+    #     call with the SAME real ms/token report the SAME figure, even
+    #     though their raw wall-clock and token counts differ enormously.
+    #     This is the exact defect the addendum's real data exposed: 7,972
+    #     tokens in 14.6s and 2,596 tokens in 111.7s read as a 24x swing on
+    #     wall-clock alone but are actually comparable once normalised. -----
+    long_output = {"usage_available": True, "completion_tokens": 800, "prompt_tokens": 50}
+    short_output = {"usage_available": True, "completion_tokens": 40, "prompt_tokens": 50}
+    ms_long = k2.generation_ms_per_token(16.0, long_output)   # 20ms/tok
+    ms_short = k2.generation_ms_per_token(0.8, short_output)  # 20ms/tok
+    if ms_long is None or ms_short is None or abs(ms_long - ms_short) > 1e-9:
+        v.append(f"a long-output call (800 tok/16.0s) and a short-output call (40 tok/0.8s) "
+                  f"at the SAME real generation speed should report the SAME ms/token: "
+                  f"long={ms_long} short={ms_short}")
+
+    # --- call_lmstudio: on_usage fires with a dict when `usage` is present,
+    #     None when absent, and the function's OWN return value (the content
+    #     string) is completely unaffected either way -----------------------
+    usage_calls: list = []
+
+    def usage_urlopen_present(req, timeout=None):
+        return _FakeResponse({
+            "choices": [{"message": {"content": "[]"}}],
+            "usage": {"prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168},
+        })
+
+    def usage_urlopen_absent(req, timeout=None):
+        return _FakeResponse({"choices": [{"message": {"content": "[]"}}]})
+
+    try:
+        urllib.request.urlopen = usage_urlopen_present
+        content = k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0,
+                                     on_usage=usage_calls.append)
+        if content != "[]":
+            v.append("call_lmstudio's return value must be unaffected by on_usage")
+        if usage_calls != [{"completion_tokens": 45, "prompt_tokens": 123}]:
+            v.append(f"on_usage should fire once with the response's usage block: {usage_calls}")
+
+        usage_calls.clear()
+        urllib.request.urlopen = usage_urlopen_absent
+        content2 = k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0,
+                                      on_usage=usage_calls.append)
+        if content2 != "[]":
+            v.append("call_lmstudio's return value must be unaffected by a missing usage block")
+        if usage_calls != [None]:
+            v.append(f"on_usage should fire with None when the response carries no usage -- "
+                      f"absent, never estimated: {usage_calls}")
+
+        # omitting on_usage entirely must not crash and must not change the
+        # return value -- every earlier call_lmstudio test in this file
+        # (none of which pass on_usage) already proves this, but assert it
+        # explicitly against a response that HAS a usage block too.
+        urllib.request.urlopen = usage_urlopen_present
+        content3 = k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0)
+        if content3 != "[]":
+            v.append("call_lmstudio without on_usage should behave exactly as before")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # --- end-to-end: extract_for_conversation wires usage_box into the
+    #     per-window record's usage_available/prompt_tokens/completion_tokens/
+    #     generation_ms_per_token -- the caller (not call_lmstudio) is what
+    #     writes into usage_box here, exactly as a real call_lmstudio bound
+    #     with on_usage=make_usage_accumulator(usage_box) would sideways ----
+    usage_conv = _multi_msg_conv("local_usage", "2026-08-06T00:00:00Z", 12)
+    run_box: dict = {}
+
+    def usage_caller(t, *, endpoint, model, temperature, **kw):
+        run_box["completion_tokens"] += 42
+        run_box["prompt_tokens"] += 10
+        run_box["calls_with_usage"] += 1
+        run_box["calls_total"] += 1
+        return "[]"
+
+    usage_windows: list[dict] = []
+    result_u = k2.extract_for_conversation(
+        usage_conv, caller=usage_caller, endpoint="x", model="m", temperature=0.0,
+        max_window_tokens=500, on_window_timing=usage_windows.append, usage_box=run_box,
+    )
+    if not usage_windows:
+        v.append("expected at least one window record for local_usage")
+    else:
+        for w in usage_windows:
+            if w["usage_available"] is not True or w["completion_tokens"] != 42 or w["prompt_tokens"] != 10:
+                v.append(f"window record did not carry the usage_box's accumulated totals: {w}")
+            expected_ms = w["wall_clock_seconds"] * 1000.0 / 42
+            if w["generation_ms_per_token"] is None or abs(w["generation_ms_per_token"] - expected_ms) > 1e-9:
+                v.append(f"window record's generation_ms_per_token should be derived from "
+                          f"THAT window's own wall_clock_seconds and completion_tokens: {w}")
+
+    # a caller that never touches usage_box (e.g. a plain stub, same as every
+    # OTHER test in this file) leaves usage correctly marked unavailable --
+    # not an error, not a guess, just "not measured this time."
+    no_usage_windows: list[dict] = []
+    k2.extract_for_conversation(
+        usage_conv, caller=gov_caller, endpoint="x", model="m", temperature=0.0,
+        max_window_tokens=500, on_window_timing=no_usage_windows.append, usage_box={},
+    )
+    if not no_usage_windows or any(w["usage_available"] is not False for w in no_usage_windows):
+        v.append(f"a caller that never populates usage_box should leave every window's "
+                  f"usage_available False, not True or missing: {no_usage_windows}")
+    if any(w["generation_ms_per_token"] is not None for w in no_usage_windows):
+        v.append(f"generation_ms_per_token must be None when usage was never captured: "
+                  f"{no_usage_windows}")
+
+    # omitting usage_box entirely (every OTHER window test in this file) must
+    # still produce a well-formed record with usage fields present-but-empty,
+    # never a KeyError downstream.
+    no_box_windows: list[dict] = []
+    k2.extract_for_conversation(
+        usage_conv, caller=gov_caller, endpoint="x", model="m", temperature=0.0,
+        max_window_tokens=500, on_window_timing=no_box_windows.append,
+    )
+    if not no_box_windows or any("usage_available" not in w or "generation_ms_per_token" not in w
+                                    for w in no_box_windows):
+        v.append(f"omitting usage_box should still produce usage fields (all absent/False), "
+                  f"not missing keys: {no_box_windows}")
+
     return v

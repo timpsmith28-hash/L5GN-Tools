@@ -51,6 +51,44 @@ full UAT list that Task 1 actually touches is listed here.
 
 ---
 
+## Addendum 2 — the instrument fix
+
+- [x] `[G]` `usage` is captured on every call in both K2 and K4; a response
+  carrying no `usage` records it as absent and the run continues.
+  — `call_lmstudio`/`call_lmstudio_generic`: monkeypatched transport tests
+  confirm `on_usage` fires once with `{"completion_tokens", "prompt_tokens"}`
+  when present, once with `None` when absent, and the function's own return
+  value (the content string) is identical either way.
+
+- [x] `[G]` Generation ms/token appears in the window and claim records, and
+  is independent of output length.
+  — `generation_ms_per_token(elapsed, usage)` tested directly: a long-output
+  call (800 completion tokens / 16.0s) and a short-output call (40 tokens /
+  0.8s) at the same real generation speed both report 20.0ms/token exactly.
+  Zero completion_tokens and usage_available=False both yield `None`, never
+  a division-by-zero or a fabricated figure. End-to-end: K2's
+  `extract_for_conversation` and K4's `match_claims` both wire a caller-
+  populated `usage_box` into the window/claim record correctly, and a
+  multi-call unit (several `confirm_chunk` calls under one K4 match) SUMS
+  across every call rather than keeping only the last.
+
+- [x] `[G]` The four `caller(...)` sites are unchanged and every existing
+  tester stub still works.
+  — Confirmed by inspection (no edit to `extract_for_conversation`'s,
+  `extract_batch`'s, `confirm_chunk`'s, or `confirm_supersede`'s call to
+  `caller(...)`) and by every pre-existing test in both testers passing
+  unmodified, including the many that use a stub caller with no `usage_box`
+  at all.
+
+- [ ] `[W]` **Replay the 10 August series against the governor.** Not
+  possible without Task 3 (the governor itself), not built this round.
+
+- [ ] `[H]` **With the new unit, re-walk Run 2**: does throughput decay
+  *within* one conversation? Still open — this is Tim's real-rig walk with
+  the fixed instrument now available.
+
+---
+
 Everything else in the brief's UAT list (the calibration ledger, the
 governor's pause/resume/cap behaviour and its "no cause" language, the
 planner's ordering and remainder, the streaming executor, the lock's
