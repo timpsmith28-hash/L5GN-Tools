@@ -1089,4 +1089,10 @@ scoped pausing to *between* steps, which this loop does.
   real two-gesture Ctrl-C sequence — not yet exercised outside the
   hermetic tester.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `25e977d`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the new `tests/tester_conductor_run.py` (unapproved-plan
+refusal, the happy path with a real governor pause + ledger feed +
+post-step state read, queued cancellation, in-flight cancellation, and
+mid-run re-validation failure preserving already-collected results)
+(verified again by the pre-commit hook at commit time).
