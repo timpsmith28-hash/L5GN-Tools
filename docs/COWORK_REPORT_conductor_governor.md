@@ -989,4 +989,9 @@ proven to build a real, valid plan, not just checked in isolation.
   not possible until the ledger has real entries in it (the feeder isn't
   wired into a live run yet either).
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `99c010f`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the new `tests/tester_candidates.py` (join correctness, the K1
+fallback, cache-identity reuse, and the estimate-scaling behaviour,
+finishing with a real `build_plan` call over the adapter's own output)
+(verified again by the pre-commit hook at commit time).
