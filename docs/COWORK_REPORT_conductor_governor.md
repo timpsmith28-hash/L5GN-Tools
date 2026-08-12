@@ -626,3 +626,134 @@ This round built the primitive Task 4's execution loop will call.
 including `tester_curator_control.py`'s new coverage for the streaming
 seam, lock heartbeat/staleness/`break_lock`, and queued-vs-in-flight
 cancellation (verified again by the pre-commit hook at commit time).
+
+---
+
+# Task 4′ — the planner
+
+**Precondition status at build time:** Task 5′ built — the streaming
+executor and the lock exist, so a future execution loop has something real
+to drive a plan against. Built last, per the agreed order, since a plan is
+pointless to validate against execution machinery that couldn't yet run it.
+
+## What was built
+
+`chronicler/review/planner.py` — new module, app tier (needs
+`curator_control.STAGE_TABLE`, the one declaration point for stage keys;
+the dependency only runs app → pipeline, never back, same direction
+`governor.py`'s own docstring already states for itself). Re-derives
+`chain_registry.py`'s pattern, imports nothing from it.
+
+**`PlanSpec`/`PlanStep` — a validated, serialisable artefact, not an
+in-memory list.** Schema `l5gn.plan.v1` from day one. A dataclass-derived
+field table (`dataclasses.fields`) drives `to_dict`/`from_dict`, so a later
+field addition round-trips without touching the serialiser — proven
+directly by a round-trip test (`PlanSpec.from_dict(spec.to_dict()) ==
+spec`). `PlanValidationError`, accumulate-then-raise: a plan with an
+unknown policy *and* an unknown stage key reports both in one exception,
+not one-fix-at-a-time.
+
+**Closed vocabularies.** Policy names (`coverage`, `freshness`, `breadth` —
+the brief's own three) as a module-level frozenset. Stage keys default to
+`frozenset(curator_control.STAGE_TABLE)`, resolved lazily so this module
+carries no hard import-time dependency on the app being fully wired — the
+single declaration point stays single; nothing here redeclares it.
+
+**Unit of work is a project, structurally, not just by convention.**
+`PlanStep` has no field that could name a partial project — one step is
+always one project's stage invocation in full. `PlanSpec.validate` also
+checks directly that no project appears twice across `steps` (interleaving
+would require exactly that) and that no project appears in both `steps`
+and `remainder` at once. (A finer "newest-first prefix of a project" — the
+other unit 0037 clause 3 permits — would need per-conversation steps; not
+built this round, recorded as a known simplification.)
+
+**The budget is a strict prefix, never a cherry-pick.** `build_plan` ranks
+candidates by the chosen policy, then fills the budget by walking that
+order and stopping at the FIRST candidate that doesn't fit — it never
+skips ahead to grab a smaller later one that would individually fit. This
+is the brief's own instruction ("filling the time with work that corrupts
+the ordering") turned into code, and tested directly: a candidate costing
+10s that would easily fit inside a budget's slack is still cut to
+`remainder` because an earlier, larger candidate consumed the space first.
+Every step after the first pays the profile's `cool_down_seconds` before
+its own estimate — the budget accounts for pause time, not just inference,
+per the brief's explicit correction.
+
+**No estimate without a measurement behind it.** A budgeted `build_plan`
+call refuses (`PlanValidationError`) if any candidate carries
+`estimated_seconds=None` — Task 2's calibration ledger (not built) is the
+natural future source of real per-project estimates; this module will not
+guess one to make a budget "work." The same candidates are perfectly fine
+for an *unbudgeted* plan (policy order, no time claim at all) — mirrors
+Task 2's own stated rule ("no measurements → no estimate, offer an
+unbudgeted ordering instead") applied to the same situation here.
+
+**Approval is explicit, per-plan, and never mutates in place.** `approve()`
+returns a NEW `PlanSpec` with `approved=True`/`approved_at` stamped —
+frozen dataclasses don't mutate, so a plan handed to one caller can't be
+silently un-approved by another's edit. `validate_for_execution` is the
+re-check immediately before a plan runs: structural validity again (not
+just trusted from build time), refusal if never approved (`ValueError`,
+deliberately a different exception type than `PlanValidationError` — "this
+plan is malformed" and "this plan is fine but nobody signed off on it" are
+different problems), and refusal if `profile_name` isn't in a
+caller-supplied `known_profiles` set — a plan approved against a profile
+since renamed or removed is refused rather than run against something that
+may have changed meaning.
+
+**No save-what-was-typed path.** There is no function anywhere in this
+module that accepts arbitrary caller-supplied plan JSON and persists it as
+approved or ready-to-run — `PlanRegistry.save` always calls `spec.validate()`
+first, and the only way to build a `PlanSpec` at all is `build_plan` (from
+policy inputs) or `PlanSpec.from_dict` (round-tripping something this
+module itself already wrote). The line the addendum draws against CID's
+`chain_builder.py`/`chain_authoring.save_chain_text()` is not crossed.
+
+**`PlanRegistry`** — file-backed, atomic `.tmp` + `os.replace` persistence
+under `data/knowledge_curator/plans/`, `ChainRegistry`'s own shape: a
+malformed sibling file is recorded in `.errors` and skipped, never crashes
+the registry or blocks loading the valid ones.
+
+## What was deliberately not done this round
+
+**No adapter from real curator data to `ProjectCandidate`.** This module
+ranks and budgets whatever `ProjectCandidate` objects a caller supplies —
+it does not itself read `knowledge_index.json`/`claims.json` to produce
+them. Building that adapter without Task 2's ledger behind it would mean
+either fabricating `estimated_seconds` (the exact thing this module
+refuses to do) or shipping an adapter that can only ever produce unbudgeted
+plans — a real but partial piece, deliberately left for when Task 2 exists
+to feed it honestly.
+
+**No execution loop.** Nothing in this module calls
+`curator_control.execute_with_lock`. A future loop — walk `spec.steps` in
+order, `validate_for_execution` before each, execute, re-derive remaining
+work from the caches, honour the governor's pause actions between steps —
+is what Task 5′'s primitives and this module's artefact both exist to
+support, not built here. `run.py`'s eventual conductor command is the
+natural home for it.
+
+## UAT
+
+- `[G]` A plan never interleaves projects or reorders within one — checked
+  structurally (`PlanStep` cannot name a partial project; `validate`
+  rejects a project appearing twice in `steps`).
+- `[G]` A budget fitting some prefix of the ranked candidates yields
+  exactly that prefix, never a cherry-picked subset — a smaller candidate
+  that would individually fit past the cutoff is still excluded.
+- `[G]` The plan's budget includes pause time (`cool_down_seconds` charged
+  between steps), not just inference.
+- `[G]` An estimate is never produced with no measurement behind it — a
+  budgeted plan refuses outright if any candidate lacks `estimated_seconds`.
+- `[G]` A plan is re-validated immediately before execution, and an
+  unapproved plan, a structurally invalid one, or one whose profile is no
+  longer known are each refused with a distinguishable reason.
+- `[G]` No route accepts caller-supplied plan JSON as something to save
+  and run — the only ways to produce a `PlanSpec` are `build_plan` (from
+  policy inputs) and round-tripping this module's own output.
+- `[H]` A real multi-project plan, walked on the real rig once an execution
+  loop exists to drive it — not possible until that loop (and Task 2's
+  ledger, for a budgeted plan with real numbers) exist.
+
+**Commit:** pending — code round, gate run before commit.

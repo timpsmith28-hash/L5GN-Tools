@@ -206,9 +206,64 @@ full UAT list that Task 1 actually touches is listed here.
   caches stay consistent, re-planning re-derives the remainder — not
   possible until Task 4 (the planner) exists to define "mid-plan."
 
+## Task 4′ — the planner
+
+- [x] `[G]` A plan never interleaves projects or reorders within one.
+  — `tests/tester_planner.py`: `PlanStep` has no field that could name a
+  partial project (one step is always one project's stage invocation in
+  full); `PlanSpec.validate` rejects a `PlanSpec` where the same
+  `project_id` appears twice across `steps`.
+
+- [x] `[G]` A budget fitting a prefix yields exactly that prefix, never a
+  cherry-pick.
+  — Ranked order b(30s), a(100s), c(10s); budget 140s with a 5s cool-down
+  between steps includes b and a (running total 135s) and cuts c to
+  `remainder` even though 10s would trivially fit in the 5s of slack
+  remaining — proving the fill never skips ahead. A budget too small for
+  even the first candidate produces an empty plan with everything in
+  `remainder`, never a smaller substitute.
+
+- [x] `[G]` The plan's budget includes pause time, not just inference.
+  — The same fixture: `estimated_total_seconds` is `30 + (100 + 5) = 135`,
+  the `+5` being the cool-down charged before the second step.
+
+- [x] `[G]` An estimate is never produced with no measurement behind it.
+  — A budgeted `build_plan` call raises `PlanValidationError` when any
+  candidate carries `estimated_seconds=None`; the identical candidates are
+  accepted for an unbudgeted plan (no time claim made at all).
+
+- [x] `[G]` A plan is re-validated immediately before execution; an
+  unapproved plan, a structurally invalid one, and one whose profile is no
+  longer known are each refused with a distinguishable reason.
+  — `validate_for_execution` on a never-approved plan raises plain
+  `ValueError` (not `PlanValidationError` — a different problem: "nobody
+  signed off," not "malformed"); on an approved plan with an unknown
+  stage key it raises `PlanValidationError`; on an approved plan whose
+  `profile_name` isn't in a supplied `known_profiles` set it also raises
+  `PlanValidationError`, naming the profile.
+
+- [x] `[G]` No route accepts caller-supplied plan JSON as something to
+  save and run.
+  — The only ways to construct a `PlanSpec` are `build_plan` (from policy
+  inputs, never free text) and `PlanSpec.from_dict` round-tripping this
+  module's own `to_dict()` output; `PlanRegistry.save` always validates
+  before persisting. `PlanSpec.from_dict(spec.to_dict()) == spec` proven
+  directly (the dataclass-derived field table round-trip).
+
+- [x] `[G]` `PlanRegistry` persists atomically and a malformed sibling file
+  never blocks loading the valid ones.
+  — A garbage `.json` file alongside a valid saved plan is recorded in
+  `.errors` and skipped; the valid plan still loads.
+
+- [ ] `[H]` A real multi-project plan walked on the real rig — not possible
+  until an execution loop exists to drive `PlanSpec.steps` (not built this
+  round; `run.py`'s eventual conductor command is the natural home) and
+  Task 2's ledger exists to supply real `estimated_seconds`.
+
 ---
 
 Everything else in the brief's UAT list (the calibration ledger, the
-planner's ordering and remainder, the surface, and every real-hardware
-walk) belongs to Tasks 2, 4 and 6, not built this round, and is
-intentionally absent here rather than listed as failing or skipped.
+adapter from real curator data to `ProjectCandidate`, the execution loop,
+the surface, and every real-hardware walk) belongs to Tasks 2 and 6 plus
+the not-yet-built execution loop, and is intentionally absent here rather
+than listed as failing or skipped.

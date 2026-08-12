@@ -91,6 +91,7 @@ TESTERS: list[str] = [
     "tests.tester_curator_control",
     "tests.tester_curator_findings",
     "tests.tester_governor",
+    "tests.tester_planner",
 ]
 
 
