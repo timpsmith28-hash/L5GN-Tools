@@ -1289,4 +1289,9 @@ removed as redundant.
   execution itself changed, only what's printed), but won't show this
   fix; the next run will.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `813d285`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the extended `tester_conductor_run.py` happy-path scenario
+(asserts `on_step_start`/`on_timing_line`/`on_step_end` all fire live, in
+order, with correct per-line arguments) (verified again by the pre-commit
+hook at commit time).
