@@ -280,10 +280,43 @@ full UAT list that Task 1 actually touches is listed here.
   data on the real rig — not possible until `make_ledger_feeder` is wired
   into a real `execute_with_lock` call.
 
+## Task 6 — the conductor panel, backend half
+
+- [x] `[G]` `calibration_state` never fabricates a figure `summarize`
+  wouldn't itself produce.
+  — `tests/tester_conductor_panel.py`: a stage/partition with nothing
+  recorded (K4, never touched in the fixture) reads `None` in both
+  cool-down partitions, never borrowed from K2's figures; an explicit
+  `model_ids` filter restricts the report without needing to already know
+  what's in the ledger.
+- [x] `[G]` `plan_preview` mirrors a `PlanSpec` exactly, including
+  approval state.
+  — An unapproved plan's preview shows `approved: False`,
+  `approved_at: None`; the same plan after `planner.approve()` shows both
+  set correctly; `remainder_count` matches the spec's real remainder length.
+- [x] `[G]` `run_state` never shows a fabricated "in progress" view.
+  — An idle lock path reads `locked: False`; a genuinely held one
+  (`curator_control.acquire_lock` called directly in the test) reads the
+  real stage and pid; `governor` is `None` in both cases, with a `note`
+  explaining why rather than an empty field.
+- [x] `[G]` No conductor route accepts a plan (or a step, or an argv) as
+  input.
+  — Verified two ways: by inspection (`ConductorPlanPreview`'s only
+  compound field is a list of candidate *facts*, never a step/stage/argv),
+  and by a live `TestClient` round-trip through all five routes
+  (`preconditions` → `calibration` → `run` → `plan/preview` →
+  `plan/approve`) against a real temp-directory `Curator` and a real
+  `PlanRegistry` write, confirming the shapes match what the hermetic
+  tester already proved.
+- [ ] `[H]` The panel walked as an actual UI in the curator tab — not
+  possible until the frontend half is built; out of scope this round by
+  explicit agreement (Tim: build the backend now, frontend later,
+  independent of a possible future app reorganisation).
+
 ---
 
 Everything else in the brief's UAT list (the adapter from real curator
-data to `ProjectCandidate`, the execution loop, the surface, and every
-real-hardware walk) belongs to Task 6 plus the not-yet-built execution
-loop, and is intentionally absent here rather than listed as failing or
-skipped.
+data to `ProjectCandidate`, the execution loop, the frontend rendering,
+and every real-hardware walk) belongs to the not-yet-built execution loop
+and the deferred frontend half, and is intentionally absent here rather
+than listed as failing or skipped.

@@ -87,6 +87,33 @@ try:
         # against curator_control.EXECUTION_ALLOWLIST. No argv, no path, no
         # flag is ever accepted here (Task 3's whole security story).
         stage: str
+
+    # ---- Task 6 (COWORK_BRIEF_conductor_governor.md): the conductor panel.
+    # A plan is BUILT from these inputs, never accepted as free-form JSON --
+    # the line planner.py's own docstring draws against CID's
+    # chain_builder.py stays drawn here too: no field on this model lets a
+    # caller supply a step, an argv, or anything that reaches a subprocess.
+    class ConductorCandidate(BaseModel):
+        project_id: str
+        claim_count: int = 0
+        changed_conversations: int = 0
+        message_count: int = 0
+        estimated_seconds: float | None = None
+
+    class ConductorPlanPreview(BaseModel):
+        policy: str
+        profile_name: str = "default"
+        stage: str = "K2"
+        budget_seconds: float | None = None
+        cool_down_seconds: float = 0.0
+        plan_id: str | None = None
+        candidates: list[ConductorCandidate]
+
+    class ConductorPlanApprove(BaseModel):
+        # The ONLY field an approve request carries -- a plan_id naming a
+        # plan already built and saved by this server, never a plan body a
+        # caller could supply and have accepted as-is (0037 clause 1).
+        plan_id: str
 except ImportError:  # pydantic ships with fastapi; absent == web stack not installed
     Ruling = None  # type: ignore
     RulingBatch = None  # type: ignore
@@ -97,6 +124,9 @@ except ImportError:  # pydantic ships with fastapi; absent == web stack not inst
     CuratorRatifyPair = None  # type: ignore
     CuratorModelSelect = None  # type: ignore
     CuratorExecute = None  # type: ignore
+    ConductorCandidate = None  # type: ignore
+    ConductorPlanPreview = None  # type: ignore
+    ConductorPlanApprove = None  # type: ignore
 
 
 def available() -> bool:
@@ -649,6 +679,70 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         _need_curator_estate()
         from . import curator_control as ctl
         return ctl.lock_status()
+
+    # ---- Task 6 (COWORK_BRIEF_conductor_governor.md): the conductor panel.
+    # No execution route lives here -- there is no execution loop yet
+    # (conductor_panel.run_state says so plainly). These four routes are the
+    # panel's read/plan-build/approve surface only.
+    @app.get("/api/curator/conductor/preconditions")
+    def curator_conductor_preconditions():
+        _need_curator_estate()
+        from . import conductor_panel as cp
+        from .curator_data import Curator as _Curator
+        c = curator or _Curator()
+        return cp.preconditions(c)
+
+    @app.get("/api/curator/conductor/calibration")
+    def curator_conductor_calibration():
+        _need_curator_estate()
+        from . import conductor_panel as cp
+        return cp.calibration_state()
+
+    @app.get("/api/curator/conductor/run")
+    def curator_conductor_run():
+        _need_curator_estate()
+        from . import conductor_panel as cp
+        return cp.run_state()
+
+    @app.post("/api/curator/conductor/plan/preview")
+    def curator_conductor_plan_preview(payload: ConductorPlanPreview):
+        _need_curator_estate()
+        from . import conductor_panel as cp
+        from . import planner as pl
+        candidates = [
+            pl.ProjectCandidate(
+                project_id=c.project_id, claim_count=c.claim_count,
+                changed_conversations=c.changed_conversations,
+                message_count=c.message_count, estimated_seconds=c.estimated_seconds,
+            )
+            for c in payload.candidates
+        ]
+        try:
+            spec = pl.build_plan(
+                candidates, policy=payload.policy, profile_name=payload.profile_name,
+                stage=payload.stage, budget_seconds=payload.budget_seconds,
+                cool_down_seconds=payload.cool_down_seconds, plan_id=payload.plan_id,
+            )
+            spec.validate()
+            pl.PlanRegistry().save(spec)
+        except pl.PlanValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return cp.plan_preview(spec)
+
+    @app.post("/api/curator/conductor/plan/approve")
+    def curator_conductor_plan_approve(payload: ConductorPlanApprove):
+        _need_curator_estate()
+        from . import conductor_panel as cp
+        from . import planner as pl
+        reg = pl.PlanRegistry()
+        reg.load_all()
+        spec = reg.get(payload.plan_id)
+        if spec is None:
+            raise HTTPException(status_code=404, detail=f"no plan '{payload.plan_id}' on record "
+                                 "-- build one via /plan/preview first.")
+        approved = pl.approve(spec)
+        reg.save(approved)
+        return cp.plan_preview(approved)
 
     @app.get("/api/curator/findings")
     def curator_findings_route():

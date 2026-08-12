@@ -830,3 +830,101 @@ including the new `tests/tester_ledger.py` (partitioning discipline,
 spread reporting, absence-never-estimated, the streaming feeder against a
 realistic timing line) (verified again by the pre-commit hook at commit
 time).
+
+---
+
+# Task 6 — the conductor panel, backend half
+
+**Scope for this round, agreed with Tim explicitly:** the panel's
+read/plan-build/approve data layer and API surface — not the frontend
+HTML/JS rendering it into the curator tab. Tim separately flagged a
+possible future reorganisation of the review app's structure; this round's
+additions follow today's existing conventions exactly (thin FastAPI routes
+in `app.py` delegating to a plain-function data module, the same shape
+`curator_data.py`/`curator_control.py` already established) so nothing
+here is at odds with a later restructure.
+
+## What was built
+
+**`chronicler/review/conductor_panel.py`** — new module, pure data-shaping
+over `curator_control`, `ledger`, and `planner`; no new I/O of its own and
+no execution logic.
+
+- `preconditions(curator, endpoint=...)` — `curator_control.preflight`
+  unchanged, reused, plus `calibration_available` (whether the ledger has
+  anything in it at all).
+- `calibration_state(...)` — `ledger.summarize` fanned out over every known
+  model and both model-calling stages (`curator_control.
+  MODEL_SELECTABLE_STAGES`, not a redeclared copy), both cool-down
+  partitions each. A model/stage/partition with nothing recorded reports
+  `None` — exactly what `summarize` itself would say, never upgraded to a
+  guess by this layer.
+- `plan_preview(spec)` — flattens a `PlanSpec` into the panel's rendering
+  shape: steps, remainder, budget, approval state.
+- `run_state(lock_path=...)` — the REAL lock status, `governor: None`, and
+  an explicit `note` naming exactly why: no execution loop exists yet.
+  **Never a fabricated "in progress" view** — tested directly: an idle
+  lock path reads `locked: False`, a genuinely held one reads the real
+  stage and pid, and `governor` is `None` in both cases because nothing
+  produces a live reading yet.
+
+**Four new routes in `app.py`**, alongside the existing
+`/api/curator/control/*` family, same conventions (`_need_curator_estate()`
+guard first, lazy imports inside the handler):
+
+- `GET /api/curator/conductor/preconditions`
+- `GET /api/curator/conductor/calibration`
+- `GET /api/curator/conductor/run`
+- `POST /api/curator/conductor/plan/preview` — body is a policy, a profile
+  name, an optional budget, and a list of candidates (`project_id`,
+  `claim_count`, `changed_conversations`, `message_count`,
+  `estimated_seconds`) — **never a plan itself**. Builds via
+  `planner.build_plan`, validates, saves to the real `PlanRegistry`, and
+  returns the preview. A `PlanValidationError` (e.g. a budget with no
+  estimates behind it) surfaces as `400`, not a silent fallback.
+- `POST /api/curator/conductor/plan/approve` — body is a bare `plan_id`.
+  Loads the already-saved plan from the registry, approves it
+  (`planner.approve`, a new object), re-saves, returns the preview. A
+  `plan_id` never on record is `404`.
+
+**The line stays uncrossed here too.** No route accepts a `PlanSpec`
+(or anything shaped like one) as input — `ConductorPlanPreview`'s
+candidates carry only the facts a `ProjectCandidate` needs, never a step,
+an argv, or a stage list. The only way a plan gets INTO the registry is
+this server building one itself from those inputs.
+
+Verified end-to-end with a live `TestClient` round-trip (not just the
+hermetic tester): preconditions → calibration → run → plan/preview →
+plan/approve, all five returning exactly the shapes described above
+against a real (temp-directory) `Curator` and a real `PlanRegistry` write.
+
+## What was deliberately not done this round
+
+**No frontend.** The curator tab's HTML/JS does not yet render any of
+this — these four routes exist and are tested, but nothing in
+`static/index.html` calls them. This is the explicitly agreed scope for
+this round, not an oversight, and follows `curator_data.py`'s own
+precedent (Task 1 of `COWORK_BRIEF_curator_tab.md` shipped its data layer
+before any UI existed for it).
+
+**No live governor/progress data.** `run_state`'s `governor` field is
+`None` by construction — there is still no execution loop wiring a
+`GovernorState` to anything. Once one exists (the natural follow-on to
+Task 4′/5′), `run_state` is the seam it would report through.
+
+## UAT
+
+- `[G]` `calibration_state` never fabricates a figure `ledger.summarize`
+  wouldn't itself produce — a stage/partition with nothing recorded reads
+  `None`, never borrowed from a sibling stage or partition.
+- `[G]` `plan_preview` mirrors a `PlanSpec` exactly, including its
+  approval state.
+- `[G]` `run_state` never shows a fabricated "in progress" view — reports
+  the real lock, `governor: None`, and an explicit note naming why.
+- `[G]` No conductor route accepts a plan (or a step, or an argv) as
+  input — only policy-level candidate facts; a `PlanValidationError`
+  surfaces as `400`, an unknown `plan_id` on approve as `404`.
+- `[H]` The panel walked as an actual UI in the curator tab — not possible
+  until the frontend half is built, out of scope this round by agreement.
+
+**Commit:** pending — code round, gate run before commit.
