@@ -621,4 +621,8 @@ This round built the primitive Task 4's execution loop will call.
   stay consistent, re-planning re-derives the remainder — not possible
   until Task 4 exists to define "mid-plan."
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `ada2088`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including `tester_curator_control.py`'s new coverage for the streaming
+seam, lock heartbeat/staleness/`break_lock`, and queued-vs-in-flight
+cancellation (verified again by the pre-commit hook at commit time).
