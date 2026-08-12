@@ -526,10 +526,26 @@ function renderConductorPlanPreview(plan) {
   if (!plan.approved) {
     html += `<div style="margin-top:.6rem"><button class="small primary" onclick="curatorConductorApprove('${esc(plan.plan_id)}')">Approve this plan</button></div>`;
   } else {
+    const cmd = `python run.py conductor --plan-id ${plan.plan_id}`;
     html += `<div class="doc-row" style="cursor:default"><span>Run it from a terminal on this machine:
-      <code>python run.py conductor --plan-id ${esc(plan.plan_id)}</code></span></div>`;
+      <code id="conductor-run-cmd">${esc(cmd)}</code>
+      <button class="small" onclick="curatorConductorCopyCmd(this, ${JSON.stringify(cmd).replace(/"/g, "&quot;")})">Copy</button></span></div>`;
   }
   previewEl.innerHTML = html;
+}
+
+async function curatorConductorCopyCmd(btn, cmd) {
+  const original = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(cmd);
+    btn.textContent = "Copied!";
+  } catch (e) {
+    // Clipboard API unavailable (non-HTTPS/non-localhost origin, or denied
+    // permission) -- the command is still selectable text in the <code>
+    // beside this button; this just can't do it for you.
+    btn.textContent = "Copy failed — select & copy manually";
+  }
+  setTimeout(() => { btn.textContent = original; }, 1500);
 }
 
 async function curatorConductorApprove(planId) {
@@ -553,5 +569,5 @@ Object.assign(window, {
   showCuratorSub, curatorLoadEvidence, curatorRatify, curatorHandMap,
   loadCuratorStagedDiff, curatorCheckInvalidation, curatorSetModel,
   curatorExecute, curatorDrillThrough,
-  curatorConductorPreview, curatorConductorApprove,
+  curatorConductorPreview, curatorConductorApprove, curatorConductorCopyCmd,
 });

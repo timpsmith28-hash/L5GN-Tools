@@ -1216,3 +1216,77 @@ a stamped report/UAT section. What remains is exactly the `[H]` items
 listed throughout: real-hardware walks (an overnight run, a two-gesture
 Ctrl-C sequence, a browser session) against the real machine, which this
 environment cannot exercise.
+
+# Three real-rig findings, fixed
+
+The first live walk on `10280L` (approved a plan, triggered a real run,
+watched it unattended) surfaced three things — two cosmetic, one a
+genuine functional gap in the execution loop itself.
+
+**1. Select dropdown options rendered white-on-white.** The shared
+`select { background: transparent; color: inherit; }` rule (present
+site-wide, not new this round) lets the CLOSED select box blend with the
+page correctly, but several browsers don't apply that same rule to the
+native OPTION popup — it renders with a plain white popup background
+while still inheriting the page's light-on-dark text colour, unreadable
+until hovered. Fixed with `select option { background-color: Canvas;
+color: CanvasText; }` — CSS system colours that resolve to the browser's
+real current colour scheme, honouring the page's existing `color-scheme:
+light dark` rather than hand-picking a colour that only works in one
+theme. Applies to every select on the page (a pre-existing gap the new
+Conductor sub-tab's three selects just happened to be the first to
+surface, not something this round introduced).
+
+**2. No click-to-copy for the `run.py conductor` command.** Added a
+`Copy` button next to the command shown after approval
+(`navigator.clipboard.writeText`, with visible "Copied!"/failure feedback
+and a plain-text fallback already sitting right there in the `<code>` if
+the Clipboard API is unavailable on that origin).
+
+**3. The real functional gap: the execution loop showed zero progress
+during a real run.** `conductor_run.run_plan` only *returns* once the
+WHOLE plan is done — `run.py conductor` was reading nothing but that
+return value, so a multi-hour real run showed nothing in the terminal at
+all while LM Studio was visibly, actively working through requests. This
+was a genuine defect in the round that built the execution loop, not a
+missing nice-to-have: a caller had no way to distinguish "working" from
+"hung" for the entire duration of a run.
+
+Fixed with three optional callbacks on `run_plan`, all firing LIVE from
+inside the same blocking read loop `curator_control.run_stage` already
+streams a step's output through (nothing new to instrument — these hook
+the exact point Task 5' already made line-by-line):
+
+- `on_step_start(step_index, step)` — right before that step's
+  `execute_fn` is called.
+- `on_timing_line(kind, ms_per_token, line, action)` — for every TIMING*
+  line, AFTER the governor has already observed it and the ledger has
+  already recorded it; `action` is that exact `GovernorAction`, not the
+  step's eventual final one.
+- `on_step_end(step_result)` — right after that step's `StepResult` is
+  recorded.
+
+`run.py conductor` now wires all three to `print()` — one line per K2
+window / K4 claim as it happens, plus a step-start and step-end line —
+and the old end-of-run recap loop (which only ever printed after
+`run_plan` returned, i.e. the exact thing that produced this gremlin) was
+removed as redundant.
+
+## UAT
+
+- `[G]` `select option` styling verified via inspection of the resolved
+  rule (no browser available in this environment to screenshot the fix
+  against — the real-rig walk that found the bug is what will confirm it).
+- `[G]` The copy button and its fallback text verified by inspection.
+- `[G]` `on_step_start`/`on_timing_line`/`on_step_end` all fire live, in
+  order, with the correct arguments — including that `on_timing_line`'s
+  `action` is the REAL per-line `GovernorAction`, not a stand-in for the
+  step's eventual last one — added to `tester_conductor_run.py`'s
+  existing happy-path scenario rather than a new one, since it's the same
+  run being observed two ways at once.
+- `[H]` The real `10280L` run already in flight when this was found used
+  the OLD, silent code — it will still complete correctly (nothing about
+  execution itself changed, only what's printed), but won't show this
+  fix; the next run will.
+
+**Commit:** pending — code round, gate run before commit.

@@ -309,7 +309,18 @@ def _cmd_conductor(args: argparse.Namespace) -> int:
     left to finish, and no further step is started. A SECOND Ctrl-C also
     cancels that in-flight step immediately (`curator_control.CancelToken`,
     Task 5's own primitive) -- see `conductor_run.RunControl`'s docstring
-    for why one signal on its own can't tell these two intents apart."""
+    for why one signal on its own can't tell these two intents apart.
+
+    **Prints AS the run happens, not after it.** `run_plan` only *returns*
+    once the whole plan is done -- a caller that reads nothing but the
+    return value shows nothing for a run that can run for hours, which is
+    exactly what a real run on 10280L found (LM Studio visibly working,
+    this command silent). `run_plan`'s `on_step_start`/`on_timing_line`/
+    `on_step_end` callbacks fire live, from inside the same blocking read
+    loop that's already streaming a step's output line by line
+    (`curator_control.run_stage`) -- wiring them to `print()` here is what
+    makes that visible in this terminal in real time, one line per K2
+    window / K4 claim, not a summary reconstructed at the end."""
     import signal
 
     from chronicler.review import conductor_run as cr
@@ -342,9 +353,24 @@ def _cmd_conductor(args: argparse.Namespace) -> int:
                   "stopping. Ctrl-C again to stop immediately.", file=sys.stderr)
             control.request_stop_after_step()
 
+    def _on_step_start(i, step):
+        print(f"conductor: step {i} starting -- {step.project_id}/{step.stage}")
+
+    def _on_timing_line(kind, ms_per_token, line, action):
+        token_str = f"{ms_per_token:.1f}ms/token" if ms_per_token is not None else "unmeasured"
+        print(f"conductor:   {kind} -- {token_str} -- governor: {action.action} "
+              f"({action.message})")
+
+    def _on_step_end(result):
+        print(f"conductor: step {result.step_index} {result.project_id}/{result.stage} -> "
+              f"{result.outcome.state} ({result.outcome.detail})")
+        if result.paused_after:
+            print(f"conductor:   governor paused {result.paused_after:.0f}s before the next step")
+
     previous_handler = signal.signal(signal.SIGINT, _on_sigint)
     try:
-        summary = cr.run_plan(spec, control=control)
+        summary = cr.run_plan(spec, control=control, on_step_start=_on_step_start,
+                               on_timing_line=_on_timing_line, on_step_end=_on_step_end)
     except (pl.PlanValidationError, ValueError) as exc:
         print(f"conductor: plan {args.plan_id!r} refused: {exc}", file=sys.stderr)
         return 2
@@ -354,11 +380,8 @@ def _cmd_conductor(args: argparse.Namespace) -> int:
     finally:
         signal.signal(signal.SIGINT, previous_handler)
 
-    for r in summary["results"]:
-        print(f"conductor: step {r.step_index} {r.project_id}/{r.stage} -> "
-              f"{r.outcome.state} ({r.outcome.detail})")
-        if r.paused_after:
-            print(f"conductor:   governor paused {r.paused_after:.0f}s before the next step")
+    # Every step was already printed live via _on_step_end as it happened
+    # (above) -- this is the closing status line only, not a recap.
     if summary["stopped_early"]:
         print(f"conductor: stopped early -- {summary['stop_reason']}", file=sys.stderr)
         return 1

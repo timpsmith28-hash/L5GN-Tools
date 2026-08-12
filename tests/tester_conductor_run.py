@@ -101,9 +101,33 @@ def run() -> list[str]:
                                      returncode=0)
 
         sleeps: list[float] = []
+        # Live-progress callbacks -- the whole point of these (COWORK_REPORT_
+        # conductor_governor.md's real-rig gremlin: a run with LM Studio
+        # visibly working and the CLI showing nothing) is that they fire
+        # DURING the run, not reconstructed from the return value afterward.
+        step_starts: list[tuple] = []
+        timing_calls: list[tuple] = []
+        step_ends: list = []
         summary = cr.run_plan(spec, curator=curator, ledger_path=ledger_path,
                                execute_fn=fake_execute, sleep_fn=sleeps.append,
-                               known_profiles=frozenset({"tester_conductor_run_profile"}))
+                               known_profiles=frozenset({"tester_conductor_run_profile"}),
+                               on_step_start=lambda i, step: step_starts.append((i, step.project_id)),
+                               on_timing_line=lambda kind, ms, line, action:
+                                   timing_calls.append((kind, ms, action.action)),
+                               on_step_end=lambda result: step_ends.append(result.project_id))
+
+        if step_starts != [(0, "proj-a"), (1, "proj-b")]:
+            v.append(f"on_step_start should fire once per step, in order, BEFORE that "
+                     f"step's execute_fn: {step_starts}")
+        if len(timing_calls) != 12:  # 8 from proj-a + 4 from proj-b
+            v.append(f"on_timing_line should fire for every timing line across both "
+                     f"steps, live, not just the last action per step: {len(timing_calls)}")
+        if timing_calls[7][2] != "pause":
+            v.append(f"on_timing_line's 4th argument is the REAL GovernorAction for that "
+                     f"exact line, not just the step's final action: {timing_calls[7]}")
+        if step_ends != ["proj-a", "proj-b"]:
+            v.append(f"on_step_end should fire once per step, in order, right after "
+                     f"that step's result is recorded: {step_ends}")
 
         if summary["stopped_early"]:
             v.append(f"the happy path should not stop early: {summary['stop_reason']}")

@@ -368,6 +368,21 @@ full UAT list that Task 1 actually touches is listed here.
 - [ ] `[H]` A real walk of the tab in a browser against the real `10280L`
   Curator estate — not exercised this round (no browser available here).
 
+## Real-rig findings, fixed
+
+- [x] `[G]` Select dropdown options no longer render white-on-white
+  (`select option { background-color: Canvas; color: CanvasText; }`) —
+  found on the real `10280L` browser walk.
+- [x] `[G]` A `Copy` button next to the `run.py conductor` command, with
+  visible copied/failed feedback.
+- [x] `[G]` `run_plan`'s `on_step_start`/`on_timing_line`/`on_step_end`
+  callbacks fire live, in order, with correct per-line arguments —
+  closes a real gap found on the actual overnight run (LM Studio visibly
+  working, the CLI showing nothing for the whole run).
+- [ ] `[H]` Confirm the select fix and the live progress output visually
+  against a fresh `run.py conductor` run on `10280L` — the in-flight run
+  that found this started before the fix and won't show it.
+
 ---
 
 Every `[H]` item above (real-hardware walks, a real overnight run, a real

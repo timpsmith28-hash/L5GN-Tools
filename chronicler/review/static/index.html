@@ -126,6 +126,20 @@
        color: inherit; }
   select { font: inherit; padding: .35rem .5rem; border-radius: 6px;
            border: 1px solid #8886; background: transparent; color: inherit; }
+  /* The closed select box inherits the page's colours fine (background:
+     transparent lets the dark page show through) -- but the native OPTION
+     popup does NOT reliably inherit them in every browser; several render
+     it with a plain white popup background while still applying the
+     inherited (light-mode-only-looking) text colour, which is unreadable
+     white-on-white until an option is hovered/selected. `Canvas`/
+     `CanvasText` are CSS system colours that resolve to the OS/browser's
+     real current-scheme background/foreground (honouring this page's own
+     `color-scheme: light dark`), so the popup stays legible in both
+     themes without hand-picking a colour that only works in one. Found on
+     a real work-rig walk of the new Conductor sub-tab's selects; applies
+     to every select on the page, not just those, since it was a
+     pre-existing gap this just happened to be the first to surface. */
+  select option { background-color: Canvas; color: CanvasText; }
   .hit { border: 1px solid #8884; border-left: 3px solid #8886; border-radius: 8px;
          padding: .55rem .8rem; margin-bottom: .5rem; cursor: pointer; }
   .hit:hover { background: #8881; }

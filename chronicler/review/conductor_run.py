@@ -108,11 +108,29 @@ def run_plan(spec: "pl.PlanSpec", *, host: str | None = None, lock_path: Path | 
              control: RunControl | None = None,
              known_stage_keys: frozenset | None = None,
              known_profiles: frozenset | None = None,
-             execute_fn=None, sleep_fn=None) -> dict:
+             execute_fn=None, sleep_fn=None,
+             on_step_start=None, on_timing_line=None, on_step_end=None) -> dict:
     """Run every step of an APPROVED `spec`, in the order `spec.steps`
     already carries -- this loop reorders nothing (0037 clause 3). Returns
     a summary dict: ``{"plan_id", "results": [StepResult, ...],
-    "stopped_early": bool, "stop_reason": str | None}``.
+    "stopped_early": bool, "stop_reason": str | None}`` once the WHOLE run
+    is over -- a caller that only reads the return value sees nothing
+    until then, which is wrong for anything multi-hour. The three
+    optional callbacks below are how a caller (`run.py conductor`) gets
+    LIVE progress instead, firing in real time as the loop actually
+    reaches each point, not reconstructed afterward from the final
+    summary:
+
+    - ``on_step_start(step_index, step)`` -- right before a step's
+      `execute_fn` is called.
+    - ``on_timing_line(kind, ms_per_token, line, action)`` -- for every
+      TIMING* line a step emits, AFTER the governor has already observed
+      it and the ledger has already recorded it (`action` is that
+      `GovernorAction`) -- this callback changes nothing about the run
+      itself, purely observational, same posture `curator_control.
+      run_stage`'s own `on_timing_line` already has.
+    - ``on_step_end(step_result)`` -- right after a step's `StepResult` is
+      recorded, before the next step (or a governor pause) starts.
 
     Raises immediately, before touching anything, if `spec` does not pass
     `planner.validate_for_execution` right now -- and re-checks it again
@@ -157,8 +175,14 @@ def run_plan(spec: "pl.PlanSpec", *, host: str | None = None, lock_path: Path | 
         last_action: list = [None]
 
         def _on_timing_line(kind, ms_per_token, line, _stage=step.stage):
-            last_action[0] = gov.observe(state, ms_per_token)
+            action = gov.observe(state, ms_per_token)
+            last_action[0] = action
             led.make_ledger_feeder(ledger_path, stage=_stage)(kind, ms_per_token, line)
+            if on_timing_line is not None:
+                on_timing_line(kind, ms_per_token, line, action)
+
+        if on_step_start is not None:
+            on_step_start(i, step)
 
         try:
             outcome = execute_fn(step.stage, lock_path=lock_path, host=host,
@@ -181,9 +205,11 @@ def run_plan(spec: "pl.PlanSpec", *, host: str | None = None, lock_path: Path | 
             paused_after = action.pause_seconds
             sleep_fn(paused_after)
 
-        results.append(StepResult(step_index=i, project_id=step.project_id, stage=step.stage,
-                                   outcome=outcome, post_state=post_state,
-                                   paused_after=paused_after))
+        result = StepResult(step_index=i, project_id=step.project_id, stage=step.stage,
+                             outcome=outcome, post_state=post_state, paused_after=paused_after)
+        results.append(result)
+        if on_step_end is not None:
+            on_step_end(result)
 
         if outcome.cancelled:
             stopped_early = True
