@@ -110,9 +110,66 @@ full UAT list that Task 1 actually touches is listed here.
   live attempt — `docs/RUNBOOK_conductor_thermal_trial.md`, `Set-Content`/
   `Add-Content -Encoding utf8` in place of bare `>`/`>>`.
 
+## Addendum 4 — resilience (retry, K2 checkpointing)
+
+- [x] `[G]` A transient transport failure (HTTP 400, `URLError`, `OSError`)
+  is retried before being treated as a real failure; a persistent one still
+  raises once retries are exhausted; `retries=0` restores exact
+  fail-immediately behaviour.
+  — `tests/tester_extract_claims.py` / `tests/tester_match_claims.py`:
+  monkeypatched transport fails N times then succeeds (correct attempt/sleep
+  count, return value unaffected); a transport that never clears still
+  raises after exactly `retries + 1` attempts; `retries=0` makes exactly one
+  attempt and never sleeps.
+
+- [x] `[G]` K2 checkpoints (cache + partial `--out`) after every group, not
+  only at the end — a crash mid-run loses at most the in-flight group.
+  — Three single-conversation groups produce exactly 3 checkpoints, each a
+  strict superset of conversations covered by the last; a simulated crash
+  raised from inside `on_checkpoint` after the 2nd of 3 groups still leaves
+  the first two conversations' entries in the (in-memory, mutated in place)
+  cache dict — the resumability property itself, not just the callback
+  firing. Omitting `on_checkpoint` entirely changes nothing about the
+  result.
+
+## Task 3 — the governor
+
+- [x] `[G]` The governor pauses on a synthetic decaying-throughput stream,
+  resumes on recovery, and hits its cap on a stream that never recovers —
+  recording that it did.
+  — `tests/tester_governor.py`: baseline established from the first 4
+  units (median); a stream degraded to 40% of baseline for 4 consecutive
+  units produces exactly 1 `pause`; recovering back to baseline produces
+  exactly 1 `resume`; a stream that never recovers produces exactly
+  `pause_cap` (3) `pause` actions then exactly 1 `cap_reached` — never
+  repeated on later still-degraded units, and never hangs (every
+  subsequent unit reads `none`, proceeding). A later genuine recovery
+  after the cap still resumes normally and resets `cap_reached`.
+
+- [x] `[G]` **The governor's output names no cause.**
+  — Every message produced across every test scenario (baseline
+  establishment, steady state, decay, pause, cap, resume, `None`/unmeasured
+  units) is scanned for `thermal`/`overheat`/`throttl`; none found. This is
+  a test assertion (`_FORBIDDEN_WORDS`), not a review-by-eye promise.
+
+- [x] `[G]` Named, machine-scoped profiles round-trip through
+  `config/local.json`, and the default profile leads with the token dials.
+  — `get_profile`/`set_profile` tested against a temp path: a never-stored
+  profile name returns `DEFAULT_PROFILE` exactly; a partially-specified
+  stored profile is layered over the default so every key is still
+  present; writing one host/profile never disturbs another. Addendum 3's
+  real data (cool-down alone: no measurable benefit; token-dial reduction:
+  a real one) is why `DEFAULT_PROFILE` leads with `max_window_tokens`/
+  `batch_target_tokens` rather than `cool_down_seconds`.
+
+- [ ] `[H]` Wired into a real run and walked live (hour/overnight budget,
+  did it help, did you want to intervene) — not possible until Task 5 (the
+  streaming executor) exists to feed it a live timing stream.
+
+---
+
 Everything else in the brief's UAT list (the calibration ledger, the
-governor's pause/resume/cap behaviour and its "no cause" language, the
 planner's ordering and remainder, the streaming executor, the lock's
 stale-detection, the surface, and every real-hardware walk) belongs to
-Tasks 2–6, not built this round, and is intentionally absent here rather
-than listed as failing or skipped.
+Tasks 2, 4, 5 and 6, not built this round, and is intentionally absent here
+rather than listed as failing or skipped.

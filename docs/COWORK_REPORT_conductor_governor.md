@@ -408,3 +408,98 @@ regardless of whether the governor is paused, running, or not yet built.
 including new coverage for retry exhaustion/success/opt-out and
 checkpoint accumulation/crash-survival (verified again by the pre-commit
 hook at commit time).
+
+---
+
+# Task 3 — the governor, built
+
+**Precondition status at build time:** Q1 (no intra-conversation decay) and
+Q3 (cool-down alone shows no measurable benefit; token dials do) both
+resolved by Addendum 3. Neither blocks this task any further.
+
+## What was built
+
+`chronicler/pipeline/governor.py` — new module, pipeline tier, stdlib +
+`l5gntools` only (no import of `chronicler.review`; dependency runs the
+other way, same direction DECISIONS 0034 clause 3 establishes for
+`l5gntools`, applied here even though the auditor scanning for it only
+covers that specific pair). Plain functions and dataclasses a tester calls
+directly with a temp directory — same posture as `curator_control.py`, for
+the same reason (INTENT: guarantees are structural).
+
+**The decision loop** (`GovernorState`, `new_governor`, `observe`):
+
+- **Baseline from the run's own opening units**, never the ledger (Task 2
+  isn't built; the field names line up for when it is). The first
+  `baseline_units` (default 4) measured units, median. Established once
+  per state; never recomputed mid-run — Addendum 2's own finding for why
+  (a ledger or stale baseline would misattribute a persistent config-state
+  change to every later run).
+- **Rolling-median decay detection.** A `rolling_window` (default 4) sliding
+  window of the most recent units, compared against baseline as a ratio.
+  One slow unit never triggers anything; four consecutive slow ones do —
+  the brief's own words.
+- **Pause, resume, or cap.** Below `pause_threshold` (default 75% of
+  baseline) → pause `pause_seconds` (default 60s). Still degraded after
+  waking → pause again, up to `pause_cap` (default 3) consecutive times,
+  then **proceed anyway and record `cap_reached` exactly once** — never a
+  second time while still capped, and the cap resets cleanly on a genuine
+  later recovery. A governor that can wait forever is a hang; Addendum 2's
+  10 August data (a 36% drop that never recovered in 11.5 hours) is the
+  standing proof this isn't a defensive nicety.
+- **`None` (usage unavailable for a unit) is skipped entirely** — not
+  counted toward the baseline, not counted toward the rolling window, never
+  treated as zero or estimated. Same discipline Addendum 2 already applies
+  to the timing records this module consumes.
+- **The honesty requirement, mechanically enforced.** Every message reports
+  an observation and an action only — "throughput fell to 61% of this run's
+  baseline over the last four units; pausing 60s", the brief's own example
+  phrasing, never a named cause. `_FORBIDDEN_WORDS` (`thermal`, `overheat`,
+  `throttl`) exists so this is a test assertion, not a review-by-eye
+  promise: every message produced across every test scenario is scanned.
+
+**Two dials, the default profile now evidence-led rather than assumed.**
+Addendum 3's real data showed cool-down alone bought nothing measurable
+(per-conversation ratios 0.90–1.06) while the token-dial reduction (Run 5)
+showed a real effect. `DEFAULT_PROFILE` leads with `max_window_tokens` /
+`batch_target_tokens`, keeps `cool_down_seconds` modest and secondary — the
+reverse of the original brief's framing, now built that way on purpose
+rather than by default.
+
+**Profiles are named and machine-scoped.** `get_profile`/`set_profile`
+read/write `config/local.json` under this hostname's `governor_profiles`
+key, layering a partially-specified stored profile over `DEFAULT_PROFILE`
+so every key is always present — mirrors `curator_control.get_curator_models`
+/ `set_curator_model`'s read-modify-write discipline exactly (writing one
+host or profile never disturbs another).
+
+**Cooling is a conductor state, never a stage state.** Nothing in this
+module touches `classify_outcome`; a caller tracks `GovernorState` alongside
+a stage outcome, never folds pause/resume into it — the fifth-state trap the
+brief names explicitly is structurally unreachable from here, since this
+module has no notion of `classify_outcome`'s vocabulary at all.
+
+## What was deliberately not done this round
+
+**No wiring into a live run.** This module has no caller yet — Task 5 (the
+streaming executor) is what will feed it a live per-window/per-claim
+timing stream and act on `pause_seconds`/`resume`. Building the decision
+logic ahead of its caller, hermetically testable on its own, follows the
+same order Task 1 already established (the timing record existed before
+anything consumed it). **No calibration ledger** (Task 2) — `DEFAULT_PROFILE`'s
+numbers are reasoned from the trial's own evidence (Addendum 3) and the
+brief's stated defaults, not learned from accumulated runs; nothing here
+prevents Task 2 tuning them later. **No `nvidia-smi` or any temperature
+probe** — out of scope per the brief, unchanged.
+
+## UAT
+
+- `[G]` The governor pauses on a synthetic decaying-throughput stream,
+  resumes on recovery, and hits its cap on a stream that never recovers —
+  recording that it did, exactly once.
+- `[G]` The governor's output names no cause — every message across every
+  test scenario scanned for `thermal`/`overheat`/`throttl`; none found.
+- `[H]` Wiring this into a real run (Task 5) and walking an hour/overnight
+  budget with it live — not possible until Task 5 exists.
+
+**Commit:** pending — code round, gate run before commit.
