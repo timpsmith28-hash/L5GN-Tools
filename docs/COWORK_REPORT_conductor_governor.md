@@ -933,3 +933,60 @@ including the new `tests/tester_conductor_panel.py`, plus a live
 `TestClient` round-trip through all five routes (not part of the gate,
 run manually against this commit) (verified again by the pre-commit hook
 at commit time).
+
+---
+
+# The real-data adapter
+
+**Source:** the gap Task 4′'s own report flagged — `planner.py` ranks and
+budgets `ProjectCandidate`s a caller supplies; nothing turned real Curator
+data into them.
+
+## What was built
+
+`chronicler/review/candidates.py` — `candidates_from_curator(...)`, one
+function, one project per ratified `map_rows` entry:
+
+- **`claim_count`** — summed from `claims.json`'s conversations via the
+  ratified session→project join, the same join K4 itself uses.
+- **`message_count`** (breadth proxy) — conversation count, from K1's
+  `knowledge_index.json` when available, falling back to counting
+  `map_rows` directly when K1 hasn't run yet (never zero just because a
+  stage is behind). Stated plainly as a proxy, not a true message count —
+  a real one needs re-parsing every transcript, duplicating work K0/K2
+  already do.
+- **`changed_conversations`** and **`estimated_seconds`** — both require
+  REAL conversation objects and the K2 cache together; both default to `0`
+  / `None` (never guessed) if either is omitted. Changed-detection reuses
+  K2's own cache-identity check (`source_identity`) directly rather than
+  reimplementing it — a conversation whose sources match the cache is a
+  clean hit, costs nothing on a re-run, and is correctly excluded from
+  both the changed count and the size estimate.
+- **`estimated_seconds`** is calibration median ms/token (Task 2's ledger,
+  clean/not-preceded partition) × the ACTUAL token count of the CHANGED
+  conversations only, via `approx_token_count`/`full_transcript_text` —
+  never the whole project's size, since unchanged conversations are cache
+  hits. Stays `None` whenever the ledger has no measurement for the
+  selected model/stage, exactly `summarize`'s own rule, carried through
+  rather than papered over with a default.
+
+Tested directly against `build_plan` at the end — the adapter's output is
+proven to build a real, valid plan, not just checked in isolation.
+
+## UAT
+
+- `[G]` `claim_count` sums correctly via the real ratified-map join.
+- `[G]` Breadth falls back to counting `map_rows` when K1 hasn't run,
+  never reads zero.
+- `[G]` `changed_conversations` reuses K2's own cache-identity check — a
+  clean cache hit is correctly excluded.
+- `[G]` `estimated_seconds` is `None` unless both real conversations AND a
+  ledger measurement for the selected model are present; scales by the
+  changed conversations' real token count only, never the whole project's.
+- `[G]` The adapter's output builds a real, valid `PlanSpec` via
+  `planner.build_plan`.
+- `[H]` A real run against the real `10280L` ledger and knowledge base —
+  not possible until the ledger has real entries in it (the feeder isn't
+  wired into a live run yet either).
+
+**Commit:** pending — code round, gate run before commit.

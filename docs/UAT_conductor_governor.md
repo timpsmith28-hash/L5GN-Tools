@@ -313,10 +313,24 @@ full UAT list that Task 1 actually touches is listed here.
   explicit agreement (Tim: build the backend now, frontend later,
   independent of a possible future app reorganisation).
 
+## The real-data adapter
+
+- [x] `[G]` `claim_count` sums correctly via the real ratified session→
+  project join.
+- [x] `[G]` Breadth falls back to counting `map_rows` when K1 hasn't run,
+  never reads zero.
+- [x] `[G]` `changed_conversations` reuses K2's own cache-identity check —
+  a clean cache hit is correctly excluded from the changed count.
+- [x] `[G]` `estimated_seconds` is `None` unless both real conversations
+  AND a ledger measurement are present, and scales by the changed
+  conversations' real token count only.
+- [x] `[G]` The adapter's output builds a real, valid `PlanSpec`.
+- [ ] `[H]` A real run against the real `10280L` ledger/knowledge base —
+  not possible until the ledger has real entries.
+
 ---
 
-Everything else in the brief's UAT list (the adapter from real curator
-data to `ProjectCandidate`, the execution loop, the frontend rendering,
-and every real-hardware walk) belongs to the not-yet-built execution loop
-and the deferred frontend half, and is intentionally absent here rather
-than listed as failing or skipped.
+Everything else in the brief's UAT list (the execution loop, the frontend
+rendering, and every real-hardware walk) belongs to the not-yet-built
+execution loop and the deferred frontend half, and is intentionally
+absent here rather than listed as failing or skipped.
