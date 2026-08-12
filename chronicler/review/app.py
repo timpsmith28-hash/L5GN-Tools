@@ -681,9 +681,13 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         return ctl.lock_status()
 
     # ---- Task 6 (COWORK_BRIEF_conductor_governor.md): the conductor panel.
-    # No execution route lives here -- there is no execution loop yet
-    # (conductor_panel.run_state says so plainly). These four routes are the
-    # panel's read/plan-build/approve surface only.
+    # No execution route lives here, deliberately -- the execution loop
+    # (`conductor_run.run_plan`, wired up as `run.py conductor`) is a CLI
+    # command run under an operator's own terminal, not a web request a
+    # browser tab can fire and walk away from; `run_state` still reads the
+    # real lock, so this panel shows a live run's progress without being
+    # the thing that started it. These routes are the panel's
+    # read/candidates/plan-build/approve surface only.
     @app.get("/api/curator/conductor/preconditions")
     def curator_conductor_preconditions():
         _need_curator_estate()
@@ -703,6 +707,40 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         _need_curator_estate()
         from . import conductor_panel as cp
         return cp.run_state()
+
+    @app.get("/api/curator/conductor/candidates")
+    def curator_conductor_candidates(model_id: str | None = None, stage: str = "K2",
+                                      host: str | None = None):
+        """Real `ProjectCandidate` facts, computed live from this machine's
+        actual Curator artefacts via `candidates.candidates_from_curator` --
+        the plan-builder form's data source, so approving a plan means
+        approving something built from what is actually on disk, never
+        hand-typed JSON. `model_id` is optional: omit it and every
+        `estimated_seconds` stays `None`, plainly (no calibration selected
+        yet), exactly the ledger's own "no measurement, no estimate" rule."""
+        _need_curator_estate()
+        from . import candidates as cd
+        from . import curator_findings as cf
+        from .curator_data import Curator as _Curator, K1_INDEX_PATH, _load_json, ratified_map_rows
+        from .curator_control import K2_CACHE_PATH
+        from chronicler.pipeline import ledger as led
+        c = curator or _Curator()
+        data_dir = c.data_dir
+        map_rows = ratified_map_rows(c.ratified_map_path)
+        claims_report = _load_json(data_dir / "claims.json")
+        knowledge_index = _load_json(data_dir / "knowledge_index.json")
+        k2_cache = _load_json(K2_CACHE_PATH)
+        conversations_by_id, _ = cf.build_conversation_map(host)
+        ledger_entries = led.load_entries()
+        result = cd.candidates_from_curator(
+            map_rows=map_rows, claims_report=claims_report, knowledge_index=knowledge_index,
+            k2_cache=k2_cache, conversations=list(conversations_by_id.values()),
+            ledger_entries=ledger_entries, model_id=model_id, stage=stage)
+        return {"stage": stage, "model_id": model_id, "candidates": [
+            {"project_id": p.project_id, "claim_count": p.claim_count,
+             "changed_conversations": p.changed_conversations,
+             "message_count": p.message_count, "estimated_seconds": p.estimated_seconds}
+            for p in result]}
 
     @app.post("/api/curator/conductor/plan/preview")
     def curator_conductor_plan_preview(payload: ConductorPlanPreview):

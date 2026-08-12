@@ -41,6 +41,11 @@ def candidates_from_curator(*, map_rows: list, claims_report: dict | None,
     ratified join surface -- the same universe K2/K4 themselves scope
     against).
 
+    ``map_rows`` is ``curator_data.ratified_map_rows()``'s own shape --
+    plain dicts with (at least) ``session_id``/``project_id`` keys, the
+    same TSV-row dicts K0/K1/every other reader of the ratified map
+    already uses. Not objects, not a bespoke row type.
+
     ``claims_report`` / ``knowledge_index`` are the parsed JSON bodies of
     `claims.json` / `knowledge_index.json` (either may be `None` -- that
     stage simply hasn't run yet, and the fields it would have fed default
@@ -57,8 +62,8 @@ def candidates_from_curator(*, map_rows: list, claims_report: dict | None,
     ``estimated_seconds`` at all -- no calibration data for the selected
     model means every candidate's estimate stays `None`, exactly `ledger.
     summarize`'s own "no measurements, no estimate" rule."""
-    session_to_project = {row.session_id: row.project_id for row in map_rows}
-    project_ids = sorted({row.project_id for row in map_rows})
+    session_to_project = {row["session_id"]: row["project_id"] for row in map_rows}
+    project_ids = sorted({row["project_id"] for row in map_rows})
 
     # --- claim_count: claims.json's conversations, summed per project via
     #     the ratified session->project join (the SAME join K4 uses) -------
@@ -79,7 +84,7 @@ def candidates_from_curator(*, map_rows: list, claims_report: dict | None,
             conv_counts[proj["project_id"]] = len(proj.get("conversations", []))
     else:
         for row in map_rows:
-            conv_counts[row.project_id] += 1
+            conv_counts[row["project_id"]] += 1
 
     # --- changed_conversations + estimated_seconds: need REAL conversation
     #     objects, since sizing the work requires the actual transcript

@@ -16,10 +16,14 @@ from chronicler.review import candidates as cd
 from chronicler.review import planner as pl
 
 
-class _Row:
-    def __init__(self, session_id: str, project_id: str):
-        self.session_id = session_id
-        self.project_id = project_id
+def _row(session_id: str, project_id: str) -> dict:
+    """`map_rows` entries are plain dicts, exactly `curator_data.
+    ratified_map_rows()`'s own real shape -- not a bespoke object (a real
+    bug this dict shape catches: an earlier draft read `row.session_id`
+    attribute-style, which silently worked against a fabricated test
+    object but would have broken the first time this ran against the
+    real ratified map's actual dict rows)."""
+    return {"session_id": session_id, "project_id": project_id}
 
 
 def run() -> list[str]:
@@ -45,7 +49,7 @@ def run() -> list[str]:
                               "2026-07-19T10:00:00Z")
         conv_b1 = make_conv("local_b1", "Project B's only conversation, short.", "2026-07-18T10:00:00Z")
 
-        map_rows = [_Row("local_a1", "proj-a"), _Row("local_a2", "proj-a"), _Row("local_b1", "proj-b")]
+        map_rows = [_row("local_a1", "proj-a"), _row("local_a2", "proj-a"), _row("local_b1", "proj-b")]
 
         claims_report = {
             "conversations": [

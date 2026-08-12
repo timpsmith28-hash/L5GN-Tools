@@ -1096,3 +1096,101 @@ refusal, the happy path with a real governor pause + ledger feed +
 post-step state read, queued cancellation, in-flight cancellation, and
 mid-run re-validation failure preserving already-collected results)
 (verified again by the pre-commit hook at commit time).
+
+# The curator-tab frontend
+
+**Source:** the brief's own last remaining piece — every other round built
+the data layer; nothing rendered it in the tab.
+
+## A real bug found and fixed first
+
+Wiring the frontend to real data (rather than the adapter's own synthetic
+test fixtures) surfaced a genuine latent defect in `candidates.py`:
+`candidates_from_curator` read `row.session_id` / `row.project_id`
+(attribute access), but `curator_data.ratified_map_rows()` — the REAL
+source of `map_rows` — returns plain dicts (`csv.DictReader` rows), not
+objects. `tester_candidates.py`'s own `_Row` helper class silently papered
+over this by fabricating an object with those attributes; it would have
+broken the first time this ran against the real ratified map. Fixed:
+`candidates.py` now reads `row["session_id"]` / `row["project_id"]`
+(dict-style, matching `ratified_map_rows`'s real return shape), and the
+tester's fixture was changed from a bespoke class to a plain dict
+constructor so the same bug can't hide behind it again.
+
+## A route closing the last gap: real candidates over HTTP
+
+Task 6's `POST /plan/preview` always required the CALLER to supply
+`ProjectCandidate` facts — there was no route that computed them from real
+Curator data, so a browser had nothing to preview a plan from except
+hand-typed JSON. New: `GET /api/curator/conductor/candidates` (optional
+`model_id`/`stage`/`host` query params), which calls
+`candidates.candidates_from_curator` against this machine's real ratified
+map, `claims.json`, `knowledge_index.json`, K2's cache, real discovered
+conversations (`curator_findings.build_conversation_map`, reused, not
+reimplemented), and the calibration ledger. Omitting `model_id` leaves
+every `estimated_seconds` honestly `None` — the same "no measurement, no
+estimate" rule carried all the way to the browser.
+
+`conductor_panel.run_state`'s docstring/note were also brought up to date
+— they still said "no execution loop exists yet," which stopped being
+true the round before this one. Corrected to say plainly what IS and
+ISN'T visible now: the real lock (shared with `run.py conductor`) shows
+up here, but the governor's pacing state lives only in that CLI process's
+memory and is never persisted anywhere this read-only panel could read it
+from — a structural absence, not a gap to paper over with a placeholder.
+
+## What was built
+
+New "Conductor" sub-tab in the curator pane
+(`chronicler/review/static/panes/curator.js` + `index.html`), following
+the existing sub-tab convention exactly (`showCuratorSub`, `curator-sub-*`
+containers, `jget`/`esc` from `shared.js`) — purely additive, no change to
+any other pane, no restructuring of the app shell (the standing
+constraint: a possible future reorganisation is being weighed separately
+and this round doesn't pre-empt it):
+
+- **Preconditions / run state / calibration**, read on tab activation —
+  LM Studio reachability, map-ratified state, calibration-data presence,
+  the real lock, and a per-model/per-stage/per-cool-down-partition
+  calibration table (median/p25/p75/n), all straight passthroughs of the
+  existing Task 6 routes.
+- **Plan builder** — policy/stage/model/budget form → `Preview plan`
+  fetches real candidates from the new route, POSTs them to
+  `/plan/preview`, and renders the resulting steps, remainder, and
+  budget fit.
+- **Approve** — a button on an unapproved preview; once approved, the
+  panel shows the exact command to actually run it:
+  `python run.py conductor --plan-id <id>` — never an in-browser "run"
+  button, for the reason given above.
+
+## What was deliberately not done this round
+
+No live in-browser progress view of a running plan (the governor's
+pacing/pause state isn't visible to any route, as `run_state`'s note now
+says plainly) — polling `run_state` while a CLI run is in progress would
+show the real lock going from free to held and back, which the panel
+already supports without any further change; a richer live view would
+need the execution loop to persist progress somewhere this panel could
+read it from, which is new scope, not a missing wire-up.
+
+## UAT
+
+- `[G]` `candidates.py` reads `map_rows` as plain dicts (matching
+  `ratified_map_rows`'s real shape), not a bespoke attribute-style object
+  — verified via `tester_candidates.py`'s corrected fixture.
+- `[G]` `GET /api/curator/conductor/candidates` returns real,
+  live-computed candidates from a temp Curator estate (verified via a
+  live `TestClient` call, not just by inspection).
+- `[G]` A full preview → approve round-trip through the real routes,
+  driven by the same request shapes the frontend JS sends, verified live
+  end-to-end via `TestClient` (preconditions → calibration → run →
+  candidates → plan/preview → plan/approve, all 200, the approved plan
+  carrying a real `approved_at` timestamp).
+- `[G]` The new pane follows the existing sub-tab convention exactly; no
+  other pane's markup or JS changed.
+- `[H]` A real walk of the tab in a browser against the real `10280L`
+  Curator estate — not exercised this round (no browser available here);
+  the live `TestClient` round-trip exercises every route the frontend
+  calls, in the same order, with the same payload shapes.
+
+**Commit:** pending — code round, gate run before commit.

@@ -352,8 +352,25 @@ full UAT list that Task 1 actually touches is listed here.
   a real two-gesture Ctrl-C sequence — not yet exercised outside the
   hermetic tester.
 
+## The curator-tab frontend
+
+- [x] `[G]` `candidates.py` reads `map_rows` as plain dicts, matching
+  `ratified_map_rows`'s real return shape — a genuine latent bug (an
+  attribute-access read that only worked against the tester's own
+  fabricated fixture) found and fixed as part of wiring this up.
+- [x] `[G]` `GET /api/curator/conductor/candidates` returns real,
+  live-computed candidates from a temp Curator estate.
+- [x] `[G]` A full preview → approve round-trip through the real routes,
+  driven by the same request shapes the frontend JS sends — verified live
+  end-to-end via `TestClient`.
+- [x] `[G]` The new "Conductor" sub-tab follows the existing sub-tab
+  convention exactly; no other pane's markup or JS changed.
+- [ ] `[H]` A real walk of the tab in a browser against the real `10280L`
+  Curator estate — not exercised this round (no browser available here).
+
 ---
 
-Everything else in the brief's UAT list (the frontend rendering and every
-remaining real-hardware walk) belongs to the deferred frontend half, and
-is intentionally absent here rather than listed as failing or skipped.
+Every `[H]` item above (real-hardware walks, a real overnight run, a real
+browser session against `10280L`) is the honest remainder: everything
+this brief scoped as buildable without the real rig is now built, tested,
+and gate-GREEN.

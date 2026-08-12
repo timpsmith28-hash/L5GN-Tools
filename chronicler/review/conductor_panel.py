@@ -13,13 +13,18 @@ rendering of that data into the curator tab's HTML/JS is a separate,
 not-yet-built piece (see the module's report entry for what's deliberately
 deferred).
 
-**Honest about what doesn't exist yet.** There is no execution loop —
-Task 4' (the planner) and Task 5' (the streaming executor, the lock,
-cancellation) were built as separate primitives; nothing currently walks a
-`PlanSpec`'s steps through `execute_with_lock`. `run_state` reports the
-real lock status and says so plainly rather than fabricating a "run in
-progress" view. This is the same discipline `curator_data.py`'s own
-`blocked_reason` fields already apply to every other stage output.
+**Honest about what this panel can and can't see.** The execution loop
+now exists (`conductor_run.run_plan`, wired up as `run.py conductor`) —
+but it runs as a CLI process under an operator's own terminal, not behind
+a route this panel calls. `run_state` reports the REAL lock status (the
+same `LOCK_PATH` a CLI run holds, so a genuine run shows up here as
+"locked") but has no way to see the in-process `GovernorState` a running
+CLI process holds in memory and never persists anywhere this read-only
+panel could read it from. `governor` therefore stays `None` here always,
+with a `note` saying exactly why — never a fabricated "in progress" view
+standing in for a reading this panel structurally cannot produce. This is
+the same discipline `curator_data.py`'s own `blocked_reason` fields
+already apply to every other stage output.
 """
 from __future__ import annotations
 
@@ -102,17 +107,23 @@ def plan_preview(spec: pl.PlanSpec) -> dict:
 
 
 def run_state(*, lock_path: Path | None = None) -> dict:
-    """The real lock state, and an explicit statement that there is no live
-    governor reading to show alongside it -- **never** a fabricated
-    "in progress" view. `note` names exactly why: no execution loop exists
-    yet to produce one. Stage-count/throughput/pause fields the eventual
-    live panel will carry are deliberately absent here rather than stubbed
-    with placeholder values a caller could mistake for real data."""
+    """The real lock state (the same one `run.py conductor` holds while a
+    plan is actually running, so a genuine CLI run shows up here as
+    `locked: true`), and an explicit statement that there is no live
+    governor reading alongside it -- **never** a fabricated "in progress"
+    view. `note` names exactly why: the governor's pacing state lives only
+    in the running CLI process's memory (`conductor_run.run_plan`'s own
+    `GovernorState`) and is never written anywhere this read-only panel
+    could read it from. Stage-count/throughput/pause fields a future
+    live-progress mechanism might carry are deliberately absent here
+    rather than stubbed with placeholder values a caller could mistake for
+    real data."""
     return {
         "lock": ctl.lock_status(lock_path=lock_path),
         "governor": None,
-        "note": ("No execution loop exists yet -- Task 4' (the planner) and Task 5' "
-                 "(the streaming executor, the lock, cancellation) were built as "
-                 "separate primitives; nothing currently walks a plan's steps through "
-                 "them. This reports the real lock state and nothing else."),
+        "note": ("The lock above is real and reflects an actual `run.py conductor` "
+                 "process if one is running. There is no live governor reading here "
+                 "because that pacing state lives only in that process's own memory "
+                 "and is never persisted anywhere this panel could read it from -- "
+                 "not a gap to be filled with a placeholder."),
     }

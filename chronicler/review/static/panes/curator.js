@@ -7,6 +7,7 @@ import { esc, jget } from "../shared.js";
 
 let CURATOR_LOADED = false;
 let CURATOR_MODELS = [];  // /v1/models loaded list, from the last preflight
+let CONDUCTOR_CANDIDATES = [];  // last /conductor/candidates fetch, held for plan/preview
 
 function showCuratorSub(name) {
   document.querySelectorAll(".curator-sub").forEach(el =>
@@ -14,6 +15,7 @@ function showCuratorSub(name) {
   if (name === "control") loadCuratorControl();
   if (name === "findings") loadCuratorFindings();
   if (name === "coverage") loadCuratorCoverage();
+  if (name === "conductor") loadCuratorConductor();
 }
 
 async function loadCurator() {
@@ -403,8 +405,153 @@ async function loadCuratorCoverage() {
   el.innerHTML = html;
 }
 
+/* -- Conductor panel: preconditions/calibration/run state, build -> preview
+ * -> approve a plan (COWORK_BRIEF_conductor_governor.md, Task 6 + the
+ * execution loop). No execute button anywhere here, deliberately -- the
+ * execution loop runs as `run.py conductor --plan-id ID` under an
+ * operator's own terminal, never a route this pane could fire and walk
+ * away from (see app.py's own comment above these routes). Approving a
+ * plan here gives you the exact command to run it, nothing more. */
+
+async function loadCuratorConductor() {
+  const el = document.getElementById("curator-sub-conductor");
+  el.innerHTML = "<div class='empty'>Loading…</div>";
+  let pre, calib, run;
+  try {
+    [pre, calib, run] = await Promise.all([
+      jget("/api/curator/conductor/preconditions"),
+      jget("/api/curator/conductor/calibration"),
+      jget("/api/curator/conductor/run"),
+    ]);
+  } catch (e) { el.innerHTML = `<span class="err">${esc(e.message)}</span>`; return; }
+
+  let html = `<div class="doc-group-head">Preconditions</div>
+    <div class="doc-row" style="cursor:default"><span>LM Studio:
+      <strong class="${pre.lm_studio.reachable ? 'ok' : 'err'}">${pre.lm_studio.reachable ? "reachable" : "NOT reachable"}</strong>
+      · map ratified: <strong class="${pre.map_ratified ? 'ok' : 'err'}">${pre.map_ratified ? "yes" : "no"}</strong>
+      · calibration data: <strong class="${pre.calibration_available ? 'ok' : ''}">${pre.calibration_available ? "present" : "none recorded yet"}</strong></span></div>
+
+    <div class="doc-group-head">Run state</div>
+    <div class="doc-row" style="cursor:default"><span>Lock:
+      <strong class="${run.lock.locked ? 'err' : 'ok'}">${run.lock.locked ? `held — ${esc(run.lock.stage)} since ${esc(run.lock.started_at)}${run.lock.stale ? " (STALE)" : ""}` : "free"}</strong></span></div>
+    <p class="sub">${esc(run.note)}</p>`;
+
+  html += `<div class="doc-group-head">Calibration (ledger)</div>`;
+  if (!calib.available) {
+    html += `<div class="empty">No models recorded yet -- calibration fills in as K2/K4 actually run.</div>`;
+  } else {
+    for (const [modelId, byStage] of Object.entries(calib.models)) {
+      for (const [stage, parts] of Object.entries(byStage)) {
+        for (const [part, s] of Object.entries(parts)) {
+          if (!s) continue;
+          html += `<div class="doc-row" style="cursor:default"><span><strong>${esc(modelId)}</strong> ·
+            ${esc(stage)} · ${part === "clean" ? "steady-state" : "post-cool-down"}:
+            median ${s.median_ms_per_token.toFixed(1)}ms/token
+            (p25 ${s.p25_ms_per_token.toFixed(1)}, p75 ${s.p75_ms_per_token.toFixed(1)},
+            n=${s.n})</span></div>`;
+        }
+      }
+    }
+  }
+
+  html += `<div class="doc-group-head">Build a plan</div>
+    <div class="doc-row" style="cursor:default;flex-wrap:wrap;gap:.4rem">
+      <span>policy <select id="conductor-policy">
+        <option value="coverage">coverage (fewest claims first)</option>
+        <option value="freshness">freshness (most changed first)</option>
+        <option value="breadth">breadth (fewest conversations first)</option>
+      </select></span>
+      <span>stage <select id="conductor-stage"><option value="K2">K2</option><option value="K4">K4</option></select></span>
+      <span>model for sizing <input id="conductor-model" placeholder="(optional) model_id" style="font:inherit;padding:.2rem .4rem;border:1px solid #8886;border-radius:5px;background:transparent;color:inherit"></span>
+      <span>budget seconds <input id="conductor-budget" type="number" placeholder="(optional)" style="width:8rem;font:inherit;padding:.2rem .4rem;border:1px solid #8886;border-radius:5px;background:transparent;color:inherit"></span>
+      <button class="small primary" onclick="curatorConductorPreview()">Preview plan</button>
+    </div>
+    <div id="conductor-candidates-note" class="sub"></div>
+    <div id="conductor-preview"></div>`;
+
+  el.innerHTML = html;
+}
+
+async function curatorConductorPreview() {
+  const note = document.getElementById("conductor-candidates-note");
+  const previewEl = document.getElementById("conductor-preview");
+  const policy = document.getElementById("conductor-policy").value;
+  const stage = document.getElementById("conductor-stage").value;
+  const modelId = document.getElementById("conductor-model").value.trim();
+  const budgetRaw = document.getElementById("conductor-budget").value.trim();
+  note.textContent = "Loading real candidates from this machine's Curator data…";
+  previewEl.innerHTML = "";
+  try {
+    const params = new URLSearchParams({ stage });
+    if (modelId) params.set("model_id", modelId);
+    const cd = await jget(`/api/curator/conductor/candidates?${params}`);
+    CONDUCTOR_CANDIDATES = cd.candidates;
+    note.textContent = `${cd.candidates.length} candidate project(s)` +
+      (modelId ? "" : " — no model given, so every estimated_seconds is None (unbudgeted ordering only).");
+
+    const body = {
+      policy, profile_name: "default", stage,
+      cool_down_seconds: 0.0, candidates: CONDUCTOR_CANDIDATES,
+    };
+    if (budgetRaw) body.budget_seconds = parseFloat(budgetRaw);
+    const res = await fetch("/api/curator/conductor/plan/preview", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const d = data.detail || {};
+      previewEl.innerHTML = `<span class="err">Refused: ${esc(typeof d === "string" ? d : (d.detail || d.reason || res.status))}</span>`;
+      return;
+    }
+    renderConductorPlanPreview(data);
+  } catch (e) { previewEl.innerHTML = `<span class="err">${esc(String(e.message || e))}</span>`; }
+}
+
+function renderConductorPlanPreview(plan) {
+  const previewEl = document.getElementById("conductor-preview");
+  let html = `<div class="doc-group-head">Plan <code>${esc(plan.plan_id)}</code> —
+    ${plan.approved ? `<span class="ok">approved ${esc(plan.approved_at)}</span>` : `<span>not yet approved</span>`}</div>
+    <div class="sub">policy ${esc(plan.policy)} · ${plan.step_count} step(s)
+      ${plan.budget_seconds != null ? `· budget ${plan.budget_seconds}s, estimated ${plan.estimated_total_seconds}s` : "· no budget (full ordering)"}
+      ${plan.remainder_count ? `· ${plan.remainder_count} project(s) left over (didn't fit the budget)` : ""}</div>`;
+  for (const s of plan.steps) {
+    html += `<div class="doc-row" style="cursor:default"><span><strong>${esc(s.project_id)}</strong> / ${esc(s.stage)}
+      ${s.estimated_seconds != null ? `<span class="meta"> · ~${s.estimated_seconds.toFixed(0)}s</span>` : ""}</span></div>`;
+  }
+  if (plan.remainder.length) {
+    html += `<div class="doc-group-head">Left over (${plan.remainder.length})</div>
+      <div class="sub">${plan.remainder.map(esc).join(", ")}</div>`;
+  }
+  if (!plan.approved) {
+    html += `<div style="margin-top:.6rem"><button class="small primary" onclick="curatorConductorApprove('${esc(plan.plan_id)}')">Approve this plan</button></div>`;
+  } else {
+    html += `<div class="doc-row" style="cursor:default"><span>Run it from a terminal on this machine:
+      <code>python run.py conductor --plan-id ${esc(plan.plan_id)}</code></span></div>`;
+  }
+  previewEl.innerHTML = html;
+}
+
+async function curatorConductorApprove(planId) {
+  const previewEl = document.getElementById("conductor-preview");
+  try {
+    const res = await fetch("/api/curator/conductor/plan/approve", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_id: planId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const d = data.detail || {};
+      previewEl.innerHTML += `<div><span class="err">Refused: ${esc(typeof d === "string" ? d : (d.detail || d.reason || res.status))}</span></div>`;
+      return;
+    }
+    renderConductorPlanPreview(data);
+  } catch (e) { previewEl.innerHTML += `<div><span class="err">${esc(String(e.message || e))}</span></div>`; }
+}
+
 Object.assign(window, {
   showCuratorSub, curatorLoadEvidence, curatorRatify, curatorHandMap,
   loadCuratorStagedDiff, curatorCheckInvalidation, curatorSetModel,
   curatorExecute, curatorDrillThrough,
+  curatorConductorPreview, curatorConductorApprove,
 });
