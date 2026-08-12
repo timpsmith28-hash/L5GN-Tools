@@ -927,4 +927,9 @@ Task 4′/5′), `run_state` is the seam it would report through.
 - `[H]` The panel walked as an actual UI in the curator tab — not possible
   until the frontend half is built, out of scope this round by agreement.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `3e31675`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the new `tests/tester_conductor_panel.py`, plus a live
+`TestClient` round-trip through all five routes (not part of the gate,
+run manually against this commit) (verified again by the pre-commit hook
+at commit time).
