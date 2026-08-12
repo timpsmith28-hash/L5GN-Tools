@@ -328,9 +328,32 @@ full UAT list that Task 1 actually touches is listed here.
 - [ ] `[H]` A real run against the real `10280L` ledger/knowledge base —
   not possible until the ledger has real entries.
 
+## The execution loop
+
+- [x] `[G]` `--project` reaches K2/K4's own existing flag through the
+  execution allowlist (`curator_control.PROJECT_SCOPED_STAGES`); every
+  other stage silently ignores a `project_id` it has no flag to accept.
+- [x] `[G]` `run_plan` re-validates before every step, not just once — a
+  mid-run failure stops the run but preserves every result already
+  collected (never discards them via a raised exception).
+- [x] `[G]` The governor and the calibration ledger are fed off the
+  identical `on_timing_line` stream a step already emits — one run
+  measures and paces itself off nothing new.
+- [x] `[G]` A `"pause"` action sleeps `pause_seconds` before the next step
+  only — never mid-step, never after the last step.
+- [x] `[G]` `post_state` is a real, fresh `curator_data.Curator.
+  stage_states()` read after each step, never inferred from the step's
+  own `StageOutcome` alone.
+- [x] `[G]` A queued stop (`stop_after_step` already set) never calls
+  `execute_fn` for step 0; an in-flight cancellation stops the run right
+  after the cancelled step's own result is recorded, never starts the
+  next one.
+- [ ] `[H]` A real overnight run against the real `10280L` rig, including
+  a real two-gesture Ctrl-C sequence — not yet exercised outside the
+  hermetic tester.
+
 ---
 
-Everything else in the brief's UAT list (the execution loop, the frontend
-rendering, and every real-hardware walk) belongs to the not-yet-built
-execution loop and the deferred frontend half, and is intentionally
-absent here rather than listed as failing or skipped.
+Everything else in the brief's UAT list (the frontend rendering and every
+remaining real-hardware walk) belongs to the deferred frontend half, and
+is intentionally absent here rather than listed as failing or skipped.

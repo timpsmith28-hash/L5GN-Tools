@@ -71,6 +71,19 @@ EXECUTION_ALLOWLIST: frozenset[str] = frozenset(STAGE_TABLE)
 #: call a model"). K0/K1/K3/K5 are deterministic and get none.
 MODEL_SELECTABLE_STAGES: tuple[str, ...] = ("K2", "K4")
 
+#: Stages that accept a `--project` filter -- exactly the two that call a
+#: model AND already ship their own `--project` CLI flag (extract_claims.py
+#: / match_claims.py, `action="append"`, scoped-merge on write). K0/K1/K3/K5
+#: are deterministic, whole-corpus builds with no `--project` flag of their
+#: own; a `project_id` given to `run_stage` for one of those is silently
+#: not applied here, never passed through as an argv this repo's own CLI
+#: parsers don't accept. The conductor's execution loop (COWORK_BRIEF_
+#: conductor_governor.md, the execution-loop task) is what actually needs
+#: this -- a `PlanStep` names one project, and running the WHOLE corpus for
+#: every step in a multi-project plan would silently duplicate work and
+#: defeat the point of having a plan at all.
+PROJECT_SCOPED_STAGES: frozenset[str] = frozenset({"K2", "K4"})
+
 DEFAULT_ENDPOINT = "http://localhost:1234"  # chat/completions + /v1/models both hang off this
 
 
@@ -525,8 +538,8 @@ def _default_popen(argv: list[str], *, cwd: str):
 
 
 def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = None,
-              popen_factory=None, on_timing_line=None, cancel_token: "CancelToken | None" = None,
-              heartbeat_fn=None) -> StageOutcome:
+              project_id: str | None = None, popen_factory=None, on_timing_line=None,
+              cancel_token: "CancelToken | None" = None, heartbeat_fn=None) -> StageOutcome:
     """Run exactly one allowlisted stage. ``stage`` is the ONLY thing this
     function accepts that named the work to do -- there is no argv, path, or
     flag parameter here a caller could use to run something else. Model
@@ -564,7 +577,16 @@ def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = 
     ``heartbeat_fn``, if given, is called after every line -- `execute_with_
     lock` binds this to the held lock's `heartbeat()` automatically, so a
     long-running stage's lock never goes stale while it's genuinely
-    streaming output."""
+    streaming output.
+
+    ``project_id``, if given AND ``stage`` is in :data:`PROJECT_SCOPED_STAGES`
+    (K2/K4 -- the two that ship their own `--project` flag), is appended as
+    `--project {project_id}`, scoping this invocation to that one project
+    exactly as the conductor's plan steps mean it to be scoped. Given for
+    any other stage, it is silently NOT applied -- K0/K1/K3/K5's own CLI
+    parsers have no `--project` flag to accept it, and inventing one here
+    would be exactly the kind of caller-supplied-argv path 0037 clause 1
+    forbids for this codebase."""
     if stage not in EXECUTION_ALLOWLIST:
         raise ExecutionRefused(
             "not_allowlisted",
@@ -578,6 +600,8 @@ def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = 
         return StageOutcome(stage=stage, state="blocked",
                              detail=f"no model selected for {stage} -- set one before running "
                                     "(no default is ever assumed).")
+    if project_id and stage in PROJECT_SCOPED_STAGES:
+        argv_extra = [*argv_extra, "--project", project_id]
 
     script_path = _PIPE / spec["script"]
     if not script_path.is_file():
@@ -636,8 +660,10 @@ def execute_with_lock(stage: str, lock_path: Path | None = None, *,
     either as a skip or as a stop, never both.
 
     ``heartbeat_fn`` is bound to this lock automatically unless the caller
-    overrides it via ``kwargs`` -- a caller-supplied ``on_timing_line`` or
-    ``popen_factory`` in ``kwargs`` passes straight through to `run_stage`."""
+    overrides it via ``kwargs`` -- a caller-supplied ``on_timing_line``,
+    ``popen_factory``, or ``project_id`` in ``kwargs`` passes straight
+    through to `run_stage` unchanged (no special handling needed here --
+    this function's whole job is the lock, not the argv)."""
     if stage not in EXECUTION_ALLOWLIST:
         raise ExecutionRefused(
             "not_allowlisted",

@@ -995,3 +995,98 @@ including the new `tests/tester_candidates.py` (join correctness, the K1
 fallback, cache-identity reuse, and the estimate-scaling behaviour,
 finishing with a real `build_plan` call over the adapter's own output)
 (verified again by the pre-commit hook at commit time).
+
+# The execution loop
+
+**Source:** the last gap named in the brief's own "What was deliberately
+not done this round" note under Task 5′ — `run_stage`/`execute_with_lock`
+ran exactly one stage per call; nothing yet turned an approved `PlanSpec`
+into a real, multi-step run, and "governor pausing between steps... needs
+a sequence of steps to pause between" was explicitly left for this piece.
+
+## A gap found and closed first: project scoping
+
+Before the loop itself, one thing was missing that made it dishonest to
+build: `curator_control.STAGE_TABLE`'s argv builders never passed
+`--project` through to K2/K4, even though both scripts already support it
+(`extract_claims.py`/`match_claims.py`, `action="append"`, scoped-merge on
+write — the planner's own docstring already claimed this scoping existed).
+Without it, "running a `PlanStep` for `proj-a`" would have silently run
+the WHOLE corpus every time — duplicating work across every step of a
+multi-project plan and defeating the entire point of having one.
+
+Closed in `curator_control.py`: a new `PROJECT_SCOPED_STAGES = frozenset({
+"K2", "K4"})`, and `run_stage` now takes a `project_id` parameter — when
+given AND the stage is in that set, `--project {project_id}` is appended
+to the fixed argv; for every other stage (K0/K1/K3/K5, none of which have
+a `--project` flag of their own) it is silently not applied, never
+invented as an argv those parsers don't accept (0037 clause 1 stays
+satisfied — no caller-supplied parameter reaches the subprocess other than
+through this one declared channel). `execute_with_lock` needed no change
+at all: `project_id` passes straight through its existing `**kwargs`.
+
+## What was built
+
+`chronicler/review/conductor_run.py` (new):
+
+- **`RunControl`** — two independent stop intents over one
+  `curator_control.CancelToken`: a plain `stop_after_step` flag the loop
+  peeks (non-consuming) before scheduling the next step, and the wrapped
+  token for the in-flight/queued half Task 5′ already built.
+  `request_stop_now()` sets both — there is no step left to "let finish"
+  once the current one has been asked to stop immediately.
+- **`run_plan(spec, ...)`** — runs every step of an APPROVED `PlanSpec`, in
+  the order `spec.steps` already carries (reorders nothing — 0037 clause
+  3). One `GovernorState` lives for the whole run (baseline is per-run,
+  `governor.py`'s own rule); `on_timing_line` feeds the SAME stream to
+  both `governor.observe` and `ledger.make_ledger_feeder` — one run now
+  measures itself and paces itself off nothing new. `validate_for_
+  execution` re-runs before **every** step, not just once — a mid-run
+  failure (a profile renamed, a stage's model unselected) is a stop
+  condition that preserves every result already collected, never an
+  exception that discards them. If the last governor action for a step was
+  `"pause"`, the loop sleeps `pause_seconds` via an injectable `sleep_fn`
+  before the *next* step — never mid-step, and never after the last one
+  (nothing follows it to pause before).
+- **Re-derives, never trusts (0037/0031).** After every step,
+  `curator.stage_states()` is re-read fresh from disk and attached to the
+  result as `post_state` — an outcome's `state == "success"` is a
+  subprocess's return code, not proof of what the caches actually show
+  now; this loop reports the observation, not the inference.
+- **`run.py conductor --plan-id ID`** — the thin CLI shell. Loads the named
+  plan from the real `PlanRegistry`, wires a SIGINT handler for the two-
+  gesture cancel (first Ctrl-C → `stop_after_step`; second → also fires
+  the `CancelToken`, terminating the in-flight subprocess), prints each
+  step's outcome and any pause, and reports a non-zero exit whenever the
+  run stopped early — the same three-state honesty `curator_control`
+  already established (never a silent partial success).
+
+## What was deliberately not done this round
+
+Mid-stream pausing (interrupting a step that is already running to sleep,
+then resuming it) — not attempted; nothing in this codebase can safely
+pause a live subprocess mid-generation, and the brief's own words already
+scoped pausing to *between* steps, which this loop does.
+
+## UAT
+
+- `[G]` `--project` now reaches K2/K4's own existing flag through the
+  execution allowlist; every other stage silently ignores a `project_id`
+  it has no flag to accept.
+- `[G]` `run_plan` re-validates before every step, not just once; a
+  mid-run failure stops the run but preserves every result already
+  collected.
+- `[G]` The governor and the ledger are fed off the identical timing
+  stream a step already emits; a `"pause"` action sleeps `pause_seconds`
+  before the next step only, never mid-step, never after the last step.
+- `[G]` `post_state` is a real, fresh `curator_data.Curator.stage_states()`
+  read after each step — never inferred from the step's own outcome.
+- `[G]` A queued stop (`stop_after_step` already set) never calls
+  `execute_fn` for step 0; an in-flight cancellation stops the run right
+  after the cancelled step's own result is recorded, never starts the
+  next one.
+- `[H]` A real overnight run against the real `10280L` rig, including a
+  real two-gesture Ctrl-C sequence — not yet exercised outside the
+  hermetic tester.
+
+**Commit:** pending — code round, gate run before commit.

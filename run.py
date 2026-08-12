@@ -22,6 +22,10 @@ Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py backup [--keep N] [--no-push]  # off-box VACUUM INTO snapshot
     python run.py scrape [urls.txt] [--force]    # Gemini share-scrape -> intake
     python run.py ingest [--skip-backup] [--skip-intake]   # backup -> intake -> pipeline
+    python run.py conductor --plan-id ID          # run an APPROVED Knowledge
+                                                  # Curator plan end-to-end
+                                                  # (COWORK_BRIEF_conductor_
+                                                  # governor.md's execution loop)
 
 Mesh commands (COWORK_BRIEF_unified_app.md Task 6 / DECISIONS 0036 -- the
 cross-machine mesh is mothballed, not deleted; these keep existing and print
@@ -290,6 +294,77 @@ def _cmd_backup(args: argparse.Namespace) -> int:
         return 0
     print(f"  off-box: FAILED -- {r['push_error']}", file=sys.stderr)
     return 1
+
+
+def _cmd_conductor(args: argparse.Namespace) -> int:
+    """`python run.py conductor --plan-id ID` -- runs an APPROVED Knowledge
+    Curator plan end-to-end (COWORK_BRIEF_conductor_governor.md's execution
+    loop, the brief's final built piece). Thin CLI shell over
+    `chronicler.review.conductor_run.run_plan`, which does the real work
+    (per-step re-validation, the governor + calibration ledger wired off the
+    same timing stream, pacing between steps) -- everything here is argv
+    parsing, loading the named plan, wiring Ctrl-C, and printing the result.
+
+    A FIRST Ctrl-C requests a graceful stop: the step running right now is
+    left to finish, and no further step is started. A SECOND Ctrl-C also
+    cancels that in-flight step immediately (`curator_control.CancelToken`,
+    Task 5's own primitive) -- see `conductor_run.RunControl`'s docstring
+    for why one signal on its own can't tell these two intents apart."""
+    import signal
+
+    from chronicler.review import conductor_run as cr
+    from chronicler.review import curator_control as ctl
+    from chronicler.review import planner as pl
+
+    if not args.plan_id:
+        print("conductor: --plan-id is required.", file=sys.stderr)
+        return 2
+
+    registry = pl.PlanRegistry()
+    registry.load_all()
+    for err in registry.errors:
+        print(f"conductor: WARNING -- malformed plan skipped: {err}", file=sys.stderr)
+    spec = registry.get(args.plan_id)
+    if spec is None:
+        print(f"conductor: no plan '{args.plan_id}' found in {registry.root} "
+              f"(known: {registry.list_ids()}).", file=sys.stderr)
+        return 2
+
+    control = cr.RunControl()
+
+    def _on_sigint(signum, frame):
+        if control.stop_after_step:
+            print("\nconductor: second Ctrl-C -- stopping NOW (terminating the "
+                  "in-flight step).", file=sys.stderr)
+            control.request_stop_now()
+        else:
+            print("\nconductor: Ctrl-C -- finishing the current step, then "
+                  "stopping. Ctrl-C again to stop immediately.", file=sys.stderr)
+            control.request_stop_after_step()
+
+    previous_handler = signal.signal(signal.SIGINT, _on_sigint)
+    try:
+        summary = cr.run_plan(spec, control=control)
+    except (pl.PlanValidationError, ValueError) as exc:
+        print(f"conductor: plan {args.plan_id!r} refused: {exc}", file=sys.stderr)
+        return 2
+    except ctl.ExecutionRefused as exc:
+        print(f"conductor: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
+
+    for r in summary["results"]:
+        print(f"conductor: step {r.step_index} {r.project_id}/{r.stage} -> "
+              f"{r.outcome.state} ({r.outcome.detail})")
+        if r.paused_after:
+            print(f"conductor:   governor paused {r.paused_after:.0f}s before the next step")
+    if summary["stopped_early"]:
+        print(f"conductor: stopped early -- {summary['stop_reason']}", file=sys.stderr)
+        return 1
+    print(f"conductor: plan {summary['plan_id']!r} complete -- "
+          f"{len(summary['results'])} step(s) ran.")
+    return 0
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
@@ -706,9 +781,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'census' / 'config' / "
                         "'deposit' / 'consume' / 'ingest' / 'app' / 'window' / "
-                        "'serve' / 'review' / 'backup' / 'scrape' ('serve' and "
-                        "'review' are deprecated aliases for 'app', kept for one "
-                        "round)")
+                        "'serve' / 'review' / 'backup' / 'scrape' / 'conductor' "
+                        "('serve' and 'review' are deprecated aliases for 'app', "
+                        "kept for one round)")
     p.add_argument("--target", help="sibling folder name or path")
     p.add_argument("--all", action="store_true", help="run across every project")
     p.add_argument("--include-third-party", action="store_true",
@@ -731,6 +806,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--host", default="0.0.0.0",
                    help="app/serve/review: bind address (default 0.0.0.0 for "
                         "Tailscale + LAN)")
+    p.add_argument("--plan-id", dest="plan_id",
+                   help="conductor: the approved plan id to run (see "
+                        "data/knowledge_curator/plans/)")
     args = p.parse_args(argv)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -744,6 +822,8 @@ def main(argv: list[str]) -> int:
         return _cmd_census(args)
     if args.command == "backup":
         return _cmd_backup(args)
+    if args.command == "conductor":
+        return _cmd_conductor(args)
     if args.command == "app":
         return _cmd_app(args, argv)
     if args.command == "window":
