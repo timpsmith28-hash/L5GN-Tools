@@ -195,6 +195,7 @@ def run() -> list[str]:
 
     # --- real transport: response_format schema selection by system prompt --
     import urllib.request
+    import urllib.error
 
     class _FakeResponse:
         def __init__(self, body: dict):
@@ -597,6 +598,53 @@ def run() -> list[str]:
         if usage_calls != [None]:
             v.append(f"on_usage should fire with None when usage is absent -- never estimated: "
                       f"{usage_calls}")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # --- call_lmstudio_generic retries: shares extract_claims.
+    #     post_json_with_retry with K2, so this just confirms K4's call site
+    #     wires it through -- a transient failure clears within the retry
+    #     budget without disturbing the return value, and a persistent one
+    #     still raises once exhausted. Full retry-count/backoff/exhaustion
+    #     coverage lives in tester_extract_claims.py against the shared
+    #     primitive; not re-litigated here. ------------------------------
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    def make_flaky_urlopen(fail_times: int, exc):
+        calls = {"n": 0}
+        def flaky(req, timeout=None):
+            calls["n"] += 1
+            if calls["n"] <= fail_times:
+                raise exc
+            return _FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+        flaky.calls = calls
+        return flaky
+
+    try:
+        flaky = make_flaky_urlopen(1, urllib.error.HTTPError("http://x", 400, "Bad Request", {}, None))
+        urllib.request.urlopen = flaky
+        content = k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                             model="m", temperature=0.0, sleep_fn=fake_sleep)
+        if content != "{}":
+            v.append(f"call_lmstudio_generic should return normally once a retry succeeds: {content!r}")
+        if flaky.calls["n"] != 2:
+            v.append(f"expected exactly 2 attempts (1 failure + 1 success), got {flaky.calls['n']}")
+
+        always_fails = make_flaky_urlopen(999, urllib.error.URLError("connection refused"))
+        urllib.request.urlopen = always_fails
+        raised = False
+        try:
+            k4.call_lmstudio_generic("p", system=k4.CONFIRM_CHUNK_SYSTEM, endpoint="http://x",
+                                       model="m", temperature=0.0, retries=2, sleep_fn=fake_sleep)
+        except urllib.error.URLError:
+            raised = True
+        if not raised:
+            v.append("call_lmstudio_generic should still raise once retries are exhausted")
+        if always_fails.calls["n"] != 3:
+            v.append(f"expected exactly 3 attempts (retries=2), got {always_fails.calls['n']}")
     finally:
         urllib.request.urlopen = real_urlopen
 

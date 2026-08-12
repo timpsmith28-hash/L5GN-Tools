@@ -166,6 +166,7 @@ def run() -> list[str]:
     # Monkeypatches urllib.request.urlopen so call_lmstudio's actual payload
     # construction is exercised (not just the stub used everywhere above).
     import urllib.request
+    import urllib.error
 
     class _FakeResponse:
         def __init__(self, body: dict):
@@ -693,6 +694,75 @@ def run() -> list[str]:
         v.append("run_extraction with on_timing/session_to_project omitted should behave "
                   "exactly as before")
 
+    # --- error-handling addition (2026-08-12): on_checkpoint fires after
+    #     EVERY group with a partial report of everything finished so far,
+    #     so a crash mid-run (the work-rig HTTP 400 that motivated this)
+    #     loses at most the in-flight group. Three single-conversation
+    #     groups (batching disabled) should produce exactly 3 checkpoints,
+    #     each strictly larger than the last. -----------------------------
+    checkpoints: list[dict] = []
+    k2.run_extraction(
+        [conv_cd1, conv_cd2, conv_cd3], [], caller=empty_caller, endpoint="x", model="m",
+        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=None,
+        on_checkpoint=checkpoints.append,
+    )
+    if len(checkpoints) != 3:
+        v.append(f"expected one checkpoint per group (3 single-conversation groups), "
+                  f"got {len(checkpoints)}")
+    else:
+        scanned_counts = [c["conversations_scanned"] for c in checkpoints]
+        if scanned_counts != [1, 2, 3]:
+            v.append(f"checkpoints should accumulate monotonically, one conversation more "
+                      f"each time: {scanned_counts}")
+        ids_seen = [{cv["conversation_id"] for cv in c["conversations"]} for c in checkpoints]
+        if ids_seen[-1] != {"local_cd1", "local_cd2", "local_cd3"}:
+            v.append(f"the final checkpoint should cover every conversation processed: "
+                      f"{ids_seen[-1]}")
+        if not ids_seen[0] <= ids_seen[1] <= ids_seen[2]:
+            v.append(f"each checkpoint's conversation set should be a superset of the "
+                      f"previous one, never losing anything already finished: {ids_seen}")
+
+    # simulate a crash: on_checkpoint raises after the 2nd group. The cache
+    # dict (mutated in place by run_extraction, independent of on_checkpoint
+    # entirely) must still hold the first 2 conversations' entries even
+    # though the run never reached the 3rd or returned normally -- this is
+    # the actual resumability property, not just the callback firing.
+    crash_cache: dict = {}
+    crash_calls = {"n": 0}
+
+    def crashing_checkpoint(partial_report):
+        crash_calls["n"] += 1
+        if crash_calls["n"] == 2:
+            raise RuntimeError("simulated crash mid-run")
+
+    crashed = False
+    try:
+        k2.run_extraction(
+            [conv_cd1, conv_cd2, conv_cd3], [], caller=empty_caller, endpoint="x", model="m",
+            temperature=0.0, cache=crash_cache, max_window_tokens=None, small_conv_tokens=None,
+            on_checkpoint=crashing_checkpoint,
+        )
+    except RuntimeError:
+        crashed = True
+    if not crashed:
+        v.append("expected the simulated on_checkpoint crash to propagate, not be swallowed")
+    if "local_cd1" not in crash_cache or "local_cd2" not in crash_cache:
+        v.append(f"a crash after the 2nd checkpoint should still leave the first 2 "
+                  f"conversations' entries in the (in-memory) cache dict -- "
+                  f"resumability depends on this: {sorted(crash_cache.keys())}")
+    if "local_cd3" in crash_cache:
+        v.append(f"the 3rd (never-reached) conversation should NOT be in the cache after "
+                  f"a crash before its group ran: {sorted(crash_cache.keys())}")
+
+    # omitting on_checkpoint entirely (every OTHER run_extraction test in
+    # this file) must change nothing about the result -- purely observational.
+    no_checkpoint_report = k2.run_extraction(
+        [conv_cd1, conv_cd2, conv_cd3], [], caller=empty_caller, endpoint="x", model="m",
+        temperature=0.0, cache={}, max_window_tokens=None, small_conv_tokens=None,
+    )
+    if no_checkpoint_report["conversations_scanned"] != 3:
+        v.append("run_extraction with on_checkpoint omitted should behave exactly as before")
+
     # a batched group shares one wall-clock measurement across its members,
     # marked with the real batch_size rather than a fabricated per-conversation split.
     b1 = tiny_conv("local_tb1", 100)
@@ -979,6 +1049,79 @@ def run() -> list[str]:
         content3 = k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0)
         if content3 != "[]":
             v.append("call_lmstudio without on_usage should behave exactly as before")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # --- post_json_with_retry / call_lmstudio retries: a transient failure
+    #     (HTTPError, URLError, plain OSError) is retried up to `retries`
+    #     times before succeeding, never touching the caller's return value;
+    #     a failure that never clears is still raised once retries are
+    #     exhausted -- the module's 'loud failure' contract is deferred, not
+    #     dropped. Real-run motive: a work-rig HTTP 400 traced to local
+    #     resource pressure cleared on a plain re-run -- exactly what this
+    #     absorbs automatically now. sleep_fn is stubbed so the test never
+    #     actually sleeps. -------------------------------------------------
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    def make_flaky_urlopen(fail_times: int, exc):
+        calls = {"n": 0}
+        def flaky(req, timeout=None):
+            calls["n"] += 1
+            if calls["n"] <= fail_times:
+                raise exc
+            return _FakeResponse({"choices": [{"message": {"content": "[]"}}]})
+        flaky.calls = calls
+        return flaky
+
+    try:
+        # succeeds on the 2nd attempt (1 failure), well within default retries=2
+        sleeps.clear()
+        flaky2 = make_flaky_urlopen(1, urllib.error.HTTPError("http://x", 400, "Bad Request", {}, None))
+        urllib.request.urlopen = flaky2
+        content = k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0,
+                                     sleep_fn=fake_sleep)
+        if content != "[]":
+            v.append(f"call_lmstudio should return normally once a retry succeeds: {content!r}")
+        if flaky2.calls["n"] != 2:
+            v.append(f"expected exactly 2 attempts (1 failure + 1 success), got {flaky2.calls['n']}")
+        if len(sleeps) != 1:
+            v.append(f"expected exactly 1 backoff sleep before the successful retry: {sleeps}")
+
+        # exhausts retries=2 (3 attempts total) and still raises -- a
+        # persistent failure is never silently swallowed
+        sleeps.clear()
+        always_fails = make_flaky_urlopen(999, urllib.error.URLError("connection refused"))
+        urllib.request.urlopen = always_fails
+        raised = False
+        try:
+            k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0,
+                              retries=2, sleep_fn=fake_sleep)
+        except urllib.error.URLError:
+            raised = True
+        if not raised:
+            v.append("call_lmstudio should still raise once retries are exhausted, not swallow the error")
+        if always_fails.calls["n"] != 3:
+            v.append(f"expected exactly 3 attempts (retries=2 means 3 total), got {always_fails.calls['n']}")
+
+        # retries=0 restores immediate failure -- exactly one attempt, no sleep
+        sleeps.clear()
+        fails_once = make_flaky_urlopen(999, OSError("boom"))
+        urllib.request.urlopen = fails_once
+        raised0 = False
+        try:
+            k2.call_lmstudio("t", endpoint="http://x", model="m", temperature=0.0,
+                              retries=0, sleep_fn=fake_sleep)
+        except OSError:
+            raised0 = True
+        if not raised0:
+            v.append("call_lmstudio with retries=0 should still raise on the first failure")
+        if fails_once.calls["n"] != 1:
+            v.append(f"retries=0 should mean exactly 1 attempt, got {fails_once.calls['n']}")
+        if sleeps:
+            v.append(f"retries=0 should never sleep: {sleeps}")
     finally:
         urllib.request.urlopen = real_urlopen
 

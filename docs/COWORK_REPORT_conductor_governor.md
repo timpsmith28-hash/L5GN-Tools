@@ -343,3 +343,64 @@ depends on it.
 **Commit:** `22763df`.
 **Gate status:** N/A — no code touched this round; `verify.py` GREEN via the
 pre-commit hook regardless (doc-only commit).
+
+---
+
+# Addendum 4 — resilience, ahead of Task 3: bounded retry and K2 checkpointing
+
+**Source:** Tim's own read of the HTTP 400 that interrupted `run3iso` —
+attributed to local resource pressure (other apps competing with LM Studio
+for RAM), not a payload defect. Two small, independent fixes, requested
+before Task 3 itself, since a governor sitting on top of a pipeline that
+loses a whole run's progress to one transient error isn't solving the more
+pressing problem.
+
+## 1. Bounded retry on transport failures
+
+`extract_claims.py` gains `post_json_with_retry` — wraps the `urlopen` call
+both K2's `call_lmstudio` and K4's `call_lmstudio_generic` already made,
+retrying up to `--retries` times (default 2, short backoff) on **any**
+transport failure (`HTTPError` including a 400, `URLError`, `OSError`)
+before re-raising. The module's existing "loud failure, no partial report"
+contract is deferred, not weakened — a persistent failure still surfaces
+after a short, bounded delay; only a transient one clears silently.
+`call_lmstudio_generic` reuses the same function (imported via `k2.`)
+rather than a second implementation. `retries=0` restores exact
+fail-immediately behaviour. Tested: a failure that clears within budget
+returns normally with the expected attempt/sleep count; a failure that
+never clears still raises once retries are exhausted; `retries=0` makes
+exactly one attempt and never sleeps.
+
+## 2. K2 checkpoints on every group boundary
+
+K4 already checkpoints (`--checkpoint-every`, cache + partial `--out` every
+N claims) — K2 didn't; `save_cache` fired once, in `main()`, only after
+`run_extraction` returned. A crash mid-run lost every conversation finished
+before it, not just the one in flight, which is exactly what happened on
+the work rig: four conversations K2 had already completed were re-done on
+the retry, for no reason other than nothing had been written to disk yet.
+
+`run_extraction` gains an `on_checkpoint` callback, fired after **every**
+group (one model call's worth of newly-finished conversations — whichever
+of the three paths produced them) with a partial report in the exact shape
+the final report already uses (report construction was factored into a
+shared `_build_report` helper so there's only one shape, not two). `main()`
+wires it to write `cache` and a partial `--out` at each checkpoint, merging
+under `--project` scope exactly as the final write already does. Purely
+observational — omitting `on_checkpoint` changes nothing about the result,
+same discipline as every other optional callback in this module.
+
+Tested: three single-conversation groups produce exactly three checkpoints,
+each a strict superset of conversations covered by the last; a simulated
+crash inside `on_checkpoint` (raised after the 2nd of 3 groups) still
+leaves the first two conversations' entries in the (in-memory, mutated in
+place) cache dict — the actual resumability property, not just the
+callback firing.
+
+## What this does not change
+
+Neither fix touches Task 3's design. They sit underneath the governor: a
+transient HTTP failure or a mid-run crash is now cheap to recover from
+regardless of whether the governor is paused, running, or not yet built.
+
+**Commit:** pending — code round, gate run before commit.

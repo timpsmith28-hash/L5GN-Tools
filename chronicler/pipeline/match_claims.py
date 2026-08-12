@@ -654,7 +654,10 @@ def merge_matches(old: dict | None, new: dict, touched_projects: set) -> dict:
 def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str,
                             temperature: float, timeout: float = DEFAULT_TIMEOUT,
                             json_mode: bool = True, ttl: float | None = None,
-                            on_usage=None) -> str:
+                            on_usage=None,
+                            retries: int = k2.DEFAULT_RETRIES,
+                            retry_backoff: float = k2.DEFAULT_RETRY_BACKOFF,
+                            sleep_fn=time.sleep) -> str:
     """As extract_claims.call_lmstudio, but for K4's two confirm shapes --
     ``response_format`` is selected by matching ``system`` against the two
     known prompts (``CONFIRM_CHUNK_SYSTEM`` / ``CONFIRM_SUPERSEDE_SYSTEM``),
@@ -670,7 +673,11 @@ def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str
     ``extract_claims.call_lmstudio``'s ``on_usage``
     (COWORK_BRIEF_conductor_governor.md Addendum 2). The return value is
     unchanged; usage leaves sideways, so ``confirm_chunk``/
-    ``confirm_supersede`` (the two call sites) never change."""
+    ``confirm_supersede`` (the two call sites) never change.
+
+    ``retries``/``retry_backoff``/``sleep_fn`` -- see
+    ``extract_claims.post_json_with_retry``, reused here rather than
+    reimplemented."""
     import urllib.request
     body: dict = {
         "model": model, "temperature": temperature,
@@ -689,8 +696,9 @@ def call_lmstudio_generic(prompt: str, *, system: str, endpoint: str, model: str
     payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(endpoint, data=payload, method="POST",
                                    headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        response_body = json.loads(resp.read().decode("utf-8"))
+    response_body = k2.post_json_with_retry(
+        req, timeout=timeout, retries=retries, retry_backoff=retry_backoff, sleep_fn=sleep_fn,
+    )
     if on_usage is not None:
         usage = response_body.get("usage")
         if (isinstance(usage, dict) and "completion_tokens" in usage
@@ -753,12 +761,18 @@ def main() -> None:
                           "claims is observable at (COWORK_BRIEF_conductor_governor.md "
                           "Task 1); the human-readable TIMING_CLAIM line is always "
                           "written to stderr regardless")
+    ap.add_argument("--retries", type=int, default=k2.DEFAULT_RETRIES,
+                     help="retry a failed LM Studio call this many times (bounded "
+                          "backoff) before treating it as a real failure -- see "
+                          "extract_claims.py's --retries. 0 restores fail-immediately "
+                          "(default 2)")
     args = ap.parse_args()
 
     usage_box: dict = {}
     k2.reset_usage_box(usage_box)
     bound_caller = functools.partial(call_lmstudio_generic, timeout=args.timeout,
                                       json_mode=args.json_mode, ttl=args.model_ttl,
+                                      retries=args.retries,
                                       on_usage=k2.make_usage_accumulator(usage_box))
 
     import knowledge_index as k1

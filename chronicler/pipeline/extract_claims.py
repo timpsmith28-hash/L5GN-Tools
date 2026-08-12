@@ -45,6 +45,16 @@ DEFAULT_TIMEOUT = 900.0
 DEFAULT_CACHE = Path("data/knowledge_curator/claims_cache.json")
 DEFAULT_OUT = Path("data/knowledge_curator/claims.json")
 
+# Real-run evidence (2026-08-12, work rig `10280L`): an HTTP 400 interrupted
+# a run mid-conversation with nothing wrong in the payload -- a plain retry
+# of the identical command succeeded. The suspected cause was local resource
+# pressure (other apps competing for RAM alongside LM Studio), not a
+# malformed request. A bounded retry absorbs exactly this kind of transient
+# failure without masking a real, persistent one -- retries are exhausted
+# and the original "loud failure, no partial report" contract still holds.
+DEFAULT_RETRIES = 2
+DEFAULT_RETRY_BACKOFF = 2.0  # seconds; backoff * attempt_number between tries
+
 # Real-run evidence (2026-08-07, qwen3.5, work rig): prompt-processing
 # throughput fell from ~158 tok/s (tokens 8192-16384) to ~48 tok/s (tokens
 # 56320-64955) WITHIN a single 65k-token call -- attention cost scales worse
@@ -160,10 +170,45 @@ CLAIMS_BATCH_JSON_SCHEMA = {
 # LM Studio transport -- stdlib only.
 # ---------------------------------------------------------------------------
 
+def post_json_with_retry(req: urllib.request.Request, *, timeout: float,
+                          retries: int = DEFAULT_RETRIES,
+                          retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+                          sleep_fn=time.sleep) -> dict:
+    """POST ``req`` and return the parsed JSON body, retrying up to
+    ``retries`` times (so ``retries + 1`` attempts total) on ANY transport
+    failure -- ``urllib.error.HTTPError`` (a non-2xx response, including a
+    400) and ``urllib.error.URLError``/``OSError`` (connection reset,
+    timeout, refused). Real-run evidence for treating a 400 as retryable:
+    a work-rig 400 with a payload identical to every surrounding successful
+    call cleared on a plain re-run -- almost certainly local resource
+    pressure on the LM Studio side, not a malformed request.
+
+    This does NOT weaken the module's 'loud failure' contract: once
+    ``retries`` is exhausted the last exception is re-raised exactly as
+    before. A persistent failure (a genuinely malformed payload, a model
+    that's gone away) still surfaces after a short, bounded delay -- it
+    costs a little time, never masks a real error.
+
+    ``sleep_fn`` is injectable so tests never actually sleep."""
+    attempt = 0
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, OSError):
+            attempt += 1
+            if attempt > retries:
+                raise
+            sleep_fn(retry_backoff * attempt)
+
+
 def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
                    temperature: float, timeout: float = DEFAULT_TIMEOUT,
                    json_mode: bool = True, batch: bool = False,
-                   ttl: float | None = None, on_usage=None) -> str:
+                   ttl: float | None = None, on_usage=None,
+                   retries: int = DEFAULT_RETRIES,
+                   retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+                   sleep_fn=time.sleep) -> str:
     """POST to an OpenAI-compatible chat/completions endpoint; returns the
     assistant message content as a raw string. Raises ``OSError`` /
     ``urllib.error.URLError`` on any transport failure -- callers must NOT
@@ -195,7 +240,12 @@ def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
     value is UNCHANGED by this -- usage leaves sideways through the
     callback, the same pattern ``progress``/``on_timing``/``on_window_timing``
     already use, so the four call sites that bind ``caller`` never have to
-    change and every existing stub-caller-based test is unaffected."""
+    change and every existing stub-caller-based test is unaffected.
+
+    ``retries``/``retry_backoff``/``sleep_fn`` -- see
+    ``post_json_with_retry``. Defaults retry twice with a short backoff
+    before a transport failure is raised; pass ``retries=0`` to restore the
+    previous fail-immediately behaviour."""
     system = SYSTEM_PROMPT_BATCH if batch else SYSTEM_PROMPT
     schema = CLAIMS_BATCH_JSON_SCHEMA if batch else CLAIMS_JSON_SCHEMA
     schema_name = "claims_batch" if batch else "claims"
@@ -219,8 +269,9 @@ def call_lmstudio(transcript_text: str, *, endpoint: str, model: str,
         endpoint, data=payload, method="POST",
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        response_body = json.loads(resp.read().decode("utf-8"))
+    response_body = post_json_with_retry(
+        req, timeout=timeout, retries=retries, retry_backoff=retry_backoff, sleep_fn=sleep_fn,
+    )
     if on_usage is not None:
         usage = response_body.get("usage")
         if (isinstance(usage, dict) and "completion_tokens" in usage
@@ -793,6 +844,51 @@ def make_window_timing_reporter(*, stream=None, jsonl_path: Path | None = None):
 # Orchestration
 # ---------------------------------------------------------------------------
 
+def _build_report(results: list, *, excluded: list, model: str, endpoint: str,
+                    temperature: float, reextracted: int, from_cache: int,
+                    batch_unattributed: list) -> dict:
+    """Shared by `run_extraction`'s final return AND its mid-run checkpoints
+    (`on_checkpoint`) -- the exact same shape either way, just over however
+    many `results` have been produced so far. A checkpoint's
+    ``conversations_scanned`` is therefore a progress count, not a claim
+    that the run is complete; nothing downstream distinguishes a partial
+    report from a final one by shape, only by when it was written."""
+    total_claims = sum(len(r.claims) for r in results)
+    total_rejected = sum(len(r.rejected) for r in results) + len(batch_unattributed)
+    total_offered = total_claims + total_rejected
+    rejection_rate = (total_rejected / total_offered) if total_offered else 0.0
+
+    return {
+        "model_id": model,
+        "endpoint": endpoint,
+        "temperature": temperature,
+        "run_timestamp": datetime.now(timezone.utc).isoformat(),
+        "conversations_scanned": len(results),
+        "conversations_reextracted": reextracted,
+        "conversations_from_cache": from_cache,
+        "conversations_excluded_no_timestamp": [
+            {"conversation_id": c.conversation_id, "reason": c.exclude_reason} for c in excluded
+        ],
+        "claims_extracted": total_claims,
+        "claims_rejected": total_rejected,
+        "quote_rejection_rate": rejection_rate,
+        "batch_unattributed_rejections": batch_unattributed,
+        "conversations": [
+            {
+                "conversation_id": r.conversation_id,
+                "real_time": r.real_time,
+                "claims": [vars(c) for c in r.claims],
+                "rejected": r.rejected,
+                "parse_failed": r.parse_failed,
+                "scanned_with_zero": r.scanned_with_zero,
+                "windows_total": r.windows_total,
+                "windows_parse_failed": r.windows_parse_failed,
+            }
+            for r in results
+        ],
+    }
+
+
 def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str,
                      model: str, temperature: float, cache: dict,
                      max_window_tokens: int | None = DEFAULT_MAX_WINDOW_TOKENS,
@@ -801,7 +897,8 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                      batch_max_conversations: int = DEFAULT_BATCH_MAX_CONVERSATIONS,
                      progress=None, cool_down: float = 0.0, sleep_fn=time.sleep,
                      session_to_project: dict | None = None, on_timing=None,
-                     on_window_timing=None, usage_box: dict | None = None) -> dict:
+                     on_window_timing=None, usage_box: dict | None = None,
+                     on_checkpoint=None) -> dict:
     """`conversations` must already be newest-first (lt.order_newest_first's
     first return value). `excluded` are conversations lt.group_conversations
     could not resolve a real timestamp for -- excluded and named here too,
@@ -858,7 +955,19 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
     on_usage=make_usage_accumulator(usage_box))``, as `main()` does. Not
     forwarded to `extract_batch` (a batched group's single call has no
     per-window record to attach usage to).
-    """
+
+    ``on_checkpoint``, if given, is called with a partial report (same
+    shape `_build_report` always produces) after EVERY group -- one model
+    call's worth of newly-finished conversations, whichever of the three
+    paths made it. `main()` uses this to write `cache` and a partial
+    `--out` to disk at each checkpoint, matching `match_claims.py`'s
+    existing per-claim checkpointing (`--checkpoint-every`): a crash
+    mid-run (a real one hit on the work rig -- an HTTP 400 four windows
+    into a conversation) then loses at most the in-flight group, not
+    every group finished before it. `cache` itself is already being
+    mutated in place as groups finish, independent of whether
+    ``on_checkpoint`` is given at all -- this callback only controls when
+    that in-memory state is persisted."""
     results_by_id: dict[str, ExtractionResult] = {}
     reextracted = 0
     from_cache = 0
@@ -969,46 +1078,25 @@ def run_extraction(conversations: list, excluded: list, *, caller, endpoint: str
                         "cool_down_preceded": this_group_preceded,
                         "wall_clock_seconds": elapsed,
                     })
+        if on_checkpoint:
+            done_so_far = [results_by_id[c.conversation_id] for c in conversations
+                            if c.conversation_id in results_by_id]
+            on_checkpoint(_build_report(
+                done_so_far, excluded=excluded, model=model, endpoint=endpoint,
+                temperature=temperature, reextracted=reextracted, from_cache=from_cache,
+                batch_unattributed=batch_unattributed,
+            ))
+
         if cool_down and group_idx < len(groups) - 1:
             sleep_fn(cool_down)
             preceded_by_cool_down = True
 
     results = [results_by_id[c.conversation_id] for c in conversations]
 
-    total_claims = sum(len(r.claims) for r in results)
-    total_rejected = sum(len(r.rejected) for r in results) + len(batch_unattributed)
-    total_offered = total_claims + total_rejected
-    rejection_rate = (total_rejected / total_offered) if total_offered else 0.0
-
-    return {
-        "model_id": model,
-        "endpoint": endpoint,
-        "temperature": temperature,
-        "run_timestamp": datetime.now(timezone.utc).isoformat(),
-        "conversations_scanned": len(results),
-        "conversations_reextracted": reextracted,
-        "conversations_from_cache": from_cache,
-        "conversations_excluded_no_timestamp": [
-            {"conversation_id": c.conversation_id, "reason": c.exclude_reason} for c in excluded
-        ],
-        "claims_extracted": total_claims,
-        "claims_rejected": total_rejected,
-        "quote_rejection_rate": rejection_rate,
-        "batch_unattributed_rejections": batch_unattributed,
-        "conversations": [
-            {
-                "conversation_id": r.conversation_id,
-                "real_time": r.real_time,
-                "claims": [vars(c) for c in r.claims],
-                "rejected": r.rejected,
-                "parse_failed": r.parse_failed,
-                "scanned_with_zero": r.scanned_with_zero,
-                "windows_total": r.windows_total,
-                "windows_parse_failed": r.windows_parse_failed,
-            }
-            for r in results
-        ],
-    }
+    return _build_report(
+        results, excluded=excluded, model=model, endpoint=endpoint, temperature=temperature,
+        reextracted=reextracted, from_cache=from_cache, batch_unattributed=batch_unattributed,
+    )
 
 
 def merge_report(old: dict | None, new: dict, touched_ids: set) -> dict:
@@ -1110,12 +1198,19 @@ def main() -> None:
                           "conversation is observable (COWORK_BRIEF_conductor_governor.md "
                           "Task 1); the human-readable TIMING_WINDOW line is always "
                           "written to stderr regardless")
+    ap.add_argument("--retries", type=int, default=DEFAULT_RETRIES,
+                     help="retry a failed LM Studio call this many times (bounded "
+                          "backoff) before treating it as a real failure -- absorbs "
+                          "transient errors (a work-rig HTTP 400 traced to local "
+                          "resource pressure cleared on a plain retry) without masking "
+                          "a persistent one. 0 restores fail-immediately (default 2)")
     args = ap.parse_args()
 
     usage_box: dict = {}
     reset_usage_box(usage_box)
     bound_caller = functools.partial(call_lmstudio, timeout=args.timeout,
                                       json_mode=args.json_mode, ttl=args.model_ttl,
+                                      retries=args.retries,
                                       on_usage=make_usage_accumulator(usage_box))
 
     map_rows = k1.load_map(args.map)
@@ -1142,6 +1237,30 @@ def main() -> None:
     timing_reporter = make_timing_reporter(jsonl_path=args.timing_log)
     window_timing_reporter = make_window_timing_reporter(jsonl_path=args.window_timing_log)
     session_to_project = {r.session_id: r.project_id for r in map_rows}
+
+    def _checkpoint(partial_report: dict) -> None:
+        # Fires after every group (COWORK_BRIEF_conductor_governor.md's
+        # error-handling addition, 2026-08-12): persists `cache` (already
+        # mutated in place by run_extraction) and a partial `--out`, so a
+        # crash mid-run -- the work-rig HTTP 400 that started this -- loses
+        # at most the in-flight group, not everything finished before it.
+        # Mirrors match_claims.py's existing per-claim `on_checkpoint`.
+        save_cache(cache, args.cache)
+        out_to_write = partial_report
+        if project_filter:
+            out_to_write = dict(partial_report)
+            out_to_write["partial_run_projects"] = sorted(project_filter)
+            old = None
+            if args.out.exists():
+                try:
+                    old = json.loads(args.out.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    old = None
+            touched_ids = {c["conversation_id"] for c in partial_report["conversations"]}
+            out_to_write = merge_report(old, out_to_write, touched_ids)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(out_to_write, indent=2), encoding="utf-8")
+
     report = run_extraction(
         included, excluded, caller=bound_caller, endpoint=args.endpoint,
         model=args.model, temperature=args.temperature, cache=cache,
@@ -1152,6 +1271,7 @@ def main() -> None:
         progress=reporter, cool_down=args.cool_down,
         session_to_project=session_to_project, on_timing=timing_reporter,
         on_window_timing=window_timing_reporter, usage_box=usage_box,
+        on_checkpoint=_checkpoint,
     )
     save_cache(cache, args.cache)
 
