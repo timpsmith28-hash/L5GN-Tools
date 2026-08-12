@@ -165,10 +165,31 @@ conversation with several windows), find a `conversation_id` with multiple
 records and a high total token count. Build a one-row map so only it runs:
 
 ```powershell
-$ROW = "<its conversation_id>"
-Get-Content config\mcf_conversation_map.tsv | Select-Object -First 1 > "$T\one.tsv"
-Get-Content config\mcf_conversation_map.tsv | Select-String -SimpleMatch $ROW >> "$T\one.tsv"
+$ROW = "its_conversation_id_with_no_angle_brackets"
+Get-Content config\mcf_conversation_map.tsv | Select-Object -First 1 | Set-Content -Encoding utf8 "$T\one.tsv"
+(Get-Content config\mcf_conversation_map.tsv | Select-String -SimpleMatch $ROW).Line | Add-Content -Encoding utf8 "$T\one.tsv"
 ```
+
+**Two traps here, both hit in the first live attempt:**
+
+1. `$ROW` is a literal value, not a placeholder — don't copy the angle
+   brackets from this doc into it, or `Select-String` matches nothing and
+   `one.tsv` ends up with just the header.
+2. **`>`/`>>` write UTF-16LE on Windows PowerShell.** K2 opens the map file
+   as `utf-8-sig` (`knowledge_index.load_map`), so a `>`-written map fails
+   with `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in
+   position 0`. Always pipe through `Set-Content -Encoding utf8` /
+   `Add-Content -Encoding utf8` instead, as above. Also note `Select-String`
+   returns `MatchInfo` objects, not plain text — pull `.Line` before piping,
+   or the row written is the object's string form, not the TSV row.
+
+**Verify before running K2 against it:**
+
+```powershell
+Get-Content "$T\one.tsv"
+```
+
+Should be exactly two lines: the header, then the one matched row.
 
 ```powershell
 & $PY $K2 --model $MODEL --map "$T\one.tsv" `

@@ -226,3 +226,119 @@ Tim's to do on the real rig — this round could not run LM Studio. Q1
 (intra-conversation decay) remains open; Task 3 remains blocked on it, now
 with the correct instrument in hand rather than the wall-clock one that
 could not have answered it regardless.
+
+---
+
+# Addendum 3 — Run 2 walked, Q1 answered, Q3 read against the real cool-down
+
+**Source:** Tim's real-rig walk of the runbook on `10280L`, two batches. The
+first batch (Run 1, Run 2 as originally attempted, Run 3, Run 4, Run 5) hit
+two execution deviations caught by cross-checking `cool_down_preceded`
+counts against the actual PowerShell used: Run 2 was run identically to
+Run 1 (not isolated to one conversation — unreadable for Q1), and Run 3 was
+run with `--cool-down 0` instead of `90` (unreadable for Q3). Both were
+re-run correctly in the second batch: `run2iso_windows.jsonl` (one
+conversation, `local_18c1d671-7cad-4b09-af75-6ec3142f714d`, isolated via a
+one-row map) and `run3iso_windows.jsonl` (the full "Pricing Model" project,
+true `--cool-down 90`, fresh cache path). The isolation map command itself
+hit a `UnicodeDecodeError` on first attempt — PowerShell's `>`/`>>` write
+UTF-16LE, K2 reads `utf-8-sig` — fixed with `Set-Content`/`Add-Content
+-Encoding utf8`, now folded into the runbook itself (this commit) so it
+doesn't trip the next run.
+
+## Q1 — does throughput decay within one conversation? No.
+
+The isolated conversation was measured twice, independently: alone in
+`run2iso` (13 windows, nothing else running), and again inside the full
+`run3iso` project scan (same conversation, same content, different run).
+Both measurements agree:
+
+| Measurement | window_index vs ms/token (r) | input token_count vs ms/token (r) |
+|---|---|---|
+| `run2iso` (isolated) | 0.234 | 0.869 |
+| `run3iso` (in-project) | 0.013 | 0.813 |
+
+Position in the conversation carries almost no correlation with speed
+(0.234, then 0.013 on the independent re-measurement — consistent with
+noise, not a real effect). Input size carries a strong, stable correlation
+in both (0.869, 0.813) — the "gets slower later" pattern seen in the first
+pass's raw wall-clock reading was the same prompt-size confound Addendum 2
+already diagnosed in general, now confirmed specifically for the
+intra-conversation case Run 2 exists to test.
+
+**Answer: no measurable intra-conversation decay.** The current
+between-conversation pause granularity is sufficient — Task 3 does not need
+an intra-conversation pause. **Task 3 is unblocked on Q1.**
+
+## Q3 — does the cool-down alone help? Not measurably, on this data.
+
+Clean comparison (`completion_tokens >= 20`, filtering out the low-output
+windows Addendum 2 already flagged as unreliable), same 11 conversations,
+same order:
+
+| Run | cool-down | n | mean ms/token | median ms/token |
+|---|---|---|---|---|
+| `run1` | 0 | 79 | 157.1 | 126.8 |
+| `run2` | 0 | 79 | 170.7 | 139.1 |
+| `run3iso` | 90 (true) | 70 | 154.4 | 120.0 |
+
+Per-conversation `run3iso`/`run1` ratios cluster tightly between 0.90 and
+1.06 across all 11 conversations — no conversation shows the "later ones
+recover more" pattern that would signal pausing counteracting a real
+degradation. Per the runbook's own stated criterion, a flat ratio means
+pausing bought nothing (beyond its own wall-clock cost). This lines up with
+Addendum 2's reading of the 10 August data: if the observed slowdown there
+was mostly the KV-cache-offload config state rather than genuine thermal
+throttling, a cool-down has nothing to recover from, which is exactly what
+this cleanly-executed comparison now shows directly rather than inferring
+from a suspect wall-clock figure.
+
+This contrasts with Run 5 (peak-token reduction), which showed a clear
+improvement in the first pass (median ~88 vs baseline ~124–139) — the
+signal so far points at the token dials, not the pause, as the lever that
+actually helps.
+
+## Reload penalty (Run 4/Q2 confirmatory) — resolved via `run3iso`'s own data
+
+`run3iso`'s 10 `cool_down_preceded: true` windows (mean 185.8, median 115.9)
+looked worse than the 60 non-preceded windows (mean 149.2, median 120.0) on
+first read — mean inflated, median roughly flat, which is the signature of
+an outlier rather than a real effect. It is: one preceded window has
+`completion_tokens=79` against a 6,419-token input, reporting 835 ms/token —
+the exact low-completion/high-input pattern Addendum 2 already named as
+contaminated by prompt-eval time. Excluding it, the remaining 9 preceded
+windows read mean 113.6 / median 102.3, both *at or below* the non-preceded
+figures.
+
+**No measurable reload penalty in this data.** This narrows what Task 2's
+ledger needs to model — `cool_down_preceded` is worth keeping as a flag for
+transparency, but nothing here says the ledger must add a reload-cost term
+on top of ordinary variance.
+
+## Operational notes, not findings
+
+- **The cache trap fired once, exactly as documented.** A first `run3iso`
+  attempt reused `run3`'s (the deviant `--cool-down 0`) cache file and
+  produced 0 re-extracted / 11 from cache — self-corrected by switching to a
+  fresh `run3iso_cache.json`, per the runbook's own instruction to always
+  use a per-run cache path.
+- **One `HTTPError: HTTP Error 400: Bad Request`** interrupted a fresh-cache
+  `run3iso` attempt four windows into the first conversation. A straight
+  retry of the identical command completed cleanly, redoing that
+  conversation from scratch (K2's cache is whole-conversation granularity,
+  so a mid-conversation failure isn't partially cached). Root cause not
+  diagnosed — no repeat on the retry, nothing in the LM Studio log
+  pinpointing a payload issue. Worth watching for recurrence; not
+  investigated further this round.
+
+## What this resolves
+
+**Task 3 is unblocked on Q1** (no intra-conversation pause needed) and has a
+real, if unhelpful, Q3 reading (cool-down alone shows no measurable benefit
+on this data; the token dials are the lever with a demonstrated effect).
+Both are now fit to design Task 3 against. Run 4 (Q2, TTL-unattended) was
+already answered in the design thread and was not re-run — nothing above
+depends on it.
+
+**Commit:** pending (this round is doc-only; no code changed).
+**Gate status:** N/A — no code touched this round.

@@ -42,12 +42,16 @@ full UAT list that Task 1 actually touches is listed here.
   "c-y", then "c-x" reappears raises `ValueError` naming "c-x". The normal
   contiguous case (every other test in the file) never raises.
 
-- [ ] `[W]` Whether throughput decays *within* a single conversation
-  (thermal trial Run 2, Q1) — **not measured**, per the design thread: Run 2
-  was unreadable before this round (one timing record per conversation, no
-  intra-conversation signal). Recorded as "not yet measurable," not "no
-  decay." Task 1's per-window timing (built this round) is what makes Run 2
-  readable the next time it's attempted; Task 3 stays open until it is.
+- [x] `[H]` Whether throughput decays *within* a single conversation
+  (thermal trial Run 2, Q1) — **walked on the real rig, Addendum 3**: an
+  isolated conversation measured twice independently
+  (`run2iso_windows.jsonl` alone, then again inside `run3iso_windows.jsonl`)
+  shows near-zero correlation between window position and
+  `generation_ms_per_token` (r=0.234, then r=0.013) against strong,
+  consistent correlation with input token count (r=0.869, r=0.813) in both
+  measurements — the earlier "gets slower later" impression was the
+  prompt-size confound Addendum 2 already named, not intra-conversation
+  decay. **No measurable decay. Task 3 is unblocked on Q1.**
 
 ---
 
@@ -83,11 +87,28 @@ full UAT list that Task 1 actually touches is listed here.
 - [ ] `[W]` **Replay the 10 August series against the governor.** Not
   possible without Task 3 (the governor itself), not built this round.
 
-- [ ] `[H]` **With the new unit, re-walk Run 2**: does throughput decay
-  *within* one conversation? Still open — this is Tim's real-rig walk with
-  the fixed instrument now available.
+- [x] `[H]` **With the new unit, re-walk Run 2**: does throughput decay
+  *within* one conversation? **Walked, Addendum 3 — no.** See above.
 
 ---
+
+## Addendum 3 — the real-rig walk
+
+- [x] `[H]` Q1 (Run 2, isolated conversation): no measurable
+  intra-conversation decay. See above.
+- [x] `[H]` Q3 (Run 3, true `--cool-down 90` vs `run1`/`run2` baseline):
+  cool-down alone shows no measurable benefit — per-conversation ratios
+  flat at 0.90–1.06, aggregate mean/median within noise of baseline. The
+  token-dial reduction (Run 5, first pass) remains the only lever with a
+  demonstrated effect.
+- [x] `[H]` Reload penalty, reassessed on `run3iso`'s own
+  `cool_down_preceded` windows: no measurable penalty once one
+  low-completion/high-input outlier (the same contamination pattern
+  Addendum 2 named) is excluded.
+- [x] `[G]` Runbook's isolation-map commands fixed for the UTF-16LE/
+  `utf-8-sig` encoding mismatch that raised `UnicodeDecodeError` on first
+  live attempt — `docs/RUNBOOK_conductor_thermal_trial.md`, `Set-Content`/
+  `Add-Content -Encoding utf8` in place of bare `>`/`>>`.
 
 Everything else in the brief's UAT list (the calibration ledger, the
 governor's pause/resume/cap behaviour and its "no cause" language, the
