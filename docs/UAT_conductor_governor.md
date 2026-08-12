@@ -260,10 +260,30 @@ full UAT list that Task 1 actually touches is listed here.
   round; `run.py`'s eventual conductor command is the natural home) and
   Task 2's ledger exists to supply real `estimated_seconds`.
 
+## Task 2 — the calibration ledger
+
+- [x] `[G]` Throughput is reported per model, partitioned on
+  `cool_down_preceded`, as the spread.
+  — `tests/tester_ledger.py`: a mixed ledger (two models, both cool-down
+  states) proves `summarize` never blends across `model_id` or across the
+  `cool_down_preceded` partition — a post-gap population reading ~4x
+  slower stays entirely separate from the clean one; `p25 < median < p75`
+  and `min`/`max` are always reported alongside the median, never a mean
+  alone.
+- [x] `[G]` No measurements for the filter → `None`, plainly.
+  — Requesting a `(model_id, stage, cool_down_preceded)` combination never
+  recorded returns `None`, not a zero or a borrowed figure.
+- [x] `[G]` `record_from_timing` never estimates a missing measurement.
+  — A timing record with `generation_ms_per_token: None` (or missing
+  `model_id`/`cool_down_preceded`) produces `None`, not a fabricated entry.
+- [ ] `[H]` A real run's ledger, walked over a full evening's calibration
+  data on the real rig — not possible until `make_ledger_feeder` is wired
+  into a real `execute_with_lock` call.
+
 ---
 
-Everything else in the brief's UAT list (the calibration ledger, the
-adapter from real curator data to `ProjectCandidate`, the execution loop,
-the surface, and every real-hardware walk) belongs to Tasks 2 and 6 plus
-the not-yet-built execution loop, and is intentionally absent here rather
-than listed as failing or skipped.
+Everything else in the brief's UAT list (the adapter from real curator
+data to `ProjectCandidate`, the execution loop, the surface, and every
+real-hardware walk) belongs to Task 6 plus the not-yet-built execution
+loop, and is intentionally absent here rather than listed as failing or
+skipped.

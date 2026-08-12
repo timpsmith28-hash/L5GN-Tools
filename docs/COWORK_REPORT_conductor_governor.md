@@ -762,3 +762,66 @@ including the new `tests/tester_planner.py` (policy ranking, the
 strict-prefix budget fill, closed-vocabulary validation, round-trip,
 approval, and `validate_for_execution`) (verified again by the pre-commit
 hook at commit time).
+
+---
+
+# Task 2 — the calibration ledger
+
+## What was built
+
+`chronicler/pipeline/ledger.py` — new module, pipeline tier, stdlib +
+`l5gntools` only. Append-only JSONL, one observation per line, same shape
+this repo already uses for `--timing-log`/`--window-timing-log`/
+`--claim-timing-log`.
+
+- **`record_from_timing(timing, *, stage)`** turns a K2/K4 timing record
+  into a ledger entry, or `None` if `generation_ms_per_token` is absent —
+  absence in, absence out, never estimated. `stage` is supplied by the
+  caller because the timing record itself doesn't know it (only
+  `curator_control.STAGE_TABLE` does).
+- **`append_entry`** — real file, genuine append (never a rewrite), a
+  timestamp stamped on write, and a loud `ValueError` if a required field
+  is missing rather than a half-formed line.
+- **`make_ledger_feeder(path, stage=...)`** returns an `on_timing_line`-
+  shaped callback — `curator_control.run_stage`'s own contract — so wiring
+  the ledger into a real streamed run is `execute_with_lock(...,
+  on_timing_line=ledger.make_ledger_feeder(path, stage="K2"))` and nothing
+  else. Fires for a window/claim line carrying a real measurement, silently
+  does nothing for a non-timing line or one marked unavailable.
+- **`summarize(entries, *, model_id, stage, cool_down_preceded)`** — the
+  brief's three requirements, all structural rather than optional: throughput
+  **per model** (never averaged across models — tested directly: two
+  models' entries in the same ledger produce independent, non-blended
+  summaries); **partitioned on `cool_down_preceded`**, always, as a
+  required filter argument rather than an optional one a caller could
+  forget; **reports the spread** (`median`, `p25`, `p75`, `min`, `max`),
+  never a mean alone. Returns `None` — plainly, not a zero or a guess —
+  when nothing matches the exact filter.
+- **`known_models(entries)`** — every distinct `model_id` a ledger has ever
+  recorded, so a caller can build a full calibration report without
+  already knowing what's in it.
+
+## What was deliberately not done this round
+
+**Not wired into a real run yet.** `make_ledger_feeder` exists and is
+tested against a realistic `TIMING_CLAIM` line, but nothing currently
+calls `execute_with_lock(..., on_timing_line=ledger.make_ledger_feeder(...))`
+— that wiring, plus turning a `CalibrationSummary` into
+`ProjectCandidate.estimated_seconds` for the planner, is the adapter
+already flagged as not built when Task 4′ shipped. This ledger is what
+that adapter now has something real to read from.
+
+## UAT
+
+- `[G]` Throughput is reported per model, partitioned on
+  `cool_down_preceded`, as the spread — never a mean alone, never blended
+  across models or across the cool-down partition.
+- `[G]` No measurements for a given `(model_id, stage, cool_down_preceded)`
+  → `summarize` returns `None` plainly, never a fabricated figure.
+- `[G]` `record_from_timing` never estimates a missing
+  `generation_ms_per_token` — absence in, absence out.
+- `[H]` A real run's ledger, walked over a full evening's calibration data
+  on the real rig — not possible until the feeder is actually wired into a
+  real `execute_with_lock` call.
+
+**Commit:** pending — code round, gate run before commit.
