@@ -340,5 +340,6 @@ Both are now fit to design Task 3 against. Run 4 (Q2, TTL-unattended) was
 already answered in the design thread and was not re-run — nothing above
 depends on it.
 
-**Commit:** pending (this round is doc-only; no code changed).
-**Gate status:** N/A — no code touched this round.
+**Commit:** `22763df`.
+**Gate status:** N/A — no code touched this round; `verify.py` GREEN via the
+pre-commit hook regardless (doc-only commit).
