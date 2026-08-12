@@ -403,4 +403,8 @@ Neither fix touches Task 3's design. They sit underneath the governor: a
 transient HTTP failure or a mid-run crash is now cheap to recover from
 regardless of whether the governor is paused, running, or not yet built.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `7fc17fa`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including new coverage for retry exhaustion/success/opt-out and
+checkpoint accumulation/crash-survival (verified again by the pre-commit
+hook at commit time).
