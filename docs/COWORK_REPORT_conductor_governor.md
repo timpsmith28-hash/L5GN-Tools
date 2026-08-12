@@ -502,4 +502,8 @@ probe** — out of scope per the brief, unchanged.
 - `[H]` Wiring this into a real run (Task 5) and walking an hour/overnight
   budget with it live — not possible until Task 5 exists.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `798f82c`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the new `tests/tester_governor.py` (baseline/rolling-median/
+pause/resume/cap, the honesty-requirement scan, and profile round-tripping)
+(verified again by the pre-commit hook at commit time).
