@@ -1193,4 +1193,26 @@ read it from, which is new scope, not a missing wire-up.
   the live `TestClient` round-trip exercises every route the frontend
   calls, in the same order, with the same payload shapes.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `92b159c`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the corrected `tests/tester_candidates.py` (dict-shaped
+`map_rows`, matching `ratified_map_rows`'s real return shape) (verified
+again by the pre-commit hook at commit time). Additionally exercised live
+via `TestClient` end-to-end (not gate-registered, same posture as the
+Task 6 smoke test): a full preconditions → calibration → run →
+candidates → plan/preview → plan/approve round-trip against a temp
+Curator estate, all 200, the approved plan carrying a real
+`approved_at` timestamp.
+
+---
+
+**COWORK_BRIEF_conductor_governor.md is now closed out.** Every task the
+brief and its addenda scoped as buildable without the real `10280L` rig —
+resilience (retry, checkpointing), the governor, the streaming executor
+and lock, the planner, the calibration ledger, the conductor panel
+backend, the real-data adapter, the execution loop, and the curator-tab
+frontend — is built, hermetically tested, gate-GREEN, and committed with
+a stamped report/UAT section. What remains is exactly the `[H]` items
+listed throughout: real-hardware walks (an overnight run, a two-gesture
+Ctrl-C sequence, a browser session) against the real machine, which this
+environment cannot exercise.
