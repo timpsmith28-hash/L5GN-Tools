@@ -824,4 +824,9 @@ that adapter now has something real to read from.
   on the real rig — not possible until the feeder is actually wired into a
   real `execute_with_lock` call.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `2ec01ed`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the new `tests/tester_ledger.py` (partitioning discipline,
+spread reporting, absence-never-estimated, the streaming feeder against a
+realistic timing line) (verified again by the pre-commit hook at commit
+time).
