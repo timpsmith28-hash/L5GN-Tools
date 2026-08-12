@@ -756,4 +756,9 @@ natural home for it.
   loop exists to drive it — not possible until that loop (and Task 2's
   ledger, for a budgeted plan with real numbers) exist.
 
-**Commit:** pending — code round, gate run before commit.
+**Commit:** `ea5fb67`.
+**Gate status: GREEN.** `python verify.py` → all auditors + testers pass,
+including the new `tests/tester_planner.py` (policy ranking, the
+strict-prefix budget fill, closed-vocabulary validation, round-trip,
+approval, and `validate_for_execution`) (verified again by the pre-commit
+hook at commit time).
