@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -269,32 +271,92 @@ def k4_model_change_impact(cache_path: Path | None = None,
 
 
 # ---------------------------------------------------------------------------
-# The lock -- a real file, not a disabled button
+# The lock -- a real file, not a disabled button. COWORK_BRIEF_conductor_
+# governor.md Task 5': "the lock must survive a multi-hour hold" -- the
+# original O_CREAT|O_EXCL scheme (an unreadable lock counts as locked,
+# correct for a five-minute stage) is a trap for an overnight run killed by
+# a crash or reboot, with nothing to ever tell it apart from one still
+# genuinely running. A pid + a heartbeat give a caller enough to make that
+# call themselves -- staleness is REPORTED here, never acted on
+# automatically; breaking a lock is always `break_lock`, called explicitly.
 # ---------------------------------------------------------------------------
 
-def lock_status(lock_path: Path | None = None) -> dict:
+#: No heartbeat update in this long -> the lock is reported stale. A live
+#: `execute_with_lock` run heartbeats far more often than this (every
+#: streamed line -- seconds, not minutes) so a genuinely running stage never
+#: approaches it; only a crashed/killed process leaves a heartbeat this old.
+STALE_HEARTBEAT_SECONDS = 120.0
+
+
+def _pid_alive(pid: int | None) -> bool | None:
+    """Best-effort, cross-platform liveness check. ``True``/``False`` when
+    it can tell, ``None`` when it genuinely cannot (no pid recorded, or a
+    platform/permission situation that makes the question unanswerable) --
+    staleness never depends SOLELY on this, because ``None`` must never be
+    silently treated as either alive or dead."""
+    if pid is None:
+        return None
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if handle:
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return True
+            return False
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not ours to signal -- definitely alive
+    except OSError:
+        return None
+
+
+def lock_status(lock_path: Path | None = None, *, stale_after: float = STALE_HEARTBEAT_SECONDS,
+                 now: float | None = None) -> dict:
+    """Reports what's held and whether it looks stale -- never breaks
+    anything itself (0031's discipline applied to the lock: an observation,
+    not a verdict acted on automatically)."""
     p = lock_path or LOCK_PATH
     if not p.is_file():
         return {"locked": False}
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {"locked": True, "stage": None, "started_at": None,
-                "detail": "lock file present but unreadable -- treated as locked"}
+        return {"locked": True, "stage": None, "started_at": None, "pid": None,
+                "heartbeat_at": None, "heartbeat_age_seconds": None, "stale": True,
+                "stale_reasons": ["lock file present but unreadable"]}
+    now = now if now is not None else time.time()
+    heartbeat_at = data.get("heartbeat_at")
+    hb_age = (now - heartbeat_at) if isinstance(heartbeat_at, (int, float)) else None
+    pid = data.get("pid")
+    alive = _pid_alive(pid)
+    reasons: list[str] = []
+    if hb_age is not None and hb_age > stale_after:
+        reasons.append(f"no heartbeat in {hb_age:.0f}s (limit {stale_after:.0f}s)")
+    if alive is False:
+        reasons.append(f"pid {pid} is not running")
     return {"locked": True, "stage": data.get("stage"), "started_at": data.get("started_at"),
-            "pid": data.get("pid")}
+            "pid": pid, "heartbeat_at": heartbeat_at, "heartbeat_age_seconds": hb_age,
+            "stale": bool(reasons), "stale_reasons": reasons}
 
 
 def acquire_lock(stage: str, lock_path: Path | None = None) -> dict:
     """Real single-run lock: an exclusive file create (`O_CREAT|O_EXCL`), not
     a disabled button and not an in-memory flag another worker process
     wouldn't see. A second request while one is held is refused with what is
-    running and when it started -- never queued, never silently dropped."""
+    running and when it started -- never queued, never silently dropped, and
+    NEVER auto-broken here even if `lock_status` would call it stale --
+    staleness is only ever acted on via the explicit `break_lock`."""
     p = lock_path or LOCK_PATH
     p.parent.mkdir(parents=True, exist_ok=True)
+    started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    now = time.time()
     payload = json.dumps({
-        "stage": stage, "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "pid": os.getpid(),
+        "stage": stage, "started_at": started_at, "pid": os.getpid(), "heartbeat_at": now,
     }, indent=2).encode("utf-8")
     try:
         fd = os.open(str(p), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -307,12 +369,52 @@ def acquire_lock(stage: str, lock_path: Path | None = None) -> dict:
     return {"acquired": True, "stage": stage}
 
 
+def heartbeat(lock_path: Path | None = None, *, now: float | None = None) -> bool:
+    """Update the held lock's `heartbeat_at`, preserving every other field --
+    read-modify-write, never a blind rewrite. Never CREATES a lock; returns
+    False (does nothing) if none is held or the file is unreadable, so a
+    caller that races a `release_lock` fails safe rather than resurrecting
+    a lock nobody holds."""
+    p = lock_path or LOCK_PATH
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    data["heartbeat_at"] = now if now is not None else time.time()
+    try:
+        p.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 def release_lock(lock_path: Path | None = None) -> None:
     p = lock_path or LOCK_PATH
     try:
         p.unlink()
     except FileNotFoundError:
         pass
+
+
+def break_lock(reason: str, lock_path: Path | None = None) -> dict:
+    """The ONLY sanctioned way a stale lock is ever cleared -- an explicit
+    operator action that names what it is breaking, never an automatic
+    silent reclaim (COWORK_BRIEF_conductor_governor.md Task 5', a stop
+    condition in its own right). `reason` is mandatory: a break with no
+    reason is refused outright, so there is always something to point at
+    later for "why was this lock cleared." Breaking a lock that isn't
+    actually stale is still permitted (an operator's call, not this
+    function's to second-guess) -- but the caller is expected to have read
+    `lock_status` first; this does not check staleness itself."""
+    if not reason or not reason.strip():
+        raise ValueError("break_lock requires a non-empty reason -- this is a "
+                          "deliberate operator action, never a silent reclaim.")
+    p = lock_path or LOCK_PATH
+    status = lock_status(p)
+    if not status["locked"]:
+        return {"broken": False, "reason": reason, "detail": "no lock was held"}
+    release_lock(lock_path=p)
+    return {"broken": True, "reason": reason, "was": status}
 
 
 # ---------------------------------------------------------------------------
@@ -329,10 +431,16 @@ class ExecutionRefused(ValueError):
 @dataclass
 class StageOutcome:
     stage: str
-    state: str  # "success" | "failed" | "skipped" | "blocked"
+    state: str  # "success" | "failed" | "skipped" | "blocked" -- FOUR states, never a fifth
     detail: str
     returncode: int | None = None
     stdout_tail: str = ""
+    #: Cancellation is conductor/orchestration state layered ALONGSIDE the
+    #: four existing states, never a fifth one of its own -- a cancelled
+    #: run still lands on "blocked" (queued, never started) or "failed"
+    #: (in-flight, terminated); this flag is what tells that apart from an
+    #: ordinary blocked precondition or a real failure.
+    cancelled: bool = False
 
 
 def classify_outcome(returncode: int | None, stdout: str, stderr: str) -> tuple[str, str]:
@@ -350,8 +458,75 @@ def classify_outcome(returncode: int | None, stdout: str, stderr: str) -> tuple[
     return "failed", f"exit {returncode}"
 
 
+class CancelToken:
+    """One-shot, thread-safe cancellation flag. Atomic test-and-clear
+    (``ForgeEngine._consume_cancel``'s pattern, re-derived -- COWORK_BRIEF_
+    conductor_governor.md Addendum's Task 5'), so a cancellation cannot fire
+    twice. The SAME token distinguishes queued vs in-flight by nothing more
+    than WHEN it's read: ``consume()`` (test-and-clear) before a step ever
+    starts means "skip it, it was still queued"; ``is_set()`` (non-consuming
+    peek) checked WHILE a step is streaming means "stop it now, it was
+    in-flight" -- two different operator intents, the same primitive,
+    exactly the distinction an overnight run needs between "stop after this
+    step" and "stop right now."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._cancelled = False
+
+    def request(self) -> None:
+        with self._lock:
+            self._cancelled = True
+
+    def consume(self) -> bool:
+        with self._lock:
+            if self._cancelled:
+                self._cancelled = False
+                return True
+            return False
+
+    def is_set(self) -> bool:
+        with self._lock:
+            return self._cancelled
+
+
+# TIMING/TIMING_WINDOW/TIMING_CLAIM lines, exactly as extract_claims.py's/
+# match_claims.py's make_*_timing_reporter() write them to stderr.
+_TIMING_KIND_RE = re.compile(r"^(TIMING_WINDOW|TIMING_CLAIM|TIMING)\b")
+_TIMING_KIND_NAMES = {"TIMING_WINDOW": "window", "TIMING_CLAIM": "claim", "TIMING": "conversation"}
+_MS_PER_TOKEN_RE = re.compile(r"generation_ms_per_token=(\S+)")
+
+
+def _classify_timing_line(line: str) -> str | None:
+    m = _TIMING_KIND_RE.match(line)
+    return _TIMING_KIND_NAMES[m.group(1)] if m else None
+
+
+def _parse_ms_per_token(line: str) -> float | None:
+    """The line's `generation_ms_per_token` figure, or `None` -- either the
+    line marked it literally "unavailable" (Addendum 2's own discipline:
+    absent, never estimated) or this isn't a window/claim line at all."""
+    m = _MS_PER_TOKEN_RE.search(line)
+    if not m or m.group(1) in ("unavailable", "None"):
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def _default_popen(argv: list[str], *, cwd: str):
+    """stderr merged into stdout (`STDOUT`) -- K2/K4 write their TIMING*
+    lines to stderr; merging keeps them in real arrival order against
+    stdout on a single stream, which is what makes reading ONE pipe (rather
+    than juggling two, with the deadlock risk that brings) safe here."""
+    return subprocess.Popen(argv, cwd=cwd, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, bufsize=1)
+
+
 def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = None,
-              runner=None) -> StageOutcome:
+              popen_factory=None, on_timing_line=None, cancel_token: "CancelToken | None" = None,
+              heartbeat_fn=None) -> StageOutcome:
     """Run exactly one allowlisted stage. ``stage`` is the ONLY thing this
     function accepts that named the work to do -- there is no argv, path, or
     flag parameter here a caller could use to run something else. Model
@@ -360,9 +535,36 @@ def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = 
     default (a model stage's `--model` has no default anywhere in this
     codebase, deliberately -- COWORK_BRIEF_curator_tab.md, "Grounding").
 
-    ``runner`` is injectable (defaults to `subprocess.run`) so testers exercise
-    the allowlist/lock/classification logic without ever spawning a real
-    process."""
+    **Streaming, not buffered to exit.** `subprocess.run(capture_output=True)`
+    used to sit here -- it blocks until the process exits and returns
+    everything at once, so a multi-hour stage showed nothing until it
+    finished: no timings, no progress, no way to tell "paused" from "stuck."
+    This spawns via ``popen_factory`` (defaults to `_default_popen`, a thin
+    `subprocess.Popen` wrapper) and reads its output line by line AS IT
+    ARRIVES -- this is what makes a live governor
+    (`chronicler.pipeline.governor`) possible at all, not a UI nicety
+    (COWORK_BRIEF_conductor_governor.md Task 5', its own words).
+
+    ``on_timing_line(kind, ms_per_token, line)`` fires for every
+    TIMING/TIMING_WINDOW/TIMING_CLAIM line K2/K4 write -- ``kind`` is
+    ``"conversation"``/``"window"``/``"claim"``, ``ms_per_token`` is the
+    parsed `generation_ms_per_token` figure (`None` if the line marked it
+    unavailable). Never fired for any other line. Purely observational --
+    whether the caller feeds it into a `governor.GovernorState` or ignores
+    it entirely is not this function's concern; it has no notion of
+    pausing.
+
+    ``cancel_token``, if given, is checked after every line -- if set
+    (`is_set()`, a non-consuming peek), the subprocess is terminated
+    (`Popen.terminate()`, cross-platform) and the outcome is marked
+    `cancelled=True`. This is the IN-FLIGHT half of cancellation; the
+    QUEUED half (skipping a step that hasn't started yet) lives in
+    `execute_with_lock`.
+
+    ``heartbeat_fn``, if given, is called after every line -- `execute_with_
+    lock` binds this to the held lock's `heartbeat()` automatically, so a
+    long-running stage's lock never goes stale while it's genuinely
+    streaming output."""
     if stage not in EXECUTION_ALLOWLIST:
         raise ExecutionRefused(
             "not_allowlisted",
@@ -382,16 +584,37 @@ def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = 
         return StageOutcome(stage=stage, state="blocked",
                              detail=f"{spec['script']} not found under {_PIPE}")
 
-    run = runner or subprocess.run
-    proc = run([sys.executable, str(script_path), *argv_extra],
-               cwd=str(_PIPE.parent.parent), capture_output=True, text=True)
-    state, detail = classify_outcome(proc.returncode, proc.stdout or "", proc.stderr or "")
-    tail = "\n".join((proc.stdout or "").splitlines()[-10:])
+    spawn = popen_factory or _default_popen
+    proc = spawn([sys.executable, str(script_path), *argv_extra], cwd=str(_PIPE.parent.parent))
+
+    lines: list[str] = []
+    cancelled = False
+    for raw_line in proc.stdout:
+        line = raw_line.rstrip("\n")
+        lines.append(line)
+        kind = _classify_timing_line(line)
+        if kind is not None and on_timing_line:
+            on_timing_line(kind, _parse_ms_per_token(line), line)
+        if heartbeat_fn:
+            heartbeat_fn()
+        if cancel_token is not None and cancel_token.is_set():
+            proc.terminate()
+            cancelled = True
+            break
+
+    returncode = proc.wait()
+    stdout_text = "\n".join(lines)
+    if cancelled:
+        state, detail = "failed", "cancelled by operator request (in-flight)"
+    else:
+        state, detail = classify_outcome(returncode, stdout_text, "")
+    tail = "\n".join(lines[-10:])
     return StageOutcome(stage=stage, state=state, detail=detail,
-                         returncode=proc.returncode, stdout_tail=tail)
+                         returncode=returncode, stdout_tail=tail, cancelled=cancelled)
 
 
-def execute_with_lock(stage: str, lock_path: Path | None = None, **kwargs) -> StageOutcome:
+def execute_with_lock(stage: str, lock_path: Path | None = None, *,
+                       cancel_token: "CancelToken | None" = None, **kwargs) -> StageOutcome:
     """Acquire the lock, run, always release -- the single entry point
     app.py's execute route calls. A refusal (lock already held) raises
     rather than silently queuing or dropping the request.
@@ -400,7 +623,21 @@ def execute_with_lock(stage: str, lock_path: Path | None = None, **kwargs) -> St
     lock) but is a parameter precisely so a tester can point it at a temp
     file and never touch the real ``data/knowledge_curator/`` directory --
     the allowlist check happens before the lock is even touched, so a bad
-    stage key never acquires anything to begin with."""
+    stage key never acquires anything to begin with.
+
+    ``cancel_token``, if given, is consumed (test-and-clear) IMMEDIATELY
+    after the lock is acquired but BEFORE `run_stage` is ever called -- a
+    token already set at that point means this step was still queued when
+    cancellation was requested, so it is skipped entirely (`state="blocked"`,
+    `cancelled=True`) rather than started and then stopped. The SAME token
+    is then handed to `run_stage` for the in-flight half: if nothing
+    consumed it here, a request arriving WHILE this step streams is caught
+    there instead. A token can therefore only ever cancel a step once,
+    either as a skip or as a stop, never both.
+
+    ``heartbeat_fn`` is bound to this lock automatically unless the caller
+    overrides it via ``kwargs`` -- a caller-supplied ``on_timing_line`` or
+    ``popen_factory`` in ``kwargs`` passes straight through to `run_stage`."""
     if stage not in EXECUTION_ALLOWLIST:
         raise ExecutionRefused(
             "not_allowlisted",
@@ -413,6 +650,11 @@ def execute_with_lock(stage: str, lock_path: Path | None = None, **kwargs) -> St
             f"a run is already in progress: stage={got.get('stage')} "
             f"started_at={got.get('started_at')}. Refused -- never queued.")
     try:
-        return run_stage(stage, **kwargs)
+        if cancel_token is not None and cancel_token.consume():
+            return StageOutcome(stage=stage, state="blocked",
+                                 detail="cancelled before it started (queued cancellation)",
+                                 cancelled=True)
+        kwargs.setdefault("heartbeat_fn", lambda: heartbeat(lock_path=lock_path))
+        return run_stage(stage, cancel_token=cancel_token, **kwargs)
     finally:
         release_lock(lock_path=lock_path)

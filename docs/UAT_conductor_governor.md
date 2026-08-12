@@ -163,13 +163,52 @@ full UAT list that Task 1 actually touches is listed here.
   `batch_target_tokens` rather than `cool_down_seconds`.
 
 - [ ] `[H]` Wired into a real run and walked live (hour/overnight budget,
-  did it help, did you want to intervene) — not possible until Task 5 (the
-  streaming executor) exists to feed it a live timing stream.
+  did it help, did you want to intervene) — not possible until Task 4 (the
+  planner) exists to define a multi-step run for it to pace.
+
+## Task 5′ — streaming, the lock, cancellation
+
+- [x] `[G]` Timing records reach a live consumer while the process is
+  running — streamed, not buffered to exit.
+  — `tests/tester_curator_control.py`: `on_timing_line` fires exactly for
+  each `TIMING_WINDOW`/`TIMING_CLAIM` line a fake streamed process emits
+  (2 of 4 lines in the fixture), with the parsed `generation_ms_per_token`
+  or `None` when the line marks it unavailable; never fires for a
+  non-timing line. Omitting the callback changes nothing about the result.
+
+- [x] `[G]` The lock carries a pid and a heartbeat; staleness is reported,
+  never acted on automatically; `break_lock` is the only way one is ever
+  cleared, and it always names why.
+  — A freshly acquired lock carries a pid and an initial `heartbeat_at`
+  and does not read stale; `heartbeat()` updates `heartbeat_at` in place
+  (read-modify-write, preserving every other field) and returns `False`
+  without creating a lock file when nothing is held; a lock whose
+  heartbeat is old relative to an injected `now` reads `stale=True`, a
+  freshly-heartbeated one does not; `break_lock("")` is refused
+  (`ValueError`); `break_lock(reason, ...)` records the reason and what
+  was broken, and actually clears the lock; `acquire_lock` never
+  auto-reclaims a lock it would itself call stale — only `break_lock`
+  ever does, and only when called explicitly.
+
+- [x] `[G]` A queued cancellation skips a step entirely; an in-flight
+  cancellation terminates the subprocess; neither invents a fifth
+  `classify_outcome` state.
+  — A `CancelToken` set before `execute_with_lock` ever calls `run_stage`
+  produces `state="blocked"`, `cancelled=True`, and `popen_factory` is
+  never even invoked (asserted via a factory that raises if called); the
+  token reads un-set afterward (one-shot). A token set 3 lines into a
+  50-line streamed fixture causes `Popen.terminate()` to be called and
+  the run to stop reading well short of the process's own output ending;
+  outcome is `cancelled=True`, `state="failed"` — never a new state value.
+  Both cases release the lock.
+
+- [ ] `[H]` Kill the conductor mid-plan on the real rig and confirm both
+  caches stay consistent, re-planning re-derives the remainder — not
+  possible until Task 4 (the planner) exists to define "mid-plan."
 
 ---
 
 Everything else in the brief's UAT list (the calibration ledger, the
-planner's ordering and remainder, the streaming executor, the lock's
-stale-detection, the surface, and every real-hardware walk) belongs to
-Tasks 2, 4, 5 and 6, not built this round, and is intentionally absent here
-rather than listed as failing or skipped.
+planner's ordering and remainder, the surface, and every real-hardware
+walk) belongs to Tasks 2, 4 and 6, not built this round, and is
+intentionally absent here rather than listed as failing or skipped.

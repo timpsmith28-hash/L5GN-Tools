@@ -507,3 +507,118 @@ probe** — out of scope per the brief, unchanged.
 including the new `tests/tester_governor.py` (baseline/rolling-median/
 pause/resume/cap, the honesty-requirement scan, and profile round-tripping)
 (verified again by the pre-commit hook at commit time).
+
+---
+
+# Task 5′ — streaming, the lock, and cancellation
+
+**Precondition status at build time:** Task 3 (the governor) built and
+gate-GREEN, with no caller yet — this task is what gives it one.
+
+## What was built
+
+All in `chronicler/review/curator_control.py` (the control strip Task 3 of
+`COWORK_BRIEF_curator_tab.md` already built `run_stage`/`execute_with_lock`
+in) — extended, not replaced; every pre-existing test kept its intent, only
+the injection seam (`runner=` → `popen_factory=`) changed, since that seam
+is exactly the thing the addendum says has to go.
+
+**1. Streaming, not buffered to exit.** `run_stage` no longer calls
+`subprocess.run(capture_output=True)` — it spawns via `popen_factory`
+(defaults to `_default_popen`, a thin `Popen` wrapper with stderr merged
+into stdout via `STDOUT` so a single stream carries both in real arrival
+order, avoiding the two-pipe deadlock risk a naive dual-read would carry)
+and reads it **line by line as it arrives**. `on_timing_line(kind,
+ms_per_token, line)` fires for every `TIMING`/`TIMING_WINDOW`/`TIMING_CLAIM`
+line K2/K4 already write to stderr — `kind` is `"conversation"`/`"window"`/
+`"claim"`, `ms_per_token` is the parsed `generation_ms_per_token` figure
+(`None` when the line marks it unavailable, Addendum 2's own discipline
+carried through here rather than re-litigated). Purely observational, same
+as every other optional callback in this codebase: what a caller does with
+it — feed it into `governor.observe()`, or ignore it — is not this
+function's concern. **This is what makes the governor possible at all**,
+per the brief's own words: Task 3's `GovernorState`/`observe` had no real
+caller until this round.
+
+**2. The lock: a pid, a heartbeat, staleness reported not acted on.** The
+original `O_CREAT|O_EXCL` lock (Task 3 of `COWORK_BRIEF_curator_tab.md`)
+had neither a pid nor a heartbeat — an unreadable lock counted as locked,
+correct for a five-minute stage, a trap for an overnight run killed by a
+crash or reboot, with nothing to ever tell that state apart from one still
+genuinely running.
+
+- `acquire_lock` now stamps `pid` and an initial `heartbeat_at`.
+- `heartbeat(lock_path)` updates `heartbeat_at` in place (read-modify-write,
+  never a blind rewrite) — `execute_with_lock` binds this automatically to
+  the held lock unless a caller overrides it, so a streamed run heartbeats
+  once per line, far more often than any staleness threshold could mistake
+  for a crash.
+- `lock_status` now reports `stale`/`stale_reasons` — a heartbeat older than
+  `STALE_HEARTBEAT_SECONDS` (120s default), or a pid `_pid_alive` can
+  positively say is gone (cross-platform: `os.kill(pid, 0)` on POSIX,
+  `OpenProcess` via `ctypes` on Windows; `None` — genuinely unknown — is
+  never silently treated as either alive or dead). This is a report, never
+  a verdict acted on (0031's own discipline, applied to the lock).
+- **`acquire_lock` never auto-reclaims a lock it would itself call stale.**
+  The only sanctioned clear is `break_lock(reason, lock_path)` — `reason`
+  is mandatory (an empty one is refused outright), and the return value
+  names what was broken. Explicit, always, per the brief's own stop
+  condition ("a stale lock is reclaimed automatically → stop").
+
+**3. Cancellation — queued vs in-flight, one token, re-derived from
+`ForgeEngine._consume_cancel`.** `CancelToken` is a one-shot, thread-safe
+flag with atomic test-and-clear (`consume()`) and a non-consuming peek
+(`is_set()`). The same token tells queued from in-flight apart by nothing
+more than *when* it's read:
+
+- `execute_with_lock` calls `consume()` immediately after acquiring the
+  lock, before `run_stage` is ever called — a token already set at that
+  point means the step was still queued when cancellation was requested,
+  so it's skipped entirely (`state="blocked"`, `cancelled=True`), never
+  started and then stopped.
+- `run_stage` checks `is_set()` after every streamed line — a request
+  arriving *while* the step is running terminates the subprocess
+  (`Popen.terminate()`, cross-platform) and marks the outcome
+  `cancelled=True`, `state="failed"`.
+- **No fifth `classify_outcome` state.** `StageOutcome` gained a `cancelled:
+  bool` field layered *alongside* the existing four states, never a state
+  of its own — the brief's explicit stop condition, satisfied structurally:
+  the field exists precisely so cancellation is distinguishable without
+  inventing a new value for `state`.
+- **Both caches already stay consistent on a cancel** — no new work
+  required here. Addendum 4's K2 checkpointing (fires every group) and
+  K4's pre-existing `--checkpoint-every` mean an in-flight-terminated
+  subprocess loses at most the group/claims-batch that was running when
+  `terminate()` landed, exactly the same guarantee a crash already gets.
+  This UAT item is a **walk**, not a build.
+
+## What was deliberately not done this round
+
+**Not borrowed from `ForgeEngine`:** the worker pool and per-endpoint
+semaphores (the conductor is deliberately single-stream — 0037's lock, and
+the whole thermal point of this brief; a pool would fight the goal), and
+the EventBus/`SystemEvents` (this app is request/response over a file
+lock, not event-driven; growing that architecture would be a large,
+unasked-for change). Recorded so neither is reinvented later by accident.
+
+**No multi-step loop yet.** `run_stage`/`execute_with_lock` still run
+**one** stage per call, exactly as before — "governor pausing between
+steps" (the brief's phrase) needs a *sequence* of steps to pause between,
+which is Task 4's job (the planner defines what a step is and its order).
+This round built the primitive Task 4's execution loop will call.
+
+## UAT
+
+- `[G]` Timing records reach a live consumer while the process is running —
+  streamed, not buffered to exit.
+- `[G]` The lock carries a pid and a heartbeat; staleness is reported, never
+  acted on automatically; `break_lock` is the only way one is ever cleared,
+  and it always names why.
+- `[G]` A queued cancellation skips a step entirely; an in-flight
+  cancellation terminates the subprocess; neither invents a fifth
+  `classify_outcome` state.
+- `[H]` Kill the conductor mid-plan on the real rig and confirm both caches
+  stay consistent, re-planning re-derives the remainder — not possible
+  until Task 4 exists to define "mid-plan."
+
+**Commit:** pending — code round, gate run before commit.
