@@ -1359,4 +1359,7 @@ throughout with the specific evidence this walk provided — most of the
 brief's remaining `[H]` items are now closed; the two still open are the
 select-fix's visual re-confirmation and the Ctrl-C finding above.
 
-**Commit:** pending — code round (docs only this round), gate run before commit.
+**Commit:** `035cbc1`.
+**Gate status: GREEN.** Docs-only round, no code changed — `python
+verify.py` unaffected, all auditors + testers still pass (verified again
+by the pre-commit hook at commit time).
