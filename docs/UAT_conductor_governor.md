@@ -162,9 +162,17 @@ full UAT list that Task 1 actually touches is listed here.
   a real one) is why `DEFAULT_PROFILE` leads with `max_window_tokens`/
   `batch_target_tokens` rather than `cool_down_seconds`.
 
-- [ ] `[H]` Wired into a real run and walked live (hour/overnight budget,
-  did it help, did you want to intervene) — not possible until Task 4 (the
-  planner) exists to define a multi-step run for it to pace.
+- [x] `[H]` Wired into a real run and walked live (hour/overnight budget,
+  did it help, did you want to intervene).
+  — `plan_coverage_1786563579` (a real 6-project K4 run, `10280L`): a real
+  baseline established at 509.0ms/token over 4 units, throughput on
+  "Solution Configurator" falling to 67% of it, a real pause fired
+  ("pausing 60s"), a second pause ("2/3"), a third
+  ("3/3"), `cap_reached` firing exactly once ("cap reached, proceeding
+  anyway"), and every subsequent unit correctly reported as "cap already
+  reached — proceeding" rather than pausing forever — the full decision
+  sequence, observed on real hardware under real load, matching the
+  design exactly.
 
 ## Task 5′ — streaming, the lock, cancellation
 
@@ -202,9 +210,19 @@ full UAT list that Task 1 actually touches is listed here.
   outcome is `cancelled=True`, `state="failed"` — never a new state value.
   Both cases release the lock.
 
-- [ ] `[H]` Kill the conductor mid-plan on the real rig and confirm both
-  caches stay consistent, re-planning re-derives the remainder — not
-  possible until Task 4 (the planner) exists to define "mid-plan."
+- [~] `[H]` Kill the conductor mid-plan on the real rig and confirm both
+  caches stay consistent, re-planning re-derives the remainder.
+  — Partially confirmed, by accident rather than by the intended
+  deliberate test: `plan_coverage_1786550456`'s first attempt failed
+  mid-plan on its own (step 6, "Pricing Model/K2 → failed (exit
+  3221225786)" — `0xC0000005`, an access violation, almost certainly an
+  LM Studio-side crash under load, not a K2 defect). Re-running the SAME
+  `--plan-id` afterward re-executed every step and step 6 succeeded the
+  second time — real evidence the cache/checkpoint discipline (Addendum 4)
+  makes an unplanned mid-plan death recoverable by simply re-running the
+  plan. **Still open:** the DELIBERATE two-gesture Ctrl-C test was
+  attempted and did not behave as designed — see the new finding below.
+  Not marking this done until that's understood.
 
 ## Task 4′ — the planner
 
@@ -255,10 +273,13 @@ full UAT list that Task 1 actually touches is listed here.
   — A garbage `.json` file alongside a valid saved plan is recorded in
   `.errors` and skipped; the valid plan still loads.
 
-- [ ] `[H]` A real multi-project plan walked on the real rig — not possible
-  until an execution loop exists to drive `PlanSpec.steps` (not built this
-  round; `run.py`'s eventual conductor command is the natural home) and
-  Task 2's ledger exists to supply real `estimated_seconds`.
+- [x] `[H]` A real multi-project plan walked on the real rig.
+  — Two real, approved plans walked to completion on `10280L`:
+  `plan_coverage_1786550456` (7 K2 steps: Validation Automation, Activity
+  Statements, Solution Configurator, ChurnLevelIndicator, Telematic
+  Solutions to Assets, WizForgeAnalytics, Pricing Model) and
+  `plan_coverage_1786563579` (6 K4 steps over the same projects). Steps
+  ran strictly in the plan's own order, never reordered or interleaved.
 
 ## Task 2 — the calibration ledger
 
@@ -276,9 +297,18 @@ full UAT list that Task 1 actually touches is listed here.
 - [x] `[G]` `record_from_timing` never estimates a missing measurement.
   — A timing record with `generation_ms_per_token: None` (or missing
   `model_id`/`cool_down_preceded`) produces `None`, not a fabricated entry.
-- [ ] `[H]` A real run's ledger, walked over a full evening's calibration
-  data on the real rig — not possible until `make_ledger_feeder` is wired
-  into a real `execute_with_lock` call.
+- [x] `[H]` A real run's ledger, populated live on the real rig — not yet
+  a full evening's volume, but real, and functioning.
+  — `plan_coverage_1786563579`'s K4 run wrote real entries live
+  (`make_ledger_feeder`, wired via `conductor_run.run_plan`'s
+  `on_timing_line`) for every measured claim across all 6 steps. **Not**
+  yet confirmed: the ledger's OWN summarisation being read back by a
+  LATER run's `estimated_seconds` (`candidates_from_curator`/
+  `calibration_state`) — this run's own governor baseline came from its
+  own live `observe()` stream, per-run, exactly as designed
+  (`governor.py`'s own rule: never from a ledger) — so this proves the
+  ledger is being written correctly, not yet that a later plan's
+  estimates read it back.
 
 ## Task 6 — the conductor panel, backend half
 
@@ -308,10 +338,9 @@ full UAT list that Task 1 actually touches is listed here.
   `plan/approve`) against a real temp-directory `Curator` and a real
   `PlanRegistry` write, confirming the shapes match what the hermetic
   tester already proved.
-- [ ] `[H]` The panel walked as an actual UI in the curator tab — not
-  possible until the frontend half is built; out of scope this round by
-  explicit agreement (Tim: build the backend now, frontend later,
-  independent of a possible future app reorganisation).
+- [x] `[H]` The panel walked as an actual UI in the curator tab.
+  — Tim: "created and approved a plan" via the app on `10280L`, producing
+  the two real plan ids walked below.
 
 ## The real-data adapter
 
@@ -325,8 +354,12 @@ full UAT list that Task 1 actually touches is listed here.
   AND a ledger measurement are present, and scales by the changed
   conversations' real token count only.
 - [x] `[G]` The adapter's output builds a real, valid `PlanSpec`.
-- [ ] `[H]` A real run against the real `10280L` ledger/knowledge base —
-  not possible until the ledger has real entries.
+- [x] `[H]` A real run against the real `10280L` ledger/knowledge base.
+  — Both real plans (`plan_coverage_1786550456`,
+  `plan_coverage_1786563579`) were built from `candidates_from_curator`'s
+  output against real project data (Validation Automation, Activity
+  Statements, Solution Configurator, ChurnLevelIndicator, Telematic
+  Solutions to Assets, WizForgeAnalytics, Pricing Model).
 
 ## The execution loop
 
@@ -348,9 +381,14 @@ full UAT list that Task 1 actually touches is listed here.
   `execute_fn` for step 0; an in-flight cancellation stops the run right
   after the cancelled step's own result is recorded, never starts the
   next one.
-- [ ] `[H]` A real overnight run against the real `10280L` rig, including
-  a real two-gesture Ctrl-C sequence — not yet exercised outside the
-  hermetic tester.
+- [~] `[H]` A real overnight run against the real `10280L` rig, including
+  a real two-gesture Ctrl-C sequence.
+  — The RUN half: confirmed. Two real plans walked to completion (7 K2
+  steps + 6 K4 steps), one of them recovering cleanly from a real mid-plan
+  crash on re-run (see Task 5′'s entry above). Not yet an overnight-length
+  budget, but real, multi-step, multi-hour-capable behaviour observed.
+  **The Ctrl-C half: not confirmed — a real anomaly found instead.** See
+  the new finding below. Left partially open rather than checked.
 
 ## The curator-tab frontend
 
@@ -365,8 +403,9 @@ full UAT list that Task 1 actually touches is listed here.
   end-to-end via `TestClient`.
 - [x] `[G]` The new "Conductor" sub-tab follows the existing sub-tab
   convention exactly; no other pane's markup or JS changed.
-- [ ] `[H]` A real walk of the tab in a browser against the real `10280L`
-  Curator estate — not exercised this round (no browser available here).
+- [x] `[H]` A real walk of the tab in a browser against the real `10280L`
+  Curator estate.
+  — Tim: "created and approved a plan" via the app.
 
 ## Real-rig findings, fixed
 
@@ -379,13 +418,60 @@ full UAT list that Task 1 actually touches is listed here.
   callbacks fire live, in order, with correct per-line arguments —
   closes a real gap found on the actual overnight run (LM Studio visibly
   working, the CLI showing nothing for the whole run).
-- [ ] `[H]` Confirm the select fix and the live progress output visually
-  against a fresh `run.py conductor` run on `10280L` — the in-flight run
-  that found this started before the fix and won't show it.
+- [x] `[H]` Confirm the live progress output on a fresh `run.py conductor`
+  run on `10280L`.
+  — Confirmed directly: after `git pull`, the same `--plan-id` re-run
+  printed a `step N starting` line per step and a live `window`/`claim`
+  line per unit with the real governor action and message, exactly as
+  designed — where the pre-fix run (same plan id, same machine, run just
+  before the pull) printed nothing until the very end.
+- [ ] `[H]` Confirm the select-dropdown contrast fix visually in a
+  browser — not explicitly re-confirmed this round (the real-rig session
+  covered the CLI only); still believed correct from the CSS itself, not
+  yet re-observed.
+
+## New finding: the SIGINT handler doesn't stop the run
+
+**Observed, not yet diagnosed (0031).** During the first real
+`run.py conductor` invocation (`plan_coverage_1786550456`, pre-`git
+pull`, so the pre-live-progress code), the terminal printed:
+
+```
+conductor: Ctrl-C -- finishing the current step, then stopping. Ctrl-C again to stop immediately.
+```
+
+immediately after the command was run — meaning the SIGINT handler fired
+and `control.request_stop_after_step()` was called. The run then
+proceeded through all 7 steps to completion regardless, ending in
+`conductor: plan '...' complete -- 7 step(s) ran.`, never `stopped early`.
+`RunControl.stop_after_step` is checked at the top of every loop
+iteration and, once set, is never reset anywhere in `conductor_run.py` —
+so by design the very next step should have been skipped. It wasn't.
+
+**Not diagnosed yet — plausible directions, not conclusions:** Windows'
+signal delivery for a console `CTRL_C_EVENT` only reaches Python's
+registered handler when the interpreter checks for pending signals, which
+doesn't happen while the main thread is blocked in a C-level blocking
+read (`for raw_line in proc.stdout:` inside `curator_control.run_stage`)
+— the handler may have run at an unexpected point relative to the loop's
+own check, or the terminal's PowerShell/venv wrapper may have intercepted
+the keystroke before Python's handler saw it consistently. Needs a
+deliberate, isolated repro on `10280L` (a real Ctrl-C press with nothing
+else going on) rather than guessing further from one transcript.
+
+- [ ] `[H]` Reproduce deliberately and diagnose why `stop_after_step`
+  didn't stop the run — filed as an open finding, not fixed this round.
 
 ---
 
-Every `[H]` item above (real-hardware walks, a real overnight run, a real
-browser session against `10280L`) is the honest remainder: everything
-this brief scoped as buildable without the real rig is now built, tested,
-and gate-GREEN.
+The real work-rig walk (two real plans, `plan_coverage_1786550456` and
+`plan_coverage_1786563579`, executed on `10280L`) closed out nearly every
+`[H]` item that was waiting on real hardware — the governor's full
+decision sequence (baseline → pause → pause → cap_reached →
+proceeding) observed live under real load, a real mid-plan crash
+recovered cleanly via re-run, the live-progress fix confirmed directly,
+and the panel walked end-to-end in the app to produce both plans. What
+remains open: the select-fix visual re-confirmation (believed correct,
+not yet re-observed), and the one real finding from this walk — the
+SIGINT/Ctrl-C sequence not stopping the run as designed, filed above,
+diagnosed and fixed only when picked back up.

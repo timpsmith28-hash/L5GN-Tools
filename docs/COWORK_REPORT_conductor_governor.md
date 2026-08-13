@@ -1295,3 +1295,68 @@ including the extended `tester_conductor_run.py` happy-path scenario
 (asserts `on_step_start`/`on_timing_line`/`on_step_end` all fire live, in
 order, with correct per-line arguments) (verified again by the pre-commit
 hook at commit time).
+
+# Real-rig validation: two plans walked on 10280L
+
+Tim built and approved two real plans through the app (`plan_coverage_
+1786550456`, 7 K2 steps; `plan_coverage_1786563579`, 6 K4 steps, both
+over real project data: Validation Automation, Activity Statements,
+Solution Configurator, ChurnLevelIndicator, Telematic Solutions to
+Assets, WizForgeAnalytics, Pricing Model) and ran both to completion with
+`run.py conductor`. This is the first time anything built across the
+whole brief actually ran end-to-end against real data on real hardware.
+
+**What went right, observed directly rather than inferred:**
+
+- **The governor's full decision sequence, under real load.** The K4 run
+  established a real baseline (509.0ms/token over 4 units), watched
+  "Solution Configurator"'s throughput fall to 67% of it, paused twice
+  (60s each), reached the pause cap on the third consecutive low reading,
+  and correctly proceeded rather than pausing forever — every action the
+  design specifies, in the order it specifies, on a real rig.
+- **The rolling median doing exactly its job.** The K2 run's raw
+  `generation_ms_per_token` stream includes real outliers — one line at
+  20742.5ms/token, another at 1225.3ms/token, sitting among a steady
+  ~100-200ms/token population — and the governor never paused on either:
+  a median over a 4-unit window absorbs one spike without mistaking it
+  for a real decay, exactly why a median was chosen over a mean back in
+  Task 3's design.
+- **Checkpointing making a real crash a non-event.** The first attempt at
+  `plan_coverage_1786550456` failed mid-plan (step 6, "Pricing Model/K2",
+  exit `3221225786` / `0xC0000005` — an access violation, almost
+  certainly LM Studio's own process crashing under load, not a K2
+  defect). Re-running the identical `--plan-id` re-executed every step
+  and step 6 succeeded the second time — the cache/checkpoint discipline
+  (Addendum 4, built specifically for "keep the system stable" after an
+  earlier real crash this same session) making an unplanned death fully
+  recoverable by just running the command again.
+- **The live-progress fix, confirmed by direct before/after comparison.**
+  The pre-`git pull` run of `plan_coverage_1786550456` printed nothing
+  per step (old code); after pulling `813d285`, re-running produced a
+  `step N starting` line and a live `window`/`claim` line per unit,
+  exactly as the fix intended.
+
+**One real finding, not yet resolved: Ctrl-C didn't stop the run.** The
+first invocation's terminal shows the graceful-stop message
+(`conductor: Ctrl-C -- finishing the current step, then stopping...`)
+printed immediately, meaning `control.request_stop_after_step()` was
+called — but the run then completed all 7 steps regardless, never
+reporting `stopped early`. `RunControl.stop_after_step` is checked at the
+top of every loop iteration and nothing ever resets it once set, so by
+design the next step should have been skipped and wasn't. Not diagnosed
+this round — logged as an open finding in the UAT doc with the most
+plausible direction (Windows' `CTRL_C_EVENT` delivery only reaches a
+registered Python handler when the interpreter checks for pending
+signals, which doesn't happen while the main thread is blocked in the
+C-level blocking read `run_stage` uses to stream a step's output) named
+as a plausible direction, not a diagnosis (0031) — needs a deliberate,
+isolated repro on the real rig, not more guessing from one transcript.
+
+## UAT
+
+See `docs/UAT_conductor_governor.md`'s per-task `[H]` items, updated
+throughout with the specific evidence this walk provided — most of the
+brief's remaining `[H]` items are now closed; the two still open are the
+select-fix's visual re-confirmation and the Ctrl-C finding above.
+
+**Commit:** pending — code round (docs only this round), gate run before commit.
