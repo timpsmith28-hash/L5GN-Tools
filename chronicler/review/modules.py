@@ -35,7 +35,7 @@ walk.
 """
 from __future__ import annotations
 
-from . import estate_report, estate_time
+from . import estate_report, estate_time, project_wizard
 from .module_contract import (
     STATUS_LEGACY,
     STATUS_REGISTRY,
@@ -66,6 +66,18 @@ MODULES: list[ModuleDescriptor] = [
     ModuleDescriptor(
         id="board", label="Docs board", order=50,
         status=STATUS_LEGACY, requires=("repo_docs",)),
+    ModuleDescriptor(
+        # No `requires` entry, deliberately, on the `repo_docs` precedent
+        # just above: Project Wizard's allowlist (config/project_wizard
+        # .allow.json) and its manifests are read from this checkout the
+        # same structural way docs/ is -- reachable by construction, not by
+        # a vault or an estate build. A host with no allowlisted repos is
+        # not a degraded tab; it is an honest, empty board (board()'s own
+        # "no repos configured" state), the same distinction docs_board
+        # draws between "gated" and "nothing to show."
+        id="project_wizard", label="Project Wizard", order=55,
+        status=STATUS_REGISTRY, requires=(),
+        router=project_wizard.router, view="project_wizard.js"),
     ModuleDescriptor(
         id="uat", label="UAT sidebar", order=60,
         status=STATUS_LEGACY, requires=("repo_docs",)),

@@ -1,0 +1,16 @@
+{
+  "_comment": "Committed, per-host repo allowlist for Project Wizard (DECISIONS 0042 clause 2). Keyed by hostname; each host's 'repos' map is {repo_key: absolute path to that repo's root}. Falls back to 'default' the same layered way config/machines.json / l5gntools.config.machine() do (see chronicler/review/project_wizard.py:load_allowlist). Widening this list -- adding a repo_key anywhere below -- is a reviewed, committed edit, never a path typed into the UI (0042 clause 2). No auditor covers this file (0042's own consequence paragraph); review it the way machines.json is reviewed.",
+  "default": {
+    "repos": {}
+  },
+  "LucasGoonPC": {
+    "_comment": "Gaming rig -- the dev-rig fixture only (COWORK_BRIEF_project_wizard.md Task 5, 'Dev-rig fixture'). No MCF repo exists on this machine, so sf-data-service/PricingModel/SolConfig cannot be exercised here; L5GN-Tools itself stands in so the board, the lock, the streaming runner and the containment gate can all be built and walked on the machine where development actually happens. This entry is a fixture, not a pilot: it does not count toward the three named pilots and is not a precedent for widening.",
+    "repos": {
+      "l5gn-tools-fixture": "C:/Users/timps/Documents/GitHub/L5GN-Tools"
+    }
+  },
+  "10280L": {
+    "_comment": "Work rig -- where the three pilot repos (sf-data-service, PricingModel, SolConfig) actually live. Deliberately EMPTY in this commit: Task 5's discovery step (identify PricingModel's and SolConfig's real generator scripts, confirm each is safely re-runnable, and hand-author each repo's own wizforge.manifest.json only after reading it) has not been done -- this session has no access to those repos' checkouts to do it from. Add a repo_key here only after that repo's manifest is committed and reviewed inside its own repo (0042's honesty clause: the manifest is the declaration site verify.py cannot see, so human review of it is the only gate it gets).",
+    "repos": {}
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "repo_name": "L5GN-Tools (dev-rig fixture)",
+  "stages": [
+    {
+      "key": "verify",
+      "label": "verify.py -- run every auditor and tester",
+      "kind": "other",
+      "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "verify.py"],
+      "cwd": ".",
+      "output_glob": null,
+      "freshness_source": "self",
+      "depends_on": []
+    },
+    {
+      "key": "build",
+      "label": "run.py build -- rebuild data/estate.json",
+      "kind": "report_build",
+      "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "run.py", "build"],
+      "cwd": ".",
+      "output_glob": "data/estate.json",
+      "freshness_source": "self",
+      "depends_on": []
+    }
+  ]
+}
