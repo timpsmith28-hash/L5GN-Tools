@@ -1,4 +1,5 @@
 <!-- actioned: 2026-08-03 · K3/K4 · f5a14d2 · scanner-scope-bypass round confirmed K3's point directly: the personal/work deposits held thousands of data-dir paths (chat-archive content), i.e. a summary artefact already leaked more than 0027's summary-only rule intends -- fixed structurally (file_census/workspace_scanner now honour Scope) and the tainted deposits replaced per DECISIONS 0029, not merely a future backup risk as K3/K4 framed it -->
+<!-- actioned: 2026-08-15 · §4 · a2aa1ec · §4's predicted non-gating, findings-only check layer has its first instance: the witness (DECISIONS 0031) -->
 
 # Response — the knight's future roles: Historian, Chronicler, Shadow
 
