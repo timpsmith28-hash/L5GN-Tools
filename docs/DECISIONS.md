@@ -1438,3 +1438,415 @@ corrupts the ordering. That cost is accepted: a shorter honest run beats a
 fuller one whose supersessions cannot be trusted.
  
 ---
+
+## 0038 — Conversation, session and thread are three distinct things with three distinct names
+
+**Date:** 2026-08-11 · **Status:** accepted · **Builds on:** 0032 (the Curator's
+conversation unit), `SPEC_Chronicler.md` S1 · **Source:** design thread
+
+**Context.** The estate has used "thread" for three different entities, and the
+ambiguity is no longer only in prose — it is encoded in a ratified artefact.
+
+`config/mcf_conversation_map.tsv`'s key column is named **`session_id`** and
+holds the `local_<uuid>` **conversation** id. `ingest_local_transcripts.py` says
+*"Cowork sessions never get a direct link"*, where "session" means the inner
+`<uuid>.jsonl`. `chronicler.db` calls its rows `threads`. And the design
+discussion that produced the Curator was conducted in "threads" while meaning
+"conversations" throughout — which is what made the Curator's curated map look
+like a competitor to Chronicler's linking rather than a solution to a problem
+Chronicler had declared unsolvable.
+
+A naming collision that survives into a committed schema is not a style
+question. It caused a design point to be missed for two rounds.
+
+**Decision.** Three terms, fixed:
+
+1. **Conversation** — the outer unit a human recognises as one continuous
+   exchange. Cowork: the `local_<uuid>` folder. Claude: one `conversations.json`
+   entry, keyed on its `uuid`. Gemini work: the 32-char hex id from field 2 of
+   the share export. Gemini personal: **no native conversation identity exists**
+   — see 0040.
+2. **Session** — one transcript file within a conversation: a `<uuid>.jsonl`,
+   including `subagents/agent-*.jsonl` and resumes. **One conversation, N
+   sessions.**
+3. **Thread** — a row in `chronicler.db`'s `threads` table. A *storage* entity,
+   not a source entity. It usually corresponds to one conversation; for Gemini
+   personal it is synthesised, which is exactly why the distinction matters.
+
+4. The map's key column is **renamed `conversation_id`**. This is a schema change
+   to a ratified artefact, performed once and explicitly, with the former name
+   recorded here so the change is traceable rather than mysterious. K1, K2 and K4
+   read it and change together.
+
+5. Code and prose use these three words as defined. Where an existing document
+   says "thread" and means "conversation", it is **wrong** — but existing
+   documents are not retro-edited (`docs/README.md` §2); the error is corrected
+   where the words are next used, not by rewriting the record.
+
+**Consequences.** `ARCHITECTURE.md` gains the glossary, because this is exactly
+the kind of boundary definition it exists to hold. The rename is a small
+migration with a real risk attached: a half-applied rename would leave K1 reading
+a column K0 no longer writes, so it lands as one change with its testers, or not
+at all.
+
+---
+
+## 0039 — The Curator is scoped to the estate declared for the machine it runs on, not to MCF
+
+**Date:** 2026-08-11 · **Status:** accepted · **Amends:** 0032 clause (1) (does
+not supersede the entry) · **Builds on:** 0025 (a surface rendering only the
+local machine's own estate is not gated), 0026, 0030 · **Source:** design thread
+
+**Context.** 0032 scoped the Curator to the work/MCF estate on two grounds. The
+first was a value argument, quoted in its brief: personal-estate knowledge is
+*"regurgitation/reuse of existing principles"*, where MCF knowledge is
+domain-specific and unrecoverable. The second was a safety argument: the tool
+never reads personal content, so **there is no mixed artefact to police.**
+
+The safety argument is sound and is preserved below. The value argument has an
+exception 0032 did not see: **this toolkit.** Thirty-seven decisions, a dozen
+investigations and the reasoning behind them are precisely the non-derivable
+material 0026 made a first-class artefact — and `docs/README.md` currently gives
+investigations no route to graduate anywhere at all. They are evidence that never
+becomes knowledge, which is a gap in the doc classes, not a property of
+investigations.
+
+Scoping by **estate label** was also the wrong instrument, and 0025 already
+established the right one for the deck: gate by the **surface**, not by the data's
+label.
+
+**Decision.**
+
+1. The Curator is scoped to the **estate declared for the machine it runs on**,
+   never to a fixed estate name, and **never to more than one estate in a single
+   run or a single output.**
+2. A machine whose declared estate is **`both` (the knight) does not run the
+   Curator.** It is a solo-machine tool, and this makes the exclusion explicit
+   where 0032 achieved it only by accident.
+3. Outputs remain **per estate and are never merged.** No artefact under
+   `data/knowledge_curator/` spans two estates.
+4. 0032's clauses (2) recency-as-truth-order and (3) derived-output-lives-under-
+   `data/` are **unchanged**.
+5. The Curator still **never writes a `KNOWLEDGE*.md` file.** A toolkit knowledge
+   document is authored by hand; the Curator only proposes. That rule is what
+   keeps the write path closed regardless of which estate is in scope.
+
+**Consequences.** The safety property survives intact — a single run reads one
+estate and produces one estate's output, so there is still no mixed artefact.
+What is given up is the simplicity of "it only ever touches MCF", which was easy
+to verify by reading one constant and is now a per-machine config read. That is
+the same weakening 0025 accepted, for the same reason, and it is bounded by (2).
+
+One thing this entry does **not** settle and which must be confirmed before the
+first personal-estate run: whether `data/knowledge_curator/` sits inside the
+deposit contract. If a Curator report can travel, per-estate outputs are not
+sufficient on their own and a deposit exclusion is required.
+
+### Why the scoping is by machine and not by topic — two worked examples
+
+The curated conversation lists contain two cases that look like estate mixing and
+are not. Both are recorded because a future reader will otherwise take them for
+errors and "fix" them.
+
+- **`Solution Configurator (MCF)` appears in the Gemini *personal* list.** Two
+  conversations, conducted on a personal phone, as open exploration of the
+  subject — not work on the MCF deliverable. The material is personal-estate: it
+  is on a personal account, in personal time, and nothing about it belongs to the
+  employer. It merely *discusses* a work topic.
+- **`L5GN-Tools` appears in the *work-rig* Cowork list.** The toolkit is built
+  partly on the work rig, deliberately — it is a toolkit for that work, and spare
+  compute goes into it when it is available. The original Chronicler build
+  happened this way before being assimilated here. That material is work-estate
+  by provenance while being about a personal project.
+
+**The principle both cases establish: estate is a fact about provenance and
+disclosure, never about subject matter.** Whose account, whose machine, whose
+time — not what the conversation is about. Topic does not partition cleanly and
+never will; provenance does.
+
+This is the argument *for* scoping by the machine's declared estate rather than
+by any label attached to content. A topic-based scoping would have misfiled both
+examples, in opposite directions.
+
+The residual risk is content, not classification: an "open exploration" of an MCF
+topic could still contain MCF-specific detail, and the Curator quotes verbatim.
+Nothing deposits, so the wall is untouched — but the first personal-estate run
+should spot-check the claims extracted from those conversations, because that is
+where domain knowledge would surface into a personal artefact if it were going to.
+
+### Clause (3) constrains the artefact, not the author
+
+"Outputs are never merged" reads as a block on the toolkit's own knowledge base,
+since `L5GN-Tools` conversations exist on **both** estates and would therefore be
+proposed by two separate runs on two machines.
+
+It is not a block, because of clause (5): **the Curator never writes a
+`KNOWLEDGE*.md` file.** Two runs produce two proposal sets; the human authors one
+document from both. The tool never produces a mixed artefact — a person reads two
+sets of proposals and writes a single document, which is a different act
+entirely, and the act every knowledge document in this estate is already the
+product of.
+
+---
+
+## 0040 — Where a source carries a stable conversation id, a curated map is the join of record
+
+**Date:** 2026-08-11 · **Status:** accepted · **Builds on:** 0011 and 0017 (what
+derived identities cost us), 0033 (stage, ratify, never commit), 0038 (the three
+names) · **Relates to:** `SPEC_Chronicler.md` S1–S6 · **Source:** design thread
+
+**Context.** K0/K1 produced an **exact** conversation→project join for the Cowork
+store by curating, once and under review, the one identifier the source natively
+carries. `ingest_local_transcripts.py` had declared that join impossible —
+*"Cowork sessions never get a direct link"* — because `cwd` encodes the session's
+own path rather than the project. The impossibility was real for *derivation* and
+false for *curation*.
+
+The same property holds elsewhere, and was not noticed because of 0038's naming
+collision:
+
+- **Claude export** — `conv["uuid"]` is stable and is already the `thread_id`.
+  Current linking is exact-title-match, else a `prompt_template` substring, else
+  nothing.
+- **Gemini work** — `parse_gemini_export.py` recovers a stable 32-char hex id
+  from field 2, across all 110 files. A closed account and a finite backfill.
+- **Gemini personal** — **no conversation identity of any kind.** Takeout's My
+  Activity is a flat stream of turn-pairs; each record's `title` is the *user
+  prompt*, not a conversation title. Verified against the July export: no
+  per-record chat id, and every Gemini URL in it is the same generic
+  `gemini.google.com/gems/view`.
+
+**Decision.**
+
+1. Where a source carries a **stable native conversation id**, a **curated map
+   keyed on that id is the join of record.** Fuzzy or derived linking is not used
+   for that source. Where a source offers **more than one id space**, the map
+   keys on the **resolved, canonical** id and never on a transient one: Gemini
+   now issues `share.gemini.google/<token>` short links which resolve to
+   `gemini.google.com/share/<hex>`, and only the latter is the id the skeletons
+   and the manifest are keyed on. A key that can be reissued is not a key.
+2. Maps are **per source**, one file each, carrying the same per-row provenance
+   discipline 0033 requires: how each row was arrived at, machine-matched or
+   human-mapped, never overwritten by a re-run.
+3. **Chronicler consumes them at `project_confidence: 'manual'`**, which S1's
+   standing override rule already protects from every automated pass.
+4. **A curated map is never committed.** It joins the same class as
+   `config/project_registry.json` and `config/local.json` — authored here,
+   shipped manually, gitignored. `/config/*conversation_map.tsv` covers the
+   pattern so the next source's map inherits the rule rather than having to
+   remember it. Existing history on the remote is accepted as spilt; the rule
+   governs from here.
+
+   **This costs 0033's review mechanism, and the cost is named rather than
+   absorbed.** That ruling's safety property is *"the human reads
+   `git diff --staged` and commits"*. An untracked file produces no diff. The
+   replacement is twofold: the curator tab's staged-rows view becomes the
+   **primary** review rather than a convenience, and a **`<map>.sha256`
+   fingerprint is committed beside the map** — so the repo still records that a
+   map was ratified, when, and against what content, while carrying no title. An
+   audit trail that proves a ratification happened is not the same as one that
+   shows what was ratified, and that reduction is accepted deliberately.
+
+5. **Gemini personal keeps the scrape**, and its role is restated: the scrape's
+   product is **conversation boundaries**, not links. The two sources are
+   **jointly necessary, not merely complementary**, and the measured reason is
+   specific — the skeletons carry `created_date: None` and
+   `published_date: None`, so they hold no time at all, while Takeout holds real
+   UTC timestamps and no boundaries. `reconcile_gemini.py` exists to marry the
+   two. Retiring the scrape would not save a fuzzy match; it would cost the
+   ability to say where one conversation ends, and with it 0032's newest-first
+   ordering for that source.
+
+6. **A public share link is a transient means, revoked once captured.** The
+   scrape requires a conversation to be publicly shared. That is a **real
+   disclosure**, and Gemini's move to `share.gemini.google` short links is a
+   reasonable reading of shared chats having surfaced in web search. So sharing
+   is a step in the capture, not a state the estate leaves behind: **once a
+   skeleton is captured, the share link is revoked.** This is what makes clause
+   (5) affordable — the scrape's privacy cost becomes momentary rather than
+   standing, which was the original objection to keeping it.
+
+7. **Gaps are named, with their reason, and sized where they can be.** Two
+   stand:
+   - **Work standard chats** — out of scope. The usage predates the estate's
+     shape and was mostly learning how to direct the work rather than doing it,
+     so the recoverable knowledge is low. Measured, not missed.
+   - **Gemini personal strays** — the curated sheet **is** the enumeration, so
+     the gap is not unbounded. Three skeletons exist that the sheet does not
+     list, recovered from the stale backup and predating the scrape run's URL
+     list. Three known items, not an open horizon.
+
+   A named gap is acceptable. A silent one is the confident-zero failure, and an
+   unsized one that could have been counted is the same failure wearing a hedge.
+
+**Consequences.** A stated impossibility is retired, and the estate gains one
+pattern in place of four bespoke linking strategies. The exposure of the existing
+map narrows to columns that identify nothing.
+
+The cost is real: four curated maps to keep, and every future source needs one
+before it can be joined. That is deliberately the same trade 0011 and 0017 were
+paid for — two rounds spent cleaning up identities a generator had invented — and
+curation is the price of never paying it a third time.
+
+It also leaves the evidence system carrying almost nothing. See 0041.
+
+---
+
+## 0041 — S2 vocabulary and S6 evidence scoring are declared dormant, not deleted
+
+**Date:** 2026-08-11 · **Status:** accepted · **Follows the pattern of:** 0004
+(Layer C kept, declared unproven and dormant) · **Builds on:** 0003, 0015, 0040 ·
+**Source:** design thread
+
+**Context.** 0003 dropped vocabulary as a linking signal and named the temporal
+anchor as the root cause. 0015 revived it "with guards", superseding 0003's
+"final". With 0040, three of four sources join **exactly** through a curated map,
+and the fourth — Gemini personal — joins through ratified boundaries once
+scraped. The population the evidence system exists to score is close to empty.
+
+Machinery that runs over nothing does not fail loudly. It succeeds over an empty
+set and reports zero, which is indistinguishable from working.
+
+**Decision.** Following 0004 exactly: S2's vocabulary fingerprints and S6's
+evidence scoring are **dormant as a linking signal** — kept in the tree, declared
+unproven for the current corpus, not deleted, and not run in the default chain.
+
+They are **not** declared useless, and the distinction is the point of this
+entry. Two conditions warrant taking them back up, and the second is now the
+likelier:
+
+1. **A source appears that cannot be joined exactly.** The original condition.
+2. **A labelled set exists to evaluate them against.** 0040's curated maps are
+   the first ground truth this estate has ever had for linking. S2 was dropped
+   (0003) and revived-with-guards (0015) **without ever being evaluable** — both
+   rulings were made on argument rather than measurement, which is why they
+   contradict each other. A curated map turns "does vocabulary predict the right
+   project" from a debate into a score against known-correct answers, and lets
+   the weighting be **reverse-engineered from the answers** rather than guessed
+   at in advance.
+
+**A candidate application already exists, in a different tool.** `match_claims`'
+K4 shortlist ranks corpus chunks by `difflib.SequenceMatcher` containment —
+contiguous character runs, with **no term weighting of any kind**. The module
+already records what that costs: a code-detail claim ranked an 8,000-character
+section that plausibly held the answer at 0.003 while a 51-character stub heading
+took the top slot, *"a likely major contributor to a full run coming back with
+zero captured outcomes"* (2026-08-08, work rig). Weighting by distinctiveness is
+exactly what a containment score cannot express, and exactly what S2 computes.
+
+So the machinery may be **relocated rather than revived** — the same computation,
+serving the Knowledge Curator's shortlist instead of thread linking, where its
+output can be measured against the confirm step's own verdicts on every run.
+
+**Consequences.** 0015's "revivable with guards" stands; this restates *when*
+revival is warranted rather than withdrawing permission, and adds the condition
+that actually makes revival answerable.
+
+The risk is that dormant code rots. Mitigation: **its testers stay registered**,
+so the gate keeps exercising it even while the chain does not, and a revival —
+or a relocation — starts from something proven rather than something merely
+present.
+
+---
+
+## 0042 — A consumer repo declares its own runnable stages; the toolkit executes them under a committed repo allowlist and never widens what they can do
+
+**Date:** 2026-08-13 · **Status:** accepted · **Builds on:** 0037 (execution
+parameters come from a ratified plan, never a caller), 0033 (a staging allowlist
+declared in code), 0025 (a loopback, single-estate surface is not gated) ·
+**Precedent next door:** `sf-data-service` **0029** (object read-scope is a
+committed, fail-closed allowlist; widening is a reviewed one-line edit) and
+**0032** (the estate view delegates freshness rather than re-deriving it) ·
+**Source:** `COWORK_BRIEF_project_wizard.md` review
+
+**Context.** 0037 clause (1) says `curator_control.STAGE_TABLE` "remains the
+single place a runnable stage is declared". That held while everything runnable
+lived in this repo, and every containment surface built so far — `docs_board`'s
+`REPO_ROOT` anchor, `estate_data.resolve_contained` — treats *"stay inside this
+repo"* as structural rather than configurable.
+
+The Project Wizard asks the toolkit to run stages declared in **other repos'**
+committed manifests. That is a second declaration site, and one `verify.py` never
+sees: the auditors walk this repo. It is the first surface asked to reach outside
+this checkout on purpose, and the widening is real enough to need ruling on
+rather than assuming.
+
+**Decision.**
+
+1. **A consumer repo declares its own runnable stages**, in a committed manifest
+   at its own root. The toolkit never authors that file and never imports the
+   repo's code. Declaration belongs to the repo that owns the work — the same
+   reasoning that puts `.request.json` inside `sf-data-service` rather than in a
+   central registry.
+2. **The toolkit looks only where a committed allowlist says.** A repo absent
+   from it is never read, listed, or executed, **even if a manifest physically
+   exists there.** Widening is a reviewed, committed edit — `sfds-0029`'s
+   discipline, applied one gate further out.
+3. **The execution allowlist is derived from validated manifests at board-build
+   time**, and the execute route accepts a `(repo_key, stage_key)` pair and
+   nothing else. 0037 clause (1)'s property survives intact one repo out: **the
+   caller names the work, never the parameters of it.**
+4. **A manifest's `command` is a fixed, literal argv list with no parameter
+   slot.** 0037 permitted schema-declared parameters because the conductor needed
+   pacing; this surface does not need them, so it **does not take the
+   weakening**. A parameter slot may be added later, by its own entry, with its
+   own reason.
+5. **Containment runs through the existing `resolve_contained` against a new
+   anchor set** — never a second implementation. A `cwd` or output path escaping
+   its own declared repo root is refused exactly as a symlink escaping `docs/` is
+   refused today.
+6. **The toolkit never widens what a consumer repo can do.** A read-only tool
+   stays read-only when a button in this app invokes it rather than a terminal.
+7. **Where a consumer repo answers a question about itself, ask it.** Freshness
+   above all: delegate to the repo's own engine and show its answer, never
+   compute a second, competing number. `sfds-0032`'s precedent, adopted.
+
+**Consequences.** Two are uncomfortable and are stated rather than absorbed.
+
+**The declaration of what is executable now lives outside the gate.**
+`verify.py`'s auditors walk this repo; a manifest in another repo is reviewed by
+whoever reviews that repo. Today that is one person on a solo work rig, which is
+an adequate answer *and an explicitly time-limited one*. It stops being adequate
+the moment a pilot repo gains a second contributor, and it is recorded here so
+that change is noticed rather than quietly inherited.
+
+**The repo allowlist is config, not code.** 0033 chose code deliberately, so that
+widening was "a commit that the gate sees and a reviewer reads, not a config
+edit". This allowlist must be per-host — MCF repos sit at different absolute
+paths on different machines, which is exactly what `machines.json` exists to
+handle — so a code constant is not available without hardcoding paths. It is
+committed and reviewed like `machines.json`, but **no auditor covers it**. A step
+down from 0033's posture, taken knowingly.
+
+Clauses (3) and (4) are the mitigation for both: a manifest nobody reviewed still
+cannot receive a parameter, and still cannot name a path outside its own repo.
+
+---
+
+## 0043 — A ruling from another repo is cited with its repo, at every mention
+
+**Date:** 2026-08-13 · **Status:** accepted · **Relates to:** `docs/README.md`
+§1 (the trinity), `sf-data-service` 0023 (that project's docs follow the same MCF
+convention) · **Source:** `COWORK_BRIEF_project_wizard.md` review
+
+**Context.** That brief's "Depends on" line listed `0023, 0025, 0029, 0031, 0036,
+0037` — of which **0029 and 0032 are `sf-data-service`'s entries, not this
+repo's**. Here, 0029 is *"a deposit found to carry more than its contract is
+replaced, never edited"* and 0032 is the Knowledge Curator's scoping. Both stop
+conditions later in the same brief cite them bare.
+
+A reader resolving those against this log gets a confidently wrong answer, and it
+is nobody's mistake: several repos now follow the same docs convention and each
+keeps its own `00NN` sequence, so collisions are guaranteed rather than unlucky.
+The shared convention is a strength; ambiguous citation is the cost it has not
+yet paid for.
+
+**Decision.** A reference to another repo's ruling **carries that repo's name at
+every mention**, not only in a depends-on list — `sf-data-service 0029`, or a
+short consistent prefix such as `sfds-0029`. **A bare `00NN` always means this
+repo's log.** Applies to briefs, reports, runbooks, DECISIONS entries and code
+comments alike.
+
+**Consequences.** Cheap, and it removes a whole class of confident-wrong reading
+before the estate grows a third and fourth repo keeping the same convention. It
+also makes the shared convention visible where today it is only implied.
