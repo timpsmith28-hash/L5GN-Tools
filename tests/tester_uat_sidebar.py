@@ -250,6 +250,67 @@ def run() -> list[str]:
         if (root / "docs" / "UAT_invalid_results.md").exists():
             v.append("uat_sidebar: a refused emit must not create a results log")
 
+        # --- Task 6 (COWORK_BRIEF_ui_witness): [G]/[W]/[H] markers split the
+        # emitted log into Machine-verified / Human ruling, cited from a
+        # witness artefact, never a human verdict field for machine items.
+        _write(root / "docs" / "UAT_layered.md",
+              "# uat\n\n"
+              "## Sec\n\n"
+              "- [ ] [W] **W1** a witness-shaped check.\n"
+              "- [ ] [H] **H1** a judgement call.\n")
+        # No witness artefact yet: honest absence, not silent omission.
+        no_witness_entries = [{"id": "H1", "verdict": "walked", "evidence": "yes, that's right"}]
+        out_nw = uat_sidebar.emit_results_log(root, "layered", no_witness_entries)
+        text_nw = (root / "docs" / "UAT_layered_results.md").read_text(encoding="utf-8")
+        if "Machine-verified" not in text_nw or "Human ruling" not in text_nw:
+            v.append("uat_sidebar: a sheet with layer markers must split into "
+                     "Machine-verified / Human ruling sections")
+        if "No witness artefact found" not in text_nw:
+            v.append("uat_sidebar: a missing witness artefact must be reported "
+                     "in the log, not silently omitted")
+        for forbidden in ("passed", '"ok"', "result="):
+            if forbidden in text_nw:
+                v.append(f"uat_sidebar: emitted log must never carry {forbidden!r}")
+
+        # Now with a witness artefact present: W1 is cited, not human-verdicted.
+        witness_dir = root / "data" / "witness"
+        witness_dir.mkdir(parents=True, exist_ok=True)
+        import json as _json
+        (witness_dir / "layered.json").write_text(_json.dumps({
+            "sheet": "layered", "ran_at": "2026-08-03T00:00:00+00:00",
+            "host": "fixture", "commit": "deadbee", "dirty": False,
+            "fixture": "tests/witness/fixtures/x",
+            "items": [{"id": "W1", "outcome": "matched", "detail": "rendered as expected"}],
+        }), encoding="utf-8")
+        out_w = uat_sidebar.emit_results_log(
+            root, "layered",
+            [{"id": "H1", "verdict": "walked", "evidence": "still correct"}],
+            mode="append")
+        text_w = (root / "docs" / "UAT_layered_results.md").read_text(encoding="utf-8")
+        if "[matched]" not in text_w:
+            v.append("uat_sidebar: a cited witness observation must appear "
+                     "inline for its item, using the schema's outcome word")
+        if "data/witness/layered.json" not in text_w:
+            v.append("uat_sidebar: the citation must name the artefact path, "
+                     "as a visible line, not an HTML comment")
+        # The citation line itself must not sit inside an HTML comment -- only
+        # the leading `<!-- uat: ... -->` stamp comment is allowed to be one.
+        body_after_stamp = text_w.split("-->", 1)[-1]
+        if "data/witness/layered.json" not in body_after_stamp:
+            v.append("uat_sidebar: the citation must appear as visible body "
+                     "text after the uat stamp comment, not inside a comment")
+        for forbidden in ('"passed"', '"ok"', '"result"'):
+            if forbidden in text_w:
+                v.append(f"uat_sidebar: emitted log must never carry {forbidden!r}")
+
+        # A legacy sheet with no markers at all must keep the old flat shape.
+        legacy_entries = [{"id": "A1", "verdict": "walked", "evidence": "unchanged shape"}]
+        uat_sidebar.emit_results_log(root, "fixture", legacy_entries, mode="append")
+        text_legacy = rp.read_text(encoding="utf-8")
+        if "Machine-verified" in text_legacy.split("Additional walk", 2)[-1]:
+            v.append("uat_sidebar: a sheet with no layer markers must keep the "
+                     "original flat-by-section shape, not gain a machine split")
+
     # --- containment holds against the REAL anchor, same shape as the board ---
     repo = estate_data.REPO_ROOT
     outside = Path(tempfile.gettempdir()) / "definitely-not-in-the-repo.md"

@@ -27,6 +27,7 @@ legend lookup back to this module.
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -57,11 +58,15 @@ _TAG = {"walked": "EVIDENCE", "deferred": "DEFERRED",
 #: practice (`## A · label`, `## Part 0 ▸ label`) -- the sidebar does not need
 #: to distinguish heading depth, only to group items under the nearest one.
 _SECTION = re.compile(r"^#{1,3}\s+(?P<label>.+?)\s*$")
-#: An item line: `- [ ] **<id>** text`. The id is whatever sits between the
-#: bold markers -- `A1`, `2.1`, `0.4`, `E7` all match, because the sheets we
-#: have actually use all three shapes (see UAT_docs_board.md, UAT_work_rig_solo.md).
+#: An item line: `- [ ] **<id>** text`, with an optional layer marker between
+#: the checkbox and the id -- `- [ ] [W] **B7.** ...` (DECISIONS 0031, the
+#: gate/witness/walk-sheet assignment rule). The id is whatever sits between
+#: the bold markers -- `A1`, `2.1`, `0.4`, `E7` all match, because the sheets
+#: we have actually use all three shapes (see UAT_docs_board.md,
+#: UAT_work_rig_solo.md).
 _ITEM = re.compile(
-    r"^\s*[-*]\s*\[(?P<mark>[ xX~])\]\s*\*\*(?P<id>[^*]+)\*\*\s*(?P<text>.*)$")
+    r"^\s*[-*]\s*\[(?P<mark>[ xX~])\]\s*(?:\[(?P<layer>[GWH])\]\s*)?"
+    r"\*\*(?P<id>[^*]+)\*\*\s*(?P<text>.*)$")
 
 #: The inverse of `build_results_body`'s per-item shape, for resuming a walk
 #: already partly recorded in an emitted results log:
@@ -140,7 +145,8 @@ def parse_sheet(path: Path) -> dict:
             mark = im.group("mark")
             state = "open" if mark == " " else ("caveat" if mark in "~" else "done")
             cur_item = {"id": im.group("id").strip(), "state": state,
-                        "text": im.group("text").strip(), "_note": []}
+                        "text": im.group("text").strip(),
+                        "layer": im.group("layer"), "_note": []}
             cur["items"].append(cur_item)
             continue
         if not line.strip():
@@ -300,11 +306,64 @@ def _uat_comment(stamp: dict) -> str:
             f"host={stamp['host']} walked={stamp['walked']} -->")
 
 
-def build_results_body(stem: str, sheet_rel: str, sections: list[dict],
+def witness_citation_line(root: Path, stem: str, current_commit: str) -> tuple[str, dict]:
+    """A visible prose line citing the witness run backing this sheet's
+    machine-verified section -- **never an HTML comment** (DECISIONS 0031
+    Task 6: a comment beside the uat stamp would eventually be read as a
+    second stamp). Points at a run that happened elsewhere; it carries enough
+    to re-derive the result (artefact path, fixture, commit, when it ran),
+    never the result itself.
+
+    Returns ``(line, items)`` where ``items`` maps item id ->
+    ``{"outcome", "detail"}``. If no artefact exists this is reported in the
+    line itself, never silently omitted (0031 Task 6: a missing artefact must
+    not produce a results log that looks complete).
+    """
+    path = root / "data" / "witness" / f"{stem}.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    except (OSError, ValueError):
+        record = None
+
+    if record is None:
+        return (
+            f"_No witness artefact found at `data/witness/{stem}.json` for this "
+            f"sheet. The machine-verified section below has no witness "
+            f"observations to cite -- reported here, not silently omitted._",
+            {},
+        )
+
+    witness_commit = record.get("commit")
+    stale = bool(witness_commit) and witness_commit != current_commit
+    stale_note = (
+        f" **Stale**: the witness ran at commit `{witness_commit}`, this walk "
+        f"is at `{current_commit}`." if stale else "")
+    line = (
+        f"Machine-verified items below are cited from a witness run: "
+        f"`data/witness/{stem}.json`, fixture `{record.get('fixture', '?')}`, "
+        f"commit `{witness_commit or '?'}`, ran {record.get('ran_at', '?')} on "
+        f"`{record.get('host', '?')}`. Re-run the witness at that commit "
+        f"against that fixture to re-derive these observations.{stale_note}")
+    items = {
+        it["id"]: {"outcome": it.get("outcome"), "detail": it.get("detail", "")}
+        for it in record.get("items", []) if "id" in it
+    }
+    return line, items
+
+
+def build_results_body(root: Path, stem: str, sheet_rel: str, sections: list[dict],
                        entries_by_id: dict, stamp: dict) -> str:
     """The body markdown for a *new* results log (no stamp comment -- the
     caller prepends that, so an append can keep the ORIGINAL stamp rather than
-    overwrite it with today's)."""
+    overwrite it with today's).
+
+    If any item on the sheet carries a `[G]`/`[W]`/`[H]` layer marker
+    (DECISIONS 0031's assignment rule), the log splits into a
+    **Machine-verified** section (`[G]`/`[W]` items, cited from a witness run,
+    no human verdict field) and a **Human ruling** section (`[H]` items only,
+    exactly as long as Tim's judgement is required). A sheet with no markers
+    at all keeps the original flat-by-section shape unchanged.
+    """
     title = stem.replace("_", " ")
     lines: list[str] = []
     lines.append(f"# Results log — {title} (walked {stamp['walked']}, {stamp['host']})")
@@ -320,33 +379,98 @@ def build_results_body(stem: str, sheet_rel: str, sections: list[dict],
     lines.append("---")
     lines.append("")
 
+    has_layers = any(it.get("layer") for sec in sections for it in sec["items"])
     not_walked: list[tuple[str, str, str, str]] = []
     any_items = False
-    for sec in sections:
-        sec_items = [it for it in sec["items"] if it["id"] in entries_by_id]
-        if not sec_items:
-            continue
-        any_items = True
-        lines.append(f"## {sec['label']}")
-        lines.append("")
-        for it in sec_items:
-            e = entries_by_id[it["id"]]
-            tag = _TAG[e["verdict"]]
-            evidence = (e.get("evidence") or "").strip()
-            lines.append(f"- **{it['id']}** {it['text']}")
-            # Pasted terminal output must survive verbatim -- a fenced block,
-            # never a paraphrase, and never re-wrapped.
-            if "\n" in evidence:
-                lines.append(f"  [{tag}]")
-                lines.append("  ```")
-                for ln in evidence.splitlines():
-                    lines.append(f"  {ln}")
-                lines.append("  ```")
-            else:
-                lines.append(f"  [{tag}] {evidence}".rstrip())
+
+    def _item_lines(it: dict, e: dict) -> list[str]:
+        tag = _TAG[e["verdict"]]
+        evidence = (e.get("evidence") or "").strip()
+        out = [f"- **{it['id']}** {it['text']}"]
+        # Pasted terminal output must survive verbatim -- a fenced block,
+        # never a paraphrase, and never re-wrapped.
+        if "\n" in evidence:
+            out.append(f"  [{tag}]")
+            out.append("  ```")
+            for ln in evidence.splitlines():
+                out.append(f"  {ln}")
+            out.append("  ```")
+        else:
+            out.append(f"  [{tag}] {evidence}".rstrip())
+        out.append("")
+        return out
+
+    if not has_layers:
+        for sec in sections:
+            sec_items = [it for it in sec["items"] if it["id"] in entries_by_id]
+            if not sec_items:
+                continue
+            any_items = True
+            lines.append(f"## {sec['label']}")
             lines.append("")
-            if e["verdict"] != "walked":
-                not_walked.append((it["id"], it["text"], tag, evidence))
+            for it in sec_items:
+                e = entries_by_id[it["id"]]
+                lines.extend(_item_lines(it, e))
+                if e["verdict"] != "walked":
+                    not_walked.append(
+                        (it["id"], it["text"], _TAG[e["verdict"]],
+                         (e.get("evidence") or "").strip()))
+    else:
+        witness_line, witness_items = witness_citation_line(root, stem, stamp["commit"])
+        machine_entered = [
+            it for sec in sections for it in sec["items"]
+            if it.get("layer") in ("G", "W") and it["id"] in entries_by_id]
+        # A [G]/[W] item never given a UI verdict still belongs here if the
+        # witness has an observation for it -- its status comes from the
+        # witness/gate, never from a human picking a verdict.
+        machine_witness_only = [
+            it for sec in sections for it in sec["items"]
+            if it.get("layer") in ("G", "W") and it["id"] in witness_items
+            and it["id"] not in entries_by_id]
+        # An item with NO marker at all (the rule couldn't place it -- see
+        # DECISIONS 0031's "unplaceable case" stop condition) defaults into
+        # Human ruling rather than vanishing from the log: an entered verdict
+        # must never be silently dropped just because a marker is missing.
+        human_entered = [
+            it for sec in sections for it in sec["items"]
+            if it.get("layer") in ("H", None) and it["id"] in entries_by_id]
+
+        lines.append("## Machine-verified")
+        lines.append("")
+        lines.append(witness_line)
+        lines.append("")
+        machine_all = machine_entered + machine_witness_only
+        if machine_all:
+            any_items = True
+            for it in machine_all:
+                obs = witness_items.get(it["id"])
+                lines.append(f"- **{it['id']}** {it['text']}")
+                if obs:
+                    detail = f" — {obs['detail']}" if obs.get("detail") else ""
+                    lines.append(f"  [{obs['outcome']}]{detail}")
+                else:
+                    lines.append(
+                        "  [no witness observation] not present in the cited "
+                        "witness artefact for this item id")
+                lines.append("")
+        else:
+            lines.append("_No `[G]`/`[W]` items were recorded on this walk._")
+            lines.append("")
+
+        lines.append("## Human ruling")
+        lines.append("")
+        if human_entered:
+            any_items = True
+            for it in human_entered:
+                e = entries_by_id[it["id"]]
+                lines.extend(_item_lines(it, e))
+                if e["verdict"] != "walked":
+                    not_walked.append(
+                        (it["id"], it["text"], _TAG[e["verdict"]],
+                         (e.get("evidence") or "").strip()))
+        else:
+            lines.append("_No `[H]` items were recorded on this walk._")
+            lines.append("")
 
     if not any_items:
         lines.append("_No items were recorded on this walk._")
@@ -360,7 +484,9 @@ def build_results_body(stem: str, sheet_rel: str, sections: list[dict],
         for iid, text, tag, ev in not_walked:
             lines.append(f"- **{iid}** [{tag}] {text} — {ev}")
     else:
-        lines.append("Everything recorded on this walk carries a `[EVIDENCE]` verdict.")
+        lines.append(
+            "Everything recorded on this walk carries a `[EVIDENCE]` verdict "
+            "or a witness observation.")
     lines.append("")
     return "\n".join(lines)
 
@@ -413,7 +539,7 @@ def emit_results_log(root: Path, stem: str, entries: list[dict],
         # read still knows which commit produced which section.
         stamp = stamp_fields()
         addendum_body = build_results_body(
-            stem, view["sheet_rel"], view["sections"], entries_by_id, stamp)
+            root, stem, view["sheet_rel"], view["sections"], entries_by_id, stamp)
         # Drop the addendum's own title line (the file already has one); keep
         # everything from "Partner to" onward as a fresh dated block.
         addendum = "\n".join(addendum_body.splitlines()[2:])
@@ -424,7 +550,7 @@ def emit_results_log(root: Path, stem: str, entries: list[dict],
     else:
         stamp = stamp_fields()
         body = build_results_body(
-            stem, view["sheet_rel"], view["sections"], entries_by_id, stamp)
+            root, stem, view["sheet_rel"], view["sections"], entries_by_id, stamp)
         text = _uat_comment(stamp) + "\n\n" + body
         status = "created"
 
