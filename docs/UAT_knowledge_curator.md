@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=479f3eb -->
 # UAT walk-sheet — Knowledge Curator, K0–K5
 
 **Brief:** `docs/COWORK_BRIEF_knowledge_curator.md`

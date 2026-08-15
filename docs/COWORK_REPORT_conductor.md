@@ -18,6 +18,7 @@ surface). Those remain to be scoped in a future round.
 Three flags, additive and off by default, in `chronicler/pipeline/extract_claims.py`
 (K2) and `chronicler/pipeline/match_claims.py` (K4):
 
+
 - **`--cool-down SECONDS`** (default `0`) — sleeps *between* conversations
   after a group that actually made a network call, never mid-conversation and
   never after the last group. In K2 a "group" is a single conversation or a

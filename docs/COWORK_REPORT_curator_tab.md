@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=9212594 -->
 # Cowork report — the Knowledge Curator tab
 
 **Brief:** `docs/COWORK_BRIEF_curator_tab.md`
