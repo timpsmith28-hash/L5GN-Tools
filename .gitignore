@@ -10,6 +10,13 @@ data/urls.txt
 # codenames. Authored here, shipped by scp like local.json, never committed.
 /config/project_registry.json
 
+# Curated conversation maps (DECISIONS 0040) -- one per source. They carry
+# conversation titles, which for the MCF map means employer project and thread
+# names. Same class as project_registry.json: authored here, shipped manually,
+# never committed. The pattern covers future per-source maps so the next one
+# does not have to remember this rule.
+/config/*conversation_map.tsv
+
 # Chronicler ingest RUNTIME data (per-machine, never code). Only chronicler/ code is tracked.
 /chronicler/**/*.db
 /chronicler/**/*.db-journal
@@ -41,3 +48,7 @@ venv/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Stray tester output at repo root (tester_ledger writes it; nothing reads it).
+/test_ledger.jsonl
+.fuse_hidden*
