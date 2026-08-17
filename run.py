@@ -467,6 +467,24 @@ APP_DEFAULT_PORT = 8002  # distinct from serve's 8001 (deprecated but still
 REVIEW_DEFAULT_PORT = APP_DEFAULT_PORT  # old name, kept as an alias
 
 
+def _reachability_line(label: str, host: str, port: int, is_loopback_host) -> str:
+    """The one line of the startup banner that claims where this bind can be
+    reached from. Pulled out as a pure function (correctness sweep, finding 4)
+    so it can be asserted against directly: it must never claim a tailnet/LAN
+    URL is reachable when the bind is loopback-only, which is exactly the
+    DECISIONS 0025 case this banner sits right below in `_cmd_app`.
+
+    ``is_loopback_host`` is passed in rather than imported, so this stays
+    testable without importing `chronicler.review.core` (and everything that
+    drags in) just to check a print statement.
+    """
+    if is_loopback_host(host):
+        return (f"{label}: bound to loopback only -- reachable from this "
+                f"machine, not from the tailnet or the LAN.")
+    return (f"{label}: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
+            f"on the LAN: http://<knight-192.168.x>:{port}/")
+
+
 def _cmd_app(args: argparse.Namespace, argv: list[str], label: str = "app") -> int:
     """The single entry point (COWORK_BRIEF_unified_app.md Task 4; DECISIONS 0035).
 
@@ -673,8 +691,13 @@ def _cmd_app(args: argparse.Namespace, argv: list[str], label: str = "app") -> i
         print(f"{label}: curator routes ENABLED -- data_dir={curator.data_dir} "
               f"available={curator.available}")
     print(f"{label}: binding {args.host}:{port}")
-    print(f"{label}: phone on the tailnet: http://<knight-100.x>:{port}/  |  "
-          f"on the LAN: http://<knight-192.168.x>:{port}/")
+    # Mesh-era text (COWORK_BRIEF_unified_app.md Task 6) advertised tailnet/LAN
+    # URLs unconditionally, contradicting the loopback refusal enforced a few
+    # lines above for any non-personal estate (DECISIONS 0025) -- and doing so
+    # with unfilled `<knight-...>` placeholders even on a machine that was
+    # never the knight. Only print reachability claims that are actually true
+    # of this bind (correctness sweep, finding 4).
+    print(_reachability_line(label, args.host, port, core.is_loopback_host))
     print(f"{label}: Datasette mounted at /db (sub-app, snapshot per request "
           f"DECISIONS 0013/0007; COWORK_BRIEF_unified_app.md Task 3) -- "
           f"see GET /api/health for whether it actually came up on this run.")

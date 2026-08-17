@@ -17,7 +17,7 @@ Walk against `docs/COWORK_BRIEF_curator_correction.md`'s acceptance checks. Mark
 - [ ] `[G]` `knowledge_index.py` run directly (not through the tab) against a personal-estate map produces correct output — confirms the shared resolver, not just the tab's use of it.
 - [ ] `[G]` A deposit built (`run.py deposit`, or the equivalent test harness) from a machine with a populated `data/knowledge_curator/` carries nothing under that path in the resulting outbox.
 - [ ] `[G]` The new deposit auditor fails loudly if the exclusion is bypassed — already verified independently during the build (a monkeypatched leak past the builder's own check was still caught by the auditor's outbox scan); re-confirm on your own machine if you want a second look.
-- [ ] `[W]` `python verify.py` is green (9 auditors + 72 testers at time of writing), and the printed counts match what's claimed in the report.
+- [ ] `[W]` `python verify.py` is green (9 auditors + 73 testers at time of writing), and the printed counts match what's claimed in the report.
 
 ## Also worth walking, found during the build rather than named in the brief
 

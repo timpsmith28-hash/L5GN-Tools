@@ -1,6 +1,6 @@
 # Cowork report — curator correction (DECISIONS 0044/0046)
 
-Built against `docs/COWORK_BRIEF_curator_correction.md`, ratified 2026-08-17 (commit `0ddf59c`). Gate: **9 auditors + 72 testers, GREEN.**
+Built against `docs/COWORK_BRIEF_curator_correction.md`, ratified 2026-08-17 (commit `0ddf59c`). Gate: **9 auditors + 73 testers, GREEN.**
 
 This is testimony about what was built, not a status board — it will not be updated as the tree moves on.
 
@@ -44,4 +44,4 @@ The reason string is `curator_excluded_both_estate` (`curator_data.CURATOR_ESTAT
 
 ## Gate
 
-9 auditors + 72 testers, all green. New/extended testers: `tester_curator_data` (estate gate, per-estate path resolution, resolver correctness), `tester_curator_ratify` (correction validation and refusal paths, revoke-drops-from-resolved), `tester_deposit` (the declared exclusion), plus the new `auditor_deposit_exclusion`.
+9 auditors + 73 testers, all green. New/extended testers: `tester_curator_data` (estate gate, per-estate path resolution, resolver correctness), `tester_curator_ratify` (correction validation and refusal paths, revoke-drops-from-resolved), `tester_deposit` (the declared exclusion), plus the new `auditor_deposit_exclusion`.
