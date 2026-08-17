@@ -16,6 +16,9 @@ Usage:
                                               # after any route/schema/gate change,
                                               # before committing -- the gate refuses
                                               # a stale render)
+    python run.py pin bump <path> [--apply]  # (re)compute an artefact's content
+                                              # hash and write its pin beside it
+                                              # (DECISIONS 0045; dry-run by default)
 
 Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py app    [--port N] [--host H]   # the deck: queue + estate + docs
@@ -828,6 +831,72 @@ def _cmd_render_architecture() -> int:
     return 0
 
 
+def _cmd_pin(rest: list[str]) -> int:
+    """`python run.py pin bump <artefact-path> [--apply]` -- (re)compute an
+    artefact's content hash and write (or dry-run) the pin file beside it.
+
+    DECISIONS 0045 clause 4: reading a pin is read-only and lives in
+    `l5gntools/pin.py`; writing or bumping one is not a scanner, so it lives
+    here, dry-run by default. This is the only sanctioned writer of a pin
+    file -- nothing in `l5gntools/` ever writes one (0034 clause 1 untouched).
+
+    Bumping is a deliberate act, invoked by a human who just ratified a
+    change to the artefact -- it does not decide whether a bump is
+    warranted (0045 clause 5: working ahead of a pin is a normal state, not
+    an error)."""
+    p = argparse.ArgumentParser(prog="run.py pin")
+    sub = p.add_subparsers(dest="subcommand", required=True)
+    bump = sub.add_parser("bump", help="(re)compute and write a pin for an artefact")
+    bump.add_argument("artefact", help="path to the artefact to pin (repo-relative "
+                                        "or absolute)")
+    bump.add_argument("--apply", action="store_true",
+                       help="write the pin file (default: dry-run, prints only)")
+    args = p.parse_args(rest)
+
+    from pathlib import Path
+    from datetime import date
+
+    from l5gntools import config
+    from l5gntools import pin as pin_mod
+    from l5gntools.common import TOOLKIT_ROOT, run_git
+
+    raw = Path(args.artefact)
+    artefact = (raw if raw.is_absolute() else (TOOLKIT_ROOT / raw)).resolve()
+    if not artefact.is_file():
+        print(f"pin bump: FAILED -- artefact not found: {artefact}", file=sys.stderr)
+        return 2
+    try:
+        rel = artefact.relative_to(TOOLKIT_ROOT).as_posix()
+    except ValueError:
+        rel = artefact.as_posix()
+
+    digest = pin_mod.hash_file(artefact)
+    pin_path = artefact.with_name(artefact.name + ".sha256")
+
+    resolver = pin_mod.commit_exists_resolver()
+    anchor = run_git(TOOLKIT_ROOT, "rev-parse", "HEAD") if resolver else None
+    line = pin_mod.format_pin_line(digest, rel)
+    comment = pin_mod.format_pin_comment(
+        origin="local", anchor=anchor or None,
+        date=date.today().isoformat(), host=config.hostname())
+
+    existing = pin_mod.parse_pin_file(pin_path)
+    if existing is not None and existing.sha256 == digest:
+        print(f"pin bump: {rel} already matches its pin at {pin_path} "
+              f"(sha256 {digest[:8]}...) -- nothing to do.")
+        return 0
+
+    print(f"pin bump: {'writing' if args.apply else 'would write'} {pin_path}:")
+    print(f"  {line}")
+    print(f"  {comment}")
+    if not args.apply:
+        print("(dry-run -- pass --apply to write)")
+        return 0
+    pin_path.write_text(line + "\n" + comment + "\n", encoding="utf-8")
+    print(f"pin bump: wrote {pin_path}")
+    return 0
+
+
 def _cmd_tool(name: str, args: argparse.Namespace) -> int:
     mod = BY_NAME[name]
     targets = resolve_targets(args.target, args.all, args.include_third_party)
@@ -852,13 +921,15 @@ def main(argv: list[str]) -> int:
         return _cmd_intake(argv[1:])
     if argv and argv[0] == "scrape":
         return _cmd_scrape(argv[1:])
+    if argv and argv[0] == "pin":
+        return _cmd_pin(argv[1:])
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'census' / "
                         "'render-architecture' / 'config' / 'deposit' / 'consume' / "
                         "'ingest' / 'app' / 'window' / 'serve' / 'review' / "
-                        "'backup' / 'scrape' / 'conductor' "
+                        "'backup' / 'scrape' / 'conductor' / 'pin' "
                         "('serve' and 'review' are deprecated aliases for 'app', "
                         "kept for one round)")
     p.add_argument("--target", help="sibling folder name or path")

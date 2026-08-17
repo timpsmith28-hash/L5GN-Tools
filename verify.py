@@ -15,6 +15,7 @@ import sys
 AUDITORS: list[str] = [
     "auditors.auditor_architecture_current",
     "auditors.auditor_cli_contract",
+    "auditors.auditor_conversation_map_pin",
     "auditors.auditor_dependency_direction",
     "auditors.auditor_deposit_exclusion",
     "auditors.auditor_doc_claims",
@@ -101,6 +102,8 @@ TESTERS: list[str] = [
     "tests.tester_candidates",
     "tests.tester_conductor_run",
     "tests.tester_run_banner",
+    "tests.tester_pin",
+    "tests.tester_conversation_map_pin",
 ]
 
 

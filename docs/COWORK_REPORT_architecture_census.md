@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=5016eb8 -->
 # Cowork report — architecture census (DECISIONS 0030)
 
 **Pair:** `docs/COWORK_BRIEF_architecture_census.md`. Session 2026-08-17.

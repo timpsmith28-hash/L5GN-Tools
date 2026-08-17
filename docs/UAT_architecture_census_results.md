@@ -1,4 +1,5 @@
 <!-- uat: commit=001d037 dirty=false host=LucasGoonPC walked=2026-08-17 -->
+<!-- gate-frozen: commit=5016eb8 -->
 
 # UAT results — architecture census (DECISIONS 0030)
 
