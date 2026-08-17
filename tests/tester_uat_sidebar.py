@@ -16,6 +16,7 @@ regardless of whether staging had anything to attach to.
 """
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -72,6 +73,32 @@ def run() -> list[str]:
             v.append("uat_sidebar: no results log was written; results_exists must be False")
         if view["evidence_in_results_log"]:
             v.append("uat_sidebar: no results log means no evidence-in-results finding")
+
+        # --- sheet_rel/results_rel are the RESOLVED path, not the typed stem --
+        # (correctness sweep, finding 6). A citation built from what the caller
+        # typed is not provenance -- these must always agree with the path the
+        # code actually resolved and read, not with f"UAT_{stem}...".
+        expected_sheet_rel = (root / "docs" / "UAT_fixture.md").relative_to(root).as_posix()
+        if view["sheet_rel"] != expected_sheet_rel:
+            v.append(f"uat_sidebar: sheet_rel must be the resolved path, got "
+                     f"{view['sheet_rel']!r}, expected {expected_sheet_rel!r}")
+
+        # The regression this guards against is Windows-specific: NTFS resolves
+        # a mismatched-case request to the real file, so it is the one platform
+        # where "built from stem" and "built from the resolved path" can
+        # actually disagree and be observed disagreeing. On a case-sensitive
+        # filesystem the mismatched request simply refuses (no_sheet) before
+        # either path is ever built, so there is nothing to compare -- the
+        # win-only guard is the correctness sweep's own diagnosis of the bug,
+        # not a weaker test.
+        if os.name == "nt":
+            mismatched = uat_sidebar.sheet_view(root, "Fixture")  # real stem is "fixture"
+            if mismatched["sheet_rel"] != expected_sheet_rel:
+                v.append(
+                    "uat_sidebar: opening a sheet with mismatched case must cite "
+                    f"the path actually resolved ({expected_sheet_rel!r}), got "
+                    f"{mismatched['sheet_rel']!r} -- a citation built from the "
+                    f"caller's keystrokes, not from provenance")
 
         # --- an unticked sheet whose results log carries the ticks ------------
         # The board's ruling (UAT_docs_board_results.md, B1/B2): an unticked

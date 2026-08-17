@@ -244,10 +244,19 @@ def sheet_view(root: Path, stem: str) -> dict:
     # change what emit does; it only offers prior verdicts back to the caller.
     prior_entries = parse_results_log(rp) if results_exists else {}
 
+    # The displayed path is a citation (E2 in UAT_ui_witness_results.md): it
+    # must name what was actually resolved and read, never what the caller
+    # typed. Building it from `stem` instead of `sp`/`rp` let a mismatched-case
+    # request (e.g. "UI_Witness") produce a banner citing a path that does not
+    # exist on disk as written -- silently correct on Windows, a different
+    # answer on a case-sensitive filesystem (correctness sweep, finding 6).
+    sheet_rel = sp.relative_to(root).as_posix()
+    results_rel = rp.relative_to(root).as_posix()
+
     return {
         "stem": stem,
-        "sheet_rel": f"{DOCS_DIRNAME}/UAT_{stem}.md",
-        "results_rel": f"{DOCS_DIRNAME}/UAT_{stem}_results.md",
+        "sheet_rel": sheet_rel,
+        "results_rel": results_rel,
         "results_exists": results_exists,
         "sheet_boxes": sheet_boxes,
         "results_boxes": results_boxes,
