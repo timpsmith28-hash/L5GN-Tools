@@ -3,7 +3,7 @@
 **Brief:** `docs/COWORK_BRIEF_unified_app.md`
 **Walk-sheet:** `docs/UAT_unified_app.md` · **Results:** `docs/UAT_unified_app_results.md`
 **Built across:** `8ba9751`..`f1d7df3`, plus three live-walk fixes.
-**Reported:** 2026-08-17, at `174e57e`.
+**Reported:** 2026-08-17, at `174e57e`. 
 
 ---
 
