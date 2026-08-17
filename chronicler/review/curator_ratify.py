@@ -3,25 +3,32 @@
 The K0 ratification screen's logic: render ``candidate_map.tsv`` as
 per-candidate cards grouped by outcome (all six K0 counts, including the
 zeroes), compute the evidence display (normalised text with the matched span
-marked), and append a ratified row to ``config/mcf_conversation_map.tsv``,
+marked), and append a ratified row to this machine's per-estate ratified
+map (``curator_data.ratified_map_path_for_estate`` -- DECISIONS 0039/0044),
 staged and never committed -- per DECISIONS 0033.
 
 Every rule below is load-bearing and tester-proven, not merely documented:
 
-  * **Per-row actions only.** Every public "ratify" function here takes
-    exactly one candidate (or, for a same-project collision, exactly the
-    two rows that collision paired) -- there is no list parameter anywhere
-    in this module that could become a bulk-accept, because there is
-    nowhere to put one.
-  * **Never edits or removes an existing row.** ``append_ratified_row`` is a
-    pure byte-append (opened ``"a"``, never ``"r+"`` or a rewrite), so there
-    is no code path in this module that can touch a byte already on disk.
+  * **Per-row actions only.** Every public "ratify"/"correct" function here
+    takes exactly one candidate (or, for a same-project collision, exactly
+    the two rows that collision paired) -- there is no list parameter
+    anywhere in this module that could become a bulk-accept, because there
+    is nowhere to put one.
+  * **Never edits or removes an existing row.** ``_append_row_bytes`` is a
+    pure byte-append (opened ``"a"``, never ``"r+"`` or a rewrite), and it
+    is the ONLY code in this module that writes a byte -- both
+    ``append_ratified_row`` (session_id must be NEW) and
+    ``append_correction_row`` (session_id must already EXIST, DECISIONS
+    0046) call it and only it. Correcting a ratification means appending a
+    new row for the same key, never touching the old one.
   * **Provenance is permanent.** Every appended row's ``notes`` field carries
     a machine-parseable ``[provenance:...]`` tag recording how the row was
     arrived at -- machine-matched by which pass, human-picked from a refused
-    collision, or hand-mapped with no candidate at all (0033).
+    collision, or hand-mapped with no candidate at all (0033). A correcting
+    row additionally carries a ``[status:corrected]``/``[status:revoked]``
+    tag (0046 clause 3) and a free-text reason.
   * **Staged, never committed.** ``stage_ratified_map`` runs exactly
-    ``git add -- config/mcf_conversation_map.tsv``, matching 0033's
+    ``git add -- <this machine's ratified map path>``, matching 0033's
     code-declared path allowlist. Nothing here calls ``git commit``.
   * **Honours K0's own refusal rules rather than re-litigating them**: a
     different-project collision is not offered a "ratify" action by this
@@ -35,9 +42,10 @@ from pathlib import Path
 
 from l5gntools.common import run_git
 
-from .curator_data import (CANDIDATE_MAP_PATH, RATIFIED_MAP_PATH,
-                            RATIFIED_MAP_HEADER, _load_tsv_rows,
-                            ratified_map_rows)
+from .curator_data import (CANDIDATE_MAP_PATH, MAP_FILENAMES,
+                            RATIFIED_MAP_PATH, RATIFIED_MAP_HEADER,
+                            _load_tsv_rows, _parse_status_tag,
+                            ratified_map_rows, resolve_map_rows)
 
 _PIPE = Path(__file__).resolve().parents[2] / "chronicler" / "pipeline"
 if str(_PIPE) not in sys.path:
@@ -51,6 +59,13 @@ PROV_PASS2 = "machine-matched:pass-2"
 PROV_HUMAN_PICKED = "human-picked:refused-collision"
 PROV_HAND_MAPPED = "hand-mapped:no-candidate"
 PROVENANCE_TAGS = (PROV_PASS1, PROV_PASS2, PROV_HUMAN_PICKED, PROV_HAND_MAPPED)
+
+#: 0046 clause 3's status vocabulary -- the only tags append_correction_row
+#: ever writes. A row with neither tag (every row ratified before this
+#: round) is an ordinary, uncorrected ratification.
+STATUS_CORRECTED = "corrected"
+STATUS_REVOKED = "revoked"
+CORRECTION_STATUSES = (STATUS_CORRECTED, STATUS_REVOKED)
 
 #: K0's own outcome vocabulary, straight from bootstrap_conversation_map.py's
 #: MatchResult.status -- reproduced here as constants only for readability,
@@ -258,6 +273,74 @@ def _validate_new_row(row: dict) -> None:
     tagged = tag[len("[provenance:"):-1]
     if tagged not in PROVENANCE_TAGS:
         raise RatifyError("unknown_provenance", f"unrecognised provenance tag {tagged!r}")
+    if _parse_status_tag(row.get("notes", "")) is not None:
+        raise RatifyError(
+            "status_on_fresh_row",
+            "a [status:...] tag names a CORRECTION (0046 clause 3) -- use "
+            "append_correction_row for that, not a fresh ratification.")
+
+
+def _validate_correction_row(row: dict, path: Path) -> None:
+    """DECISIONS 0046 clauses 1/3/5: the opposite precondition from a fresh
+    ratification -- session_id MUST already exist in the file, the row
+    MUST carry a [status:corrected]/[status:revoked] tag alongside its
+    [provenance:...] tag, and the notes must say, in words, what it
+    supersedes and why (not just the tags)."""
+    for field in RATIFIED_MAP_HEADER:
+        if field not in row:
+            raise RatifyError("missing_field", f"row is missing required field {field!r}")
+    sid = row["session_id"].strip()
+    if not sid:
+        raise RatifyError("blank_session_id", "session_id must not be blank")
+
+    existing_raw = _load_tsv_rows(path) if path.exists() else []
+    existing_ids = {r.get("session_id", "").strip() for r in existing_raw}
+    if sid not in existing_ids:
+        raise RatifyError(
+            "unknown_session_id",
+            f"cannot correct {sid!r} -- it has never been ratified in this "
+            "file. Use append_ratified_row for a genuinely new mapping.")
+
+    notes = row.get("notes", "")
+    if not notes.strip().startswith("[provenance:"):
+        raise RatifyError(
+            "missing_provenance",
+            "0033 requires every staged row to record its provenance "
+            "permanently -- notes must start with a [provenance:...] tag.")
+    prov_tag = notes.split("]", 1)[0] + "]"
+    prov = prov_tag[len("[provenance:"):-1]
+    if prov not in PROVENANCE_TAGS:
+        raise RatifyError("unknown_provenance", f"unrecognised provenance tag {prov!r}")
+
+    status = _parse_status_tag(notes)
+    if status not in CORRECTION_STATUSES:
+        raise RatifyError(
+            "missing_status",
+            "a correction's notes must carry a [status:corrected] or "
+            "[status:revoked] tag (0046 clause 3) -- a row that supersedes "
+            "without saying so reads as a duplicate to everyone except the "
+            "resolver.")
+
+    if status == STATUS_CORRECTED:
+        current = resolve_map_rows(existing_raw).get(sid)
+        if current is not None and current.get("project_id", "").strip() == row["project_id"].strip():
+            raise RatifyError(
+                "no_op_correction",
+                "the corrected project_id is identical to what's already "
+                "resolved -- a correction that changes nothing is a bug in "
+                "the caller, not a legitimate row.")
+
+    # The free text after BOTH tags must be non-empty -- 0046 clause 5:
+    # "its notes stating what it supersedes and why."
+    remainder = notes
+    for _ in range(2):
+        if "]" in remainder:
+            remainder = remainder.split("]", 1)[1]
+    if not remainder.strip():
+        raise RatifyError(
+            "missing_reason",
+            "a correction's notes must state, in words, what it supersedes "
+            "and why -- the tags alone are not a reason.")
 
 
 def build_row(*, session_id: str, local_folder: str, project_id: str,
@@ -277,28 +360,45 @@ def build_row(*, session_id: str, local_folder: str, project_id: str,
     }
 
 
+def build_correction_row(*, session_id: str, local_folder: str, project_id: str,
+                          conversation_name: str, provenance: str, status: str,
+                          reason: str) -> dict:
+    """Assemble one CORRECTING row (0046 clauses 1/3/5) -- same shape as
+    :func:`build_row`, but ``notes`` carries the existing ``[provenance:...]``
+    tag (0033, unchanged) AND a ``[status:corrected]``/``[status:revoked]``
+    tag (0046 clause 3), followed by free text stating what it supersedes
+    and why (0046 clause 5 -- recency alone resolves it, the status and the
+    reason make the intent legible to a human reading the raw file)."""
+    if provenance not in PROVENANCE_TAGS:
+        raise RatifyError("unknown_provenance", f"unrecognised provenance tag {provenance!r}")
+    if status not in CORRECTION_STATUSES:
+        raise RatifyError("unknown_status", f"unrecognised status {status!r} "
+                          f"-- must be one of {CORRECTION_STATUSES}")
+    if not reason.strip():
+        raise RatifyError("missing_reason",
+                          "a correction's reason must state what it "
+                          "supersedes and why -- it cannot be blank.")
+    tagged_note = f"[provenance:{provenance}] [status:{status}] {reason.strip()}"
+    return {
+        "session_id": session_id, "local_folder": local_folder,
+        "project_id": project_id, "conversation_name": conversation_name,
+        "notes": tagged_note,
+    }
+
+
 def _row_line(row: dict) -> str:
     return "\t".join(row[f] for f in RATIFIED_MAP_HEADER)
 
 
-def append_ratified_row(row: dict, path: Path | None = None) -> dict:
-    """Append exactly one row to the ratified map. Pure append -- opens the
-    file in ``"a"`` mode and nothing else, so there is no code path here that
-    can rewrite a byte already on disk (the stop condition this function
-    exists to make impossible, not merely avoid).
-
-    Refuses (writes nothing) if the session_id is already present -- ratifying
-    an already-ratified row is a no-op, never a silent duplicate and never an
-    edit of the existing one.
-    """
-    _validate_new_row(row)
-    p = Path(path) if path else RATIFIED_MAP_PATH
-
-    existing = _load_tsv_rows(p) if p.exists() else []
-    existing_ids = {r.get("session_id", "").strip() for r in existing}
-    if row["session_id"].strip() in existing_ids:
-        return {"status": "already_ratified", "session_id": row["session_id"]}
-
+def _append_row_bytes(row: dict, p: Path) -> None:
+    """The one and only byte-append code path in this module (DECISIONS
+    0046 clause 5, and the stop condition that predates it): opens the
+    file in ``"a"`` mode and nothing else, so there is no code path
+    anywhere in this module that can rewrite a byte already on disk.
+    :func:`append_ratified_row` and :func:`append_correction_row` both
+    call this and only this -- two named entry points expressing two
+    different intents (fresh ratification vs. correction), never two ways
+    of writing."""
     needs_header = not p.exists() or p.stat().st_size == 0
     with p.open("a", encoding="utf-8", newline="") as f:
         if needs_header:
@@ -317,7 +417,44 @@ def append_ratified_row(row: dict, path: Path | None = None) -> dict:
                         f.write("\n")
         f.write(_row_line(row) + "\n")
 
+
+def append_ratified_row(row: dict, path: Path | None = None) -> dict:
+    """Append exactly one row to the ratified map. Pure append (see
+    :func:`_append_row_bytes`) -- there is no code path here that can
+    rewrite a byte already on disk (the stop condition this function
+    exists to make impossible, not merely avoid).
+
+    Refuses (writes nothing) if the session_id is already present -- ratifying
+    an already-ratified row is a no-op, never a silent duplicate and never an
+    edit of the existing one. A row already in the map that was wrong is
+    corrected via :func:`append_correction_row`, not re-ratified here.
+    """
+    _validate_new_row(row)
+    p = Path(path) if path else RATIFIED_MAP_PATH
+
+    existing = _load_tsv_rows(p) if p.exists() else []
+    existing_ids = {r.get("session_id", "").strip() for r in existing}
+    if row["session_id"].strip() in existing_ids:
+        return {"status": "already_ratified", "session_id": row["session_id"]}
+
+    _append_row_bytes(row, p)
     return {"status": "appended", "session_id": row["session_id"], "row": row}
+
+
+def append_correction_row(row: dict, path: Path | None = None) -> dict:
+    """Append a CORRECTING row for a session_id already in the map
+    (DECISIONS 0046 clauses 1/3/5 -- "undo is an append"). The opposite
+    precondition from :func:`append_ratified_row`: ``session_id`` MUST
+    already be present, and the row MUST carry a
+    ``[status:corrected]``/``[status:revoked]`` tag (validated by
+    :func:`_validate_correction_row`). Calls the same
+    :func:`_append_row_bytes` primitive -- still exactly one byte-append
+    code path in this module."""
+    p = Path(path) if path else RATIFIED_MAP_PATH
+    _validate_correction_row(row, p)
+    _append_row_bytes(row, p)
+    status = _parse_status_tag(row["notes"])
+    return {"status": status, "session_id": row["session_id"], "row": row}
 
 
 def append_ratified_pair(row_a: dict, row_b: dict, path: Path | None = None) -> list[dict]:
@@ -330,15 +467,49 @@ def append_ratified_pair(row_a: dict, row_b: dict, path: Path | None = None) -> 
     return [r1, r2]
 
 
-def stage_ratified_map(repo_root: Path) -> str:
-    """``git add -- config/mcf_conversation_map.tsv``, and only that path --
-    0033's allowlist entry, declared here in code. Never ``git add -A``,
-    never ``git commit``."""
-    run_git(repo_root, "add", "--", "config/mcf_conversation_map.tsv")
-    return "config/mcf_conversation_map.tsv"
+#: 0033's allowlist entry, extended by 0044 clause 4 to the per-estate
+#: pattern 0040 clause 2 declared -- every filename MAP_FILENAMES knows
+#: about, never an arbitrary path. Declared in code, same discipline 0033
+#: already applies to the docs/-archiving allowlist entry.
+_MAP_ALLOWLIST: frozenset[str] = frozenset(
+    f"config/{name}" for name in MAP_FILENAMES.values())
 
 
-def staged_diff(repo_root: Path) -> str:
+def _map_relpath(map_path: Path | None, repo_root: Path) -> str:
+    if map_path is None:
+        # No default absolute path here -- RATIFIED_MAP_PATH is baked to
+        # the REAL repo root, which would break against a test's own throw-
+        # away repo (or, for that matter, a real repo checked out somewhere
+        # other than REPO_ROOT). The legacy work-estate relative path is
+        # the one thing that's true regardless of which repo_root this is.
+        rel_str = f"config/{MAP_FILENAMES['work']}"
+    else:
+        target = Path(map_path)
+        rel = target.relative_to(repo_root) if target.is_absolute() else target
+        rel_str = str(rel).replace("\\", "/")
+    if rel_str not in _MAP_ALLOWLIST:
+        raise RatifyError(
+            "not_allowlisted",
+            f"{rel_str!r} is not a declared ratified-map path -- known: "
+            f"{sorted(_MAP_ALLOWLIST)} (curator_data.MAP_FILENAMES). "
+            "Refusing to stage or diff a path outside the allowlist.")
+    return rel_str
+
+
+def stage_ratified_map(repo_root: Path, map_path: Path | None = None) -> str:
+    """``git add -- <this machine's ratified map path>``, and only that
+    path -- 0033's allowlist entry, matched against the declared
+    per-estate pattern (0044 clause 4) rather than one fixed filename.
+    ``map_path`` defaults to the legacy work-estate path for callers that
+    don't pass one. Never ``git add -A``, never ``git commit``."""
+    rel_str = _map_relpath(map_path, repo_root)
+    run_git(repo_root, "add", "--", rel_str)
+    return rel_str
+
+
+def staged_diff(repo_root: Path, map_path: Path | None = None) -> str:
     """``git diff --staged`` for the map only -- what the tab shows must be
-    exactly what a terminal ``git diff --staged`` would show, per the brief."""
-    return run_git(repo_root, "diff", "--staged", "--", "config/mcf_conversation_map.tsv")
+    exactly what a terminal ``git diff --staged`` would show, per the
+    brief. Same estate-resolved path as :func:`stage_ratified_map`."""
+    rel_str = _map_relpath(map_path, repo_root)
+    return run_git(repo_root, "diff", "--staged", "--", rel_str)

@@ -130,7 +130,8 @@ def capabilities(ctx: AppContext) -> dict[str, dict]:
     estate_reason = getattr(ctx.estate, "reason", None) if ctx.estate is not None else "estate_absent"
 
     if ctx.curator_estate_gap:
-        transcripts = {"available": False, "reason": "not_work_mcf_estate",
+        from .curator_data import CURATOR_ESTATE_GAP_REASON
+        transcripts = {"available": False, "reason": CURATOR_ESTATE_GAP_REASON,
                        "detail": ctx.curator_estate_gap}
     elif ctx.curator is None:
         transcripts = {"available": False, "reason": "curator_absent",

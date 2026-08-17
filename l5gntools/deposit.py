@@ -11,6 +11,18 @@ deposit into its own declared estate (``work`` vs ``personal``). Depositing an
 onto the knight -- the work/personal wall is structural, not a matter of trust.
 
 Transport is a direct rig -> knight push (rsync by default); no cloud in the pipe.
+
+**data/knowledge_curator/ never travels** (DECISIONS 0044 clauses 1-2). A
+Curator report quotes source spans verbatim -- content, not summary -- and
+0027 keeps content out of anything that leaves this machine. Today's
+``files`` list is a fixed, explicit whitelist (estate.json + one history
+snapshot), built by named ``shutil.copy2`` calls rather than a directory
+walk, so nothing under ``data/knowledge_curator/`` can reach it as the code
+stands -- but that safety is accidental unless it is also declared and
+checked. EXCLUDED_FROM_DEPOSIT names the rule; the assertion in
+build_bundle is the wall the next directory-walk runs into;
+auditors/auditor_deposit_exclusion.py is the second, independent proof
+(0044 clause 2: "one states the rule, the other proves it held").
 """
 from __future__ import annotations
 
@@ -23,6 +35,12 @@ from pathlib import Path
 
 from . import __version__, config
 from .common import DATA_DIR, now_iso
+
+#: DECISIONS 0044 clause 1: data/knowledge_curator/ is outside the deposit
+#: contract, declared here rather than left to build_bundle's current
+#: whitelist-by-omission. A path segment, checked against every relative
+#: path this module is about to copy into the outbox.
+EXCLUDED_FROM_DEPOSIT: tuple[str, ...] = ("knowledge_curator",)
 
 
 def _sha256(path: Path) -> str:
@@ -70,6 +88,31 @@ def build_bundle(estate: str | None, data_dir: Path = DATA_DIR,
     if snapshot is not None:
         shutil.copy2(snapshot, outbox / "history" / snapshot.name)
         files.append(f"history/{snapshot.name}")
+
+    # 0044 clause 2's first enforcement: state the rule where the bundle is
+    # actually assembled, so the day someone widens `files` into a
+    # directory walk (e.g. `shutil.copytree(data_dir, outbox)`), this is
+    # the wall they hit, not a silent leak caught only by an auditor
+    # running later. Checked against both the logical file list AND
+    # whatever the copy calls above actually put on disk, so a future
+    # change that writes into outbox() without going through `files`
+    # cannot slip past this check either.
+    for rel in files:
+        if any(seg == excluded for seg in Path(rel).parts
+               for excluded in EXCLUDED_FROM_DEPOSIT):
+            raise RuntimeError(
+                f"refusing to deposit {rel!r} -- it falls under an "
+                f"EXCLUDED_FROM_DEPOSIT path {EXCLUDED_FROM_DEPOSIT!r} "
+                "(DECISIONS 0044 clause 1).")
+    for path in outbox.rglob("*"):
+        if path.is_file():
+            rel = path.relative_to(outbox)
+            if any(seg == excluded for seg in rel.parts
+                   for excluded in EXCLUDED_FROM_DEPOSIT):
+                raise RuntimeError(
+                    f"deposit outbox carries {rel!r} under an "
+                    f"EXCLUDED_FROM_DEPOSIT path {EXCLUDED_FROM_DEPOSIT!r} "
+                    "(DECISIONS 0044 clause 1) -- refusing to manifest it.")
 
     estate_meta = json.loads(estate_json.read_text(encoding="utf-8"))
     manifest = {

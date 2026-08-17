@@ -131,4 +131,21 @@ def run() -> list[str]:
             v.append("deposit: missing estate.json should raise")
         except FileNotFoundError:
             pass
+
+        # DECISIONS 0044 clause 1: the exclusion is DECLARED, not just true
+        # by omission. auditors/auditor_deposit_exclusion.py proves the
+        # end-to-end property against a seeded leak; this checks the
+        # declaration itself and that today's real bundle never carries a
+        # path segment on the excluded list.
+        if not deposit.EXCLUDED_FROM_DEPOSIT:
+            v.append("deposit: EXCLUDED_FROM_DEPOSIT must name at least "
+                     "'knowledge_curator' -- it is empty")
+        if "knowledge_curator" not in deposit.EXCLUDED_FROM_DEPOSIT:
+            v.append("deposit: EXCLUDED_FROM_DEPOSIT must include "
+                     "'knowledge_curator'")
+        for excluded in deposit.EXCLUDED_FROM_DEPOSIT:
+            for path in b["outbox"].rglob("*"):
+                if path.is_file() and excluded in path.relative_to(b["outbox"]).parts:
+                    v.append(f"deposit: a normal bundle already carries "
+                             f"{path} under excluded segment {excluded!r}")
     return v

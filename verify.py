@@ -15,6 +15,7 @@ import sys
 AUDITORS: list[str] = [
     "auditors.auditor_cli_contract",
     "auditors.auditor_dependency_direction",
+    "auditors.auditor_deposit_exclusion",
     "auditors.auditor_doc_claims",
     "auditors.auditor_module_contract",
     "auditors.auditor_readonly",

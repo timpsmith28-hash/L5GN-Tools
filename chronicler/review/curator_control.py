@@ -33,7 +33,8 @@ from pathlib import Path
 
 from l5gntools import config as l5gn_config
 
-from .curator_data import CURATOR_DATA_DIR, RATIFIED_MAP_PATH, ratified_row_count
+from .curator_data import (CURATOR_DATA_DIR, RATIFIED_MAP_PATH,
+                            ratified_map_path_for_estate, ratified_row_count)
 
 _PIPE = Path(__file__).resolve().parents[2] / "chronicler" / "pipeline"
 
@@ -66,6 +67,13 @@ STAGE_TABLE: dict[str, dict] = {
            "argv": lambda cfg: []},
 }
 EXECUTION_ALLOWLIST: frozenset[str] = frozenset(STAGE_TABLE)
+
+#: Stages whose script reads the ratified map directly, and so must be told
+#: THIS machine's estate-resolved path explicitly (DECISIONS 0044 clause 4)
+#: rather than falling back to each script's own hardcoded work-estate
+#: default. K0 produces the CANDIDATE map and does not read the ratified
+#: one; K3/K5 don't touch it either.
+MAP_SCOPED_STAGES: frozenset[str] = frozenset({"K1", "K4"})
 
 #: Stages that get a model selector at all (Task 3: "only for stages that
 #: call a model"). K0/K1/K3/K5 are deterministic and get none.
@@ -600,6 +608,13 @@ def run_stage(stage: str, *, host: str | None = None, cache_root: Path | None = 
         return StageOutcome(stage=stage, state="blocked",
                              detail=f"no model selected for {stage} -- set one before running "
                                     "(no default is ever assumed).")
+    if stage in MAP_SCOPED_STAGES:
+        declared_estate = l5gn_config.machine(host).get("estate")
+        try:
+            map_path = ratified_map_path_for_estate(declared_estate)
+        except ValueError as exc:
+            return StageOutcome(stage=stage, state="blocked", detail=str(exc))
+        argv_extra = [*argv_extra, "--map", str(map_path)]
     if project_id and stage in PROJECT_SCOPED_STAGES:
         argv_extra = [*argv_extra, "--project", project_id]
 

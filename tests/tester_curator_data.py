@@ -103,9 +103,129 @@ def run() -> list[str]:
         if states["K1"].generated_at is None or states["K3"].generated_at is None:
             v.append("curator_data: an existing artefact must carry a "
                      "generated_at, even a file_mtime-derived one")
-        cov = c.coverage()
-        if cov["present_not_mapped"] != ["local_zzz"]:
-            v.append("curator_data: coverage() must pass K1's "
-                     "present_not_mapped through unchanged")
 
+    v.extend(_run_estate_gate())
+    v.extend(_run_estate_map_path())
+    v.extend(_run_resolver())
+    return v
+
+
+def _run_estate_gate() -> list[str]:
+    """DECISIONS 0039 clause 2 / 0044 clause 3: the Curator is excluded
+    ONLY on a machine declaring 'both', or one with no declared estate at
+    all -- never on a fixed allowlist of estate names."""
+    v: list[str] = []
+    if cd.curator_estate_gap_for("both") is None:
+        v.append("curator_estate_gap_for('both') must gate -- it did not")
+    if cd.curator_estate_gap_for(None) is None:
+        v.append("curator_estate_gap_for(None) must gate -- it did not")
+    if cd.curator_estate_gap_for("unknown") is None:
+        v.append("curator_estate_gap_for('unknown') must gate -- config."
+                 "machine()'s documented default estate is 'unknown' for "
+                 "any unconfigured machine, and it must not slip through "
+                 "the gate only to crash later resolving a map path")
+    for estate in ("work", "personal"):
+        if cd.curator_estate_gap_for(estate) is not None:
+            v.append(f"curator_estate_gap_for({estate!r}) wrongly gated")
+    gap = cd.curator_estate_gap_for("both")
+    if "0039" not in gap or "0044" not in gap:
+        v.append("curator_estate_gap_for: reason text must cite 0039/0044, "
+                 "not the superseded 0032")
+    if "0032" in gap:
+        v.append("curator_estate_gap_for: reason text still cites the "
+                 "superseded DECISIONS 0032")
+    return v
+
+
+def _run_estate_map_path() -> list[str]:
+    """0039 clause 1 / 0044 clause 4: never a fixed filename for every
+    estate -- each declared estate resolves to its own map."""
+    v: list[str] = []
+    work_path = cd.ratified_map_path_for_estate("work")
+    personal_path = cd.ratified_map_path_for_estate("personal")
+    if work_path == personal_path:
+        v.append("ratified_map_path_for_estate: work and personal resolved "
+                 "to the same path")
+    if work_path.name != "mcf_conversation_map.tsv":
+        v.append("ratified_map_path_for_estate('work') must keep the "
+                 "long-shipped filename -- got " + work_path.name)
+    if work_path != cd.RATIFIED_MAP_PATH:
+        v.append("ratified_map_path_for_estate('work') must match the "
+                 "legacy RATIFIED_MAP_PATH constant exactly")
+    try:
+        cd.ratified_map_path_for_estate("both")
+        v.append("ratified_map_path_for_estate('both') must refuse, not "
+                 "return a path -- the Curator never runs on that estate")
+    except ValueError:
+        pass
+    try:
+        cd.ratified_map_path_for_estate("unknown-estate")
+        v.append("ratified_map_path_for_estate: an undeclared estate name "
+                 "must refuse, never guess a filename")
+    except ValueError:
+        pass
+    c = cd.Curator(declared_estate="personal")
+    if c.ratified_map_path != personal_path:
+        v.append("Curator(declared_estate='personal') did not resolve to "
+                 "the personal map path")
+    c2 = cd.Curator()
+    if c2.ratified_map_path != cd.RATIFIED_MAP_PATH:
+        v.append("Curator() with no args must still default to the legacy "
+                 "RATIFIED_MAP_PATH -- existing callers rely on this")
+    return v
+
+
+def _run_resolver() -> list[str]:
+    """DECISIONS 0046: the last row per key wins, a revoked row drops out
+    of the resolved view entirely, and the raw view keeps every row."""
+    v: list[str] = []
+    header = "session_id\tlocal_folder\tproject_id\tconversation_name\tnotes\n"
+    rows_text = (
+        header
+        + "local_a\tMCF/Foo\tFoo\tFoo thread\t[provenance:machine-matched:pass-1]\n"
+        + "local_a\tMCF/Bar\tBar\tFoo thread\t[provenance:hand-mapped:no-candidate] "
+          "[status:corrected] wrong project first time\n"
+        + "local_b\tMCF/Baz\tBaz\tBaz thread\t[provenance:machine-matched:pass-1]\n"
+        + "local_b\tMCF/Baz\tBaz\tBaz thread\t[provenance:hand-mapped:no-candidate] "
+          "[status:revoked] should not have been mapped\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "map.tsv"
+        _write(path, rows_text)
+
+        raw = cd.ratified_map_rows(path)
+        if len(raw) != 4:
+            v.append(f"ratified_map_rows: expected 4 raw rows, got {len(raw)}")
+
+        resolved = cd.resolve_map_rows(raw)
+        if set(resolved) != {"local_a"}:
+            v.append(f"resolve_map_rows: expected only local_a to resolve, "
+                     f"got {sorted(resolved)}")
+        elif resolved["local_a"]["project_id"] != "Bar":
+            v.append("resolve_map_rows: local_a must resolve to the "
+                     "correcting row's project_id ('Bar')")
+
+        resolved_rows = cd.resolved_map_rows(path)
+        if len(resolved_rows) != 1:
+            v.append(f"resolved_map_rows: expected 1 row, got {len(resolved_rows)}")
+
+        annotated = cd.raw_map_rows_annotated(path)
+        if len(annotated) != 4:
+            v.append(f"raw_map_rows_annotated: expected 4 rows, got {len(annotated)}")
+        else:
+            current_flags = [a["is_current"] for a in annotated]
+            # local_a: row 0 superseded, row 1 current. local_b: row 2
+            # superseded, row 3 (revoked) resolves to nothing current.
+            if current_flags != [False, True, False, False]:
+                v.append(f"raw_map_rows_annotated: is_current flags wrong: "
+                         f"{current_flags}")
+            if annotated[1]["status"] != "corrected":
+                v.append("raw_map_rows_annotated: row 1 must parse status="
+                         "'corrected'")
+            if annotated[3]["status"] != "revoked":
+                v.append("raw_map_rows_annotated: row 3 must parse status="
+                         "'revoked'")
+            if annotated[0]["status"] is not None:
+                v.append("raw_map_rows_annotated: an uncorrected row must "
+                         "parse status=None")
     return v

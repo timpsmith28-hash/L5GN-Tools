@@ -3,9 +3,20 @@
 Read-only data layer for the Knowledge Curator tab. Loads whatever exists
 under ``data/knowledge_curator/`` (K0's ``candidate_map.tsv``, K1's
 ``knowledge_index.json``, K2's ``claims.json``, K3's ``corpus_index.json``,
-K4's ``matches.json``) and the ratified join surface,
-``config/mcf_conversation_map.tsv``, and reports **what is on disk and what
-is not** -- it recomputes no finding and reimplements no stage's logic.
+K4's ``matches.json``) and the ratified join surface -- one map per
+declared estate (DECISIONS 0039/0044: never a fixed filename; see
+MAP_FILENAMES / ratified_map_path_for_estate), ``config/mcf_conversation_
+map.tsv`` for 'work' -- and reports **what is on disk and what is not** --
+it recomputes no finding and reimplements no stage's logic.
+
+This module also owns the map's ONE recency resolver (DECISIONS 0046):
+``resolve_map_rows``/``resolved_map_rows`` for consumption (the last
+non-revoked row per key wins), ``ratified_map_rows`` (raw, unresolved) and
+``raw_map_rows_annotated`` for the reviewing view, where a superseding row
+and the row it supersedes are both visible. Every consumer --
+knowledge_index.py (and, through it, match_claims.py), candidates.py (via
+app.py), and the Curator tab's resolved views -- calls the resolver here,
+never re-implements the join.
 
 Every one of the six artefacts this module reads may be absent, and absent
 is a normal state, not an error: this machine may never have run the
@@ -40,7 +51,77 @@ CURATOR_DATA_DIR: Path = DATA_DIR / "knowledge_curator"
 
 #: The ratified join surface (K0's human-checked output). Never derived --
 #: this is the one file Task 2 is permitted to append to (DECISIONS 0033).
+#: Kept as a bare constant -- the work estate's default and the value every
+#: existing caller/test already expects -- but no longer the ONLY map: see
+#: MAP_FILENAMES / ratified_map_path_for_estate below (DECISIONS 0039
+#: clause 1, 0044 clause 4: never a fixed filename for every estate).
 RATIFIED_MAP_PATH: Path = REPO_ROOT / "config" / "mcf_conversation_map.tsv"
+
+#: The per-source, per-estate map filename (0040 clause 2: "maps are per
+#: source, one file each"), declared in code rather than derived from the
+#: estate name. 'work' keeps its long-shipped filename rather than being
+#: renamed: the map itself is gitignored (0040 clause 4) but its .sha256
+#: pin is already committed under this name, and a rename buys nothing. An
+#: estate absent here (including 'both', which never reaches this code --
+#: 0039 clause 2 excludes it from running the Curator at all) is a stated
+#: refusal in ratified_map_path_for_estate, never a guessed filename.
+MAP_FILENAMES: dict[str, str] = {
+    "work": "mcf_conversation_map.tsv",
+    "personal": "personal_conversation_map.tsv",
+}
+
+#: The one reason string the estate gate uses everywhere it appears --
+#: declared once so `run.py` and `app.py` both import it rather than
+#: hand-typing it, and so `curator.js`'s literal comparison (which cannot
+#: import a Python constant) has one name to point its comment at.
+#: Corrected from 'not_work_mcf_estate' (DECISIONS 0044): the gate no
+#: longer cites 0032's superseded MCF-only scoping.
+CURATOR_ESTATE_GAP_REASON = "curator_excluded_both_estate"
+
+
+def curator_estate_gap_for(declared_estate: str | None) -> str | None:
+    """The estate-gate decision itself, as a pure function -- logic lives
+    here, not in run.py's CLI preflight or app.py's route handler (working
+    rule). None means the Curator runs on this machine; a string is the
+    stated reason it doesn't.
+
+    Corrected to 0039 clause 2 / 0044 clause 3: the Curator runs on ANY
+    machine whose declared estate is not 'both', never on a fixed
+    allowlist naming which estates may run it (0039 clause 1 -- this is
+    what the code got wrong the first time, gating on `!= "work"`).
+
+    What this checks instead is membership in MAP_FILENAMES -- the set of
+    estates a ratified map actually exists for. In practice that is the
+    same rule 0039 states (every non-'both' estate runs the Curator),
+    expressed the one way that can't silently crash: `config.machine()`'s
+    own documented default is `{"estate": "unknown"}` for any machine not
+    yet configured in machines.json/local.json, and 'unknown' is not
+    'both' -- a bare `!= "both"` check would pass an unconfigured machine
+    straight through the gate and only fail later, inside Curator.__init__,
+    when ratified_map_path_for_estate('unknown') has no filename to return.
+    Gating here means the tab shows a stated absence instead of a crash."""
+    if declared_estate in MAP_FILENAMES:
+        return None
+    return (
+        f"this machine's declared estate is {declared_estate!r}; "
+        "the Knowledge Curator is a solo-machine tool scoped to a declared "
+        f"estate ({sorted(MAP_FILENAMES)}) and does not run on a machine "
+        "declaring 'both' (DECISIONS 0039 clause 2, 0044 clause 3), an "
+        "unconfigured/'unknown' estate, or no declared estate at all -- "
+        "refused loudly rather than guessed at.")
+
+
+def ratified_map_path_for_estate(estate: str | None) -> Path:
+    """The ratified map path for a machine's declared estate -- never a
+    fixed filename (0039 clause 1, 0044 clause 4). Raises with a named
+    remedy for an estate MAP_FILENAMES doesn't know, rather than silently
+    falling back to a default that would be wrong for that estate."""
+    if estate not in MAP_FILENAMES:
+        raise ValueError(
+            f"no ratified-map filename declared for estate {estate!r} -- "
+            f"known estates: {sorted(MAP_FILENAMES)} (curator_data."
+            "MAP_FILENAMES). Add an entry rather than guessing a name.")
+    return REPO_ROOT / "config" / MAP_FILENAMES[estate]
 
 #: K0's own candidate output -- NOT ratified, offered for review only.
 CANDIDATE_MAP_PATH: Path = CURATOR_DATA_DIR / "candidate_map.tsv"
@@ -140,6 +221,76 @@ def ratified_row_count(path: Path | None = None) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Resolution -- DECISIONS 0046: recency (file order) resolves the map, in
+# exactly ONE place. Every consumer -- knowledge_index.py (and, through it,
+# match_claims.py), candidates.py, curator_data's own blocked-reasoning, and
+# the Curator tab's resolved views -- calls resolved_map_rows()/
+# resolve_map_rows(), never re-implements the join.
+# ---------------------------------------------------------------------------
+
+def _parse_status_tag(notes: str) -> str | None:
+    """Pull a ``[status:...]`` tag out of a row's ``notes``, mirroring
+    curator_ratify's own ``[provenance:...]`` tag parsing exactly -- one
+    parser, reused, never a second one invented here. ``None`` means an
+    ordinary, uncorrected ratification -- every row on disk before this
+    round reads this way, with zero migration (0046's own framing: a
+    status column would have needed one, a notes tag does not)."""
+    notes = notes or ""
+    for token in notes.split():
+        if token.startswith("[status:") and token.endswith("]"):
+            return token[len("[status:"):-1]
+    return None
+
+
+def resolve_map_rows(rows: list[dict]) -> dict[str, dict]:
+    """The one resolver every consumer calls (0046 clause 2). File order
+    is recency (0046's own argument: an append-only file needs no
+    timestamp column) -- the last non-revoked row for a ``session_id``
+    wins. A ``revoked`` row removes the key from the resolved view
+    entirely; a ``corrected`` row simply replaces the prior row's fields,
+    the same as an ordinary later ratification would."""
+    resolved: dict[str, dict] = {}
+    for row in rows:
+        key = (row.get("session_id") or "").strip()
+        if not key:
+            continue
+        status = _parse_status_tag(row.get("notes", ""))
+        if status == "revoked":
+            resolved.pop(key, None)
+            continue
+        resolved[key] = row
+    return resolved
+
+
+def resolved_map_rows(path: Path | None = None) -> list[dict]:
+    """Every consumer's join of record (0046 clause 2) -- the resolved
+    view, one row per key, corrections and revocations already applied.
+    This is what knowledge_index.py, match_claims.py (via knowledge_
+    index.load_map), and candidates.py (via the app.py route that builds
+    its map_rows) must call for CONSUMPTION. ``ratified_map_rows`` (raw,
+    unresolved) stays the reviewing view -- see raw_map_rows_annotated."""
+    return list(resolve_map_rows(ratified_map_rows(path)).values())
+
+
+def raw_map_rows_annotated(path: Path | None = None) -> list[dict]:
+    """The reviewing view (0046 clause 4): every row, in file order, each
+    carrying its parsed ``status`` and whether it is the row currently
+    winning for its key (``is_current``) -- so a human sees both the
+    superseding row and the row it supersedes, and which one is current,
+    without re-deriving recency by eye."""
+    rows = ratified_map_rows(path)
+    current = resolve_map_rows(rows)
+    out: list[dict] = []
+    for row in rows:
+        key = (row.get("session_id") or "").strip()
+        status = _parse_status_tag(row.get("notes", ""))
+        is_current = bool(key) and current.get(key) is row
+        out.append({**row, "status": status, "is_current": is_current})
+    return out
+
+
+
+# ---------------------------------------------------------------------------
 # K0 -- candidate_map.tsv (the un-ratified candidate output)
 # ---------------------------------------------------------------------------
 
@@ -175,21 +326,25 @@ def k1_state(index_path: Path | None = None,
              ratified_path: Path | None = None) -> ArtefactState:
     ipath = index_path or K1_INDEX_PATH
     data = _load_json(ipath)
-    ratified_count = ratified_row_count(ratified_path or RATIFIED_MAP_PATH)
+    rpath = ratified_path or RATIFIED_MAP_PATH
+    resolved_count = len(resolved_map_rows(rpath))
     exists = data is not None
 
     blocked = not exists
     blocked_reason = None
     if blocked:
-        if ratified_count == 0:
+        if resolved_count == 0:
             blocked_reason = (
-                "K1 blocked: the ratified map is header-only (0 rows in "
-                f"{RATIFIED_MAP_PATH.name}). Ratify at least one row before "
+                "K1 blocked: the ratified map is header-only or has "
+                f"nothing currently mapped (0 resolved row(s) in "
+                f"{rpath.name}). Ratify at least one row -- or, if every "
+                "row so far was later revoked, ratify a new one -- before "
                 "K1 has anything to join against.")
         else:
             blocked_reason = (
                 f"K1 has not been run yet, though the map is ratified "
-                f"({ratified_count} row(s)). Run knowledge_index.py.")
+                f"({resolved_count} resolved row(s) currently mapped). "
+                "Run knowledge_index.py.")
 
     # knowledge_index.json carries no generated_at field of its own (K1's
     # writer does not stamp one) -- file mtime is the only honest answer.
@@ -211,21 +366,23 @@ def k2_state(claims_path: Path | None = None,
              ratified_path: Path | None = None) -> ArtefactState:
     cpath = claims_path or K2_CLAIMS_PATH
     data = _load_json(cpath)
-    ratified_count = ratified_row_count(ratified_path or RATIFIED_MAP_PATH)
+    resolved_count = len(resolved_map_rows(ratified_path or RATIFIED_MAP_PATH))
     exists = data is not None
 
     blocked = not exists
     blocked_reason = None
     if blocked:
-        if ratified_count == 0:
+        if resolved_count == 0:
             blocked_reason = (
-                "K2 blocked: the ratified map is header-only -- there are no "
-                "mapped conversations to extract claims from.")
+                "K2 blocked: the ratified map is header-only or has "
+                "nothing currently mapped -- there are no mapped "
+                "conversations to extract claims from.")
         else:
             blocked_reason = (
                 f"K2 has not been run yet, though the map is ratified "
-                f"({ratified_count} row(s)). Run extract_claims.py "
-                "-- requires LM Studio reachable and a --model.")
+                f"({resolved_count} resolved row(s) currently mapped). "
+                "Run extract_claims.py -- requires LM Studio reachable and "
+                "a --model.")
 
     return ArtefactState(
         stage="K2", path=str(cpath), exists=exists,
@@ -364,9 +521,15 @@ class Curator:
     "nothing has run here yet" rather than enumerating six absences.
     """
 
-    def __init__(self, data_dir: Path | None = None, ratified_map_path: Path | None = None):
+    def __init__(self, data_dir: Path | None = None, ratified_map_path: Path | None = None,
+                 declared_estate: str | None = None):
         self.data_dir: Path = data_dir or CURATOR_DATA_DIR
-        self.ratified_map_path: Path = ratified_map_path or RATIFIED_MAP_PATH
+        if ratified_map_path is not None:
+            self.ratified_map_path: Path = ratified_map_path
+        elif declared_estate is not None:
+            self.ratified_map_path = ratified_map_path_for_estate(declared_estate)
+        else:
+            self.ratified_map_path = RATIFIED_MAP_PATH
 
     @property
     def available(self) -> bool:
@@ -389,13 +552,20 @@ class Curator:
 
     def header(self) -> dict:
         """Per-artefact state, never one collapsed timestamp (per-artefact
-        staleness is load-bearing, see module docstring)."""
+        staleness is load-bearing, see module docstring). ``ratified_row_
+        count`` is the RESOLVED count (0046) -- currently-active mappings,
+        what an operator means by "how many have I ratified"; the raw
+        total including superseded/revoked rows is named separately so the
+        two are never silently collapsed into one figure."""
         states = self.stage_states()
+        raw_total = ratified_row_count(self.ratified_map_path)
+        resolved_total = len(resolved_map_rows(self.ratified_map_path))
         return {
             "available": self.available,
             "data_dir": str(self.data_dir),
             "ratified_map_path": str(self.ratified_map_path),
-            "ratified_row_count": ratified_row_count(self.ratified_map_path),
+            "ratified_row_count": resolved_total,
+            "ratified_row_count_including_superseded": raw_total,
             "stages": {k: v.summary() for k, v in states.items()},
         }
 

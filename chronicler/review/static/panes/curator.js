@@ -15,6 +15,7 @@ function showCuratorSub(name) {
   if (name === "control") loadCuratorControl();
   if (name === "findings") loadCuratorFindings();
   if (name === "coverage") loadCuratorCoverage();
+  if (name === "rawmap") loadCuratorRawMap();
   if (name === "conductor") loadCuratorConductor();
 }
 
@@ -31,8 +32,12 @@ async function loadCurator() {
   if (header.available === false && header.reason) {
     absent.style.display = "block";
     body.style.display = "none";
-    absent.textContent = header.reason === "not_work_mcf_estate"
-      ? `Absent on this machine: ${header.detail}`
+    // Literal mirror of curator_data.CURATOR_ESTATE_GAP_REASON -- JS can't
+    // import a Python constant, so this string is a named, commented
+    // duplication across the language boundary, not a second
+    // implementation of the gate (DECISIONS 0044 clause 3).
+    absent.textContent = header.reason === "curator_excluded_both_estate"
+      ? `Excluded on this machine: ${header.detail}`
       : `Nothing has run here yet: ${header.detail || header.reason}`;
     return;
   }
@@ -91,11 +96,25 @@ async function loadCuratorK0() {
   html += `<div class="doc-group-head">Unmapped local_* folders on disk (${data.unmapped_local_folders.length})</div>
     <p class="sub">If these are conversations deleted in the Cowork UI, deleting a
       conversation does not delete its transcript -- a data-retention finding
-      about the work estate, not a tidy-up list.</p>`;
+      about the work estate, not a tidy-up list. K0 never proposed a candidate for
+      any of these; capture one here to ratify it by hand (DECISIONS 0046 clause 6)
+      through the same write path every other ratify action on this screen uses.</p>`;
   for (const f of data.unmapped_local_folders) {
-    html += `<div class="doc-row" style="cursor:default"><span><code>${esc(f.conversation_id)}</code>
-      <span class="meta"> · ${esc(f.real_time || "unknown date")} (${esc(f.real_time_source || "?")}) ·
-      ${f.message_count} message(s) · project dir ${esc(f.cowork_project_dir || "?")}</span></span></div>`;
+    const fid = `unmapped-${Math.random().toString(36).slice(2)}`;
+    html += `<div class="item" id="${fid}">
+      <div class="item-body">
+        <div class="row1"><code>${esc(f.conversation_id)}</code>
+          <span class="meta"> · ${esc(f.real_time || "unknown date")} (${esc(f.real_time_source || "?")}) ·
+          ${f.message_count} message(s) · project dir ${esc(f.cowork_project_dir || "?")}</span></div>
+        <div class="item-actions">
+          <input id="${fid}-project" placeholder="project_id" class="small"
+                 style="font:inherit;padding:.2rem .4rem;border:1px solid #8886;border-radius:5px;background:transparent;color:inherit">
+          <input id="${fid}-name" placeholder="conversation_name" class="small"
+                 style="font:inherit;padding:.2rem .4rem;border:1px solid #8886;border-radius:5px;background:transparent;color:inherit">
+          <button class="small" onclick="curatorCaptureFolder('${fid}', ${JSON.stringify(f).replace(/"/g, '&quot;')})">Capture &amp; ratify</button>
+        </div>
+      </div>
+    </div>`;
   }
   html += `<div style="margin-top:1rem">
     <button class="small" onclick="loadCuratorStagedDiff()">Show staged diff</button>
@@ -198,6 +217,104 @@ async function curatorHandMap(rid, r) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail && (data.detail.detail || data.detail) || res.status);
     card.querySelector(".item-actions").innerHTML = `<span class="ok">${esc(data.status)}</span>`;
+  } catch (e) { card.querySelector(".item-actions").innerHTML += ` <span class="err">${esc(String(e.message || e))}</span>`; }
+}
+
+/* -- Task 6 (0046 clause 6): capture a folder K0 never proposed at all --
+ * the SAME write path (build_row -> _validate_new_row -> append_ratified_
+ * row -> stage_ratified_map) every ratify action on this screen already
+ * uses, via the same /api/curator/k0/ratify route curatorRatify() and
+ * curatorHandMap() call above -- one writer, one validation, one staging
+ * rule (0033), never a second endpoint. */
+async function curatorCaptureFolder(fid, f) {
+  const card = document.getElementById(fid);
+  const projectId = document.getElementById(`${fid}-project`).value.trim();
+  const name = document.getElementById(`${fid}-name`).value.trim();
+  if (!projectId) { alert("project_id required to capture this folder"); return; }
+  try {
+    const res = await fetch("/api/curator/k0/ratify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: f.conversation_id, local_folder: f.cowork_project_dir || "",
+        project_id: projectId, conversation_name: name || f.conversation_id,
+        provenance: "hand-mapped:no-candidate",
+        note: "captured from the unmapped local_* folders list -- K0 proposed no candidate"
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail && (data.detail.detail || data.detail) || res.status);
+    card.querySelector(".item-actions").innerHTML = `<span class="ok">${esc(data.status)}</span>`;
+  } catch (e) { card.querySelector(".item-actions").innerHTML += ` <span class="err">${esc(String(e.message || e))}</span>`; }
+}
+
+/* -- Task 4/5: the raw, unresolved map view (0046 clause 4) -- the
+ * reviewing surface. Every row in file order, superseded rows visibly
+ * distinct but never hidden; a "Correct" / "Revoke" action on the CURRENT
+ * row of each key appends via /api/curator/k0/correct (0046 clause 5:
+ * undo is an append). */
+async function loadCuratorRawMap() {
+  const el = document.getElementById("curator-sub-rawmap");
+  el.innerHTML = "<div class='empty'>Loading…</div>";
+  let data;
+  try { data = await jget("/api/curator/k0/map/raw"); }
+  catch (e) { el.innerHTML = `<span class="err">${esc(e.message)}</span>`; return; }
+  let html = `<p class="sub">Every ratified-map row, in file order (file order IS
+    recency -- DECISIONS 0046). <strong>${data.resolved_count}</strong> of
+    <strong>${data.row_count}</strong> row(s) are currently in force; the rest are
+    superseded and kept, never deleted -- a correction that hides what it
+    corrected is a deletion wearing a different hat.</p>`;
+  if (!data.rows.length) {
+    html += `<div class="empty">The ratified map is empty.</div>`;
+  }
+  for (const r of data.rows) {
+    const rid = `rawmap-${Math.random().toString(36).slice(2)}`;
+    const statusBadge = r.status
+      ? `<span class="badge">${esc(r.status)}</span>` : "";
+    const currentBadge = r.is_current
+      ? `<span class="ok">current</span>` : `<span class="meta">superseded</span>`;
+    let actions = "";
+    if (r.is_current) {
+      actions = `<input id="${rid}-project" placeholder="corrected project_id" class="small"
+                   style="font:inherit;padding:.2rem .4rem;border:1px solid #8886;border-radius:5px;background:transparent;color:inherit">
+                 <input id="${rid}-reason" placeholder="reason -- what this supersedes and why" class="small"
+                   style="font:inherit;padding:.2rem .4rem;border:1px solid #8886;border-radius:5px;background:transparent;color:inherit;min-width:16rem">
+                 <button class="small" onclick="curatorCorrect('${rid}', ${JSON.stringify(r).replace(/"/g, '&quot;')}, 'corrected')">Correct</button>
+                 <button class="small" onclick="curatorCorrect('${rid}', ${JSON.stringify(r).replace(/"/g, '&quot;')}, 'revoked')">Revoke</button>`;
+    }
+    html += `<div class="item" id="${rid}" style="opacity:${r.is_current ? "1" : ".6"}">
+      <div class="item-body">
+        <div class="row1">${statusBadge} ${currentBadge}
+          <span class="meta">session_id ${esc(r.session_id)}</span></div>
+        <div class="title">${esc(r.conversation_name || "(no name)")} &rarr; ${esc(r.project_id)}</div>
+        <div class="meta">local_folder ${esc(r.local_folder)}</div>
+        <div class="note">${esc(r.notes || "")}</div>
+        <div class="item-actions">${actions}</div>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+async function curatorCorrect(rid, r, status) {
+  const card = document.getElementById(rid);
+  const projectId = (document.getElementById(`${rid}-project`).value || "").trim() || r.project_id;
+  const reason = (document.getElementById(`${rid}-reason`).value || "").trim();
+  if (!reason) { alert("a reason is required -- state what this supersedes and why"); return; }
+  try {
+    const res = await fetch("/api/curator/k0/correct", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: r.session_id, local_folder: r.local_folder,
+        project_id: projectId, conversation_name: r.conversation_name,
+        provenance: "hand-mapped:no-candidate", status, reason
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail && (data.detail.detail || data.detail) || res.status);
+    card.querySelector(".item-actions").innerHTML = `<span class="ok">${esc(data.status)}</span>`;
+    await loadCuratorRawMap();
   } catch (e) { card.querySelector(".item-actions").innerHTML += ` <span class="err">${esc(String(e.message || e))}</span>`; }
 }
 

@@ -511,22 +511,30 @@ def _cmd_app(args: argparse.Namespace, argv: list[str], label: str = "app") -> i
     estate = estate_data.EstateData.load()
 
     # --- the curator half: a third route family (COWORK_BRIEF_curator_tab.md,
-    # Task 1). Estate-labelled by construction (0032: MCF-scoped, work
-    # estate only) -- `curator_estate_gap` disables every curator route with
-    # the stated reason on any machine whose declared estate is not 'work',
-    # so the tab renders a stated absence rather than curator data there
-    # (stop condition). Loading data/knowledge_curator/ itself needs no
-    # vault and no estate build -- it is independent of both other halves,
-    # same preflight-split reasoning as the docs board.
+    # Task 1). Estate-labelled by construction, corrected to what 0039
+    # clause 2 / 0044 clause 3 actually rule -- the Curator is scoped to
+    # the estate declared for the machine it runs on, never to a fixed
+    # name, and is excluded ONLY on a machine declaring 'both' (the
+    # knight). This used to gate on != 'work' citing 0032, which 0039 had
+    # already amended three days before that code was written (0044's own
+    # finding). `curator_estate_gap` disables every curator route with the
+    # stated reason on a 'both'-declared machine, so the tab renders a
+    # stated absence rather than curator data there (stop condition).
+    # Loading data/knowledge_curator/ itself needs no vault and no estate
+    # build -- it is independent of both other halves, same
+    # preflight-split reasoning as the docs board.
     from chronicler.review import curator_data
     declared_estate_for_curator = m.get("estate")
-    curator_estate_gap = None
-    if declared_estate_for_curator != "work":
-        curator_estate_gap = (
-            f"this machine's declared estate is {declared_estate_for_curator!r}; "
-            "the Knowledge Curator is scoped to the work/MCF estate only "
-            "(DECISIONS 0032) and renders no data anywhere else.")
-    curator = curator_data.Curator()
+    curator_estate_gap = curator_data.curator_estate_gap_for(declared_estate_for_curator)
+    # Only hand the declared estate to Curator() when it actually resolves to
+    # a known map (i.e. the gate passed) -- an excluded/'unknown'/unset
+    # estate must produce a STATED gap (above), never an uncaught
+    # ratified_map_path_for_estate ValueError crashing app startup. Every
+    # curator route already checks curator_estate_gap before reading
+    # anything off this instance, so falling back to the legacy default
+    # here is inert, not a second silent behaviour.
+    curator = curator_data.Curator(
+        declared_estate=(declared_estate_for_curator if curator_estate_gap is None else None))
 
     if db is None and not estate.available:
         # Both data halves absent. This used to be the refusal case, and was,

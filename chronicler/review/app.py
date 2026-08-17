@@ -23,6 +23,7 @@ import sqlite3
 from pathlib import Path
 
 from . import core, module_contract, modules
+from .curator_data import CURATOR_ESTATE_GAP_REASON
 
 # The request-body model must live at MODULE level (not inside create_app) so
 # pydantic can resolve it when FastAPI builds the route schema -- a closure-local
@@ -77,6 +78,21 @@ try:
     class CuratorRatifyPair(BaseModel):
         row_a: CuratorRatifyRow
         row_b: CuratorRatifyRow
+
+    class CuratorCorrectRow(BaseModel):
+        # A correction (DECISIONS 0046): the session_id MUST already be
+        # ratified. `status` is 'corrected' (a wrong project_id, here is
+        # the right one) or 'revoked' (this conversation should not be
+        # mapped at all). `reason` becomes the free-text half of notes,
+        # after both tags -- required, never blank (0046 clause 5: state
+        # what it supersedes and why).
+        session_id: str
+        local_folder: str
+        project_id: str
+        conversation_name: str
+        provenance: str
+        status: str
+        reason: str
 
     class CuratorModelSelect(BaseModel):
         stage: str
@@ -169,13 +185,14 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
     `curator` (a `curator_data.Curator`) is the third half (COWORK_BRIEF_
     curator_tab.md, Task 1): the Knowledge Curator tab's read-only data layer,
     plus the ratification/control/findings routes below it. It is
-    estate-labelled by construction (0032: MCF-scoped, work estate only), so
-    `curator_estate_gap`, when set, disables every curator route with the
-    stated reason -- the tab must render an absence, not curator data, on a
-    machine whose declared estate is not work/MCF (stop condition). Passing
-    `curator=None` (no data/knowledge_curator/ at all) is a separate, legal
-    state from `curator_estate_gap` (wrong machine) -- both degrade the same
-    routes, for different reasons, and both are reported as such.
+    estate-labelled by construction, corrected to 0039 clause 2 / 0044
+    clause 3: `curator_estate_gap`, when set, disables every curator route
+    with the stated reason -- the tab must render an absence, not curator
+    data, on a machine declaring the 'both' estate (stop condition).
+    Passing `curator=None` (no data/knowledge_curator/ at all) is a
+    separate, legal state from `curator_estate_gap` (wrong machine) --
+    both degrade the same routes, for different reasons, and both are
+    reported as such.
 
     `machine` is the config dict (`l5gntools.config.machine()`) the caller
     already resolved, threaded through only so Datasette's sub-app (Task 3,
@@ -504,9 +521,11 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
                                 detail={"reason": exc.reason, "detail": exc.message})
 
     # ---- the Knowledge Curator tab (COWORK_BRIEF_curator_tab.md) -----------
-    # Estate-labelled by construction (0032): every route below is gated on
-    # `curator_estate_gap` FIRST, before anything else, so a machine whose
-    # declared estate is not work/MCF gets a stated absence and never curator
+    # Estate-labelled by construction, corrected to 0039 clause 2 / 0044
+    # clause 3 (0032's MCF-only scoping is superseded): every route below
+    # is gated on `curator_estate_gap` FIRST, before anything else, so a
+    # machine declaring the 'both' estate (the knight) gets a stated
+    # absence and never curator
     # data -- the stop condition this gate exists to make structurally true,
     # not merely documented. This is also what keeps a populated Chronicler
     # strip from ever co-rendering with a populated Curator strip (case 0023):
@@ -515,7 +534,7 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
     def _need_curator_estate():
         if curator_estate_gap:
             raise HTTPException(status_code=503, detail={
-                "available": False, "reason": "not_work_mcf_estate",
+                "available": False, "reason": CURATOR_ESTATE_GAP_REASON,
                 "detail": curator_estate_gap})
 
     @app.get("/api/curator/header")
@@ -525,7 +544,7 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         # is absent, same reasoning as estate_header() above. On the wrong
         # machine this returns available=False and no stage data at all.
         if curator_estate_gap:
-            return {"available": False, "reason": "not_work_mcf_estate",
+            return {"available": False, "reason": CURATOR_ESTATE_GAP_REASON,
                     "detail": curator_estate_gap}
         if curator is None:
             return {"available": False, "reason": "curator_absent",
@@ -585,11 +604,31 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         _need_curator_estate()
         from . import curator_ratify as ratify
         from .estate_data import REPO_ROOT
+        map_path = curator.ratified_map_path if curator else None
         try:
             row = ratify.build_row(**payload.dict())
-            result = ratify.append_ratified_row(row)
+            result = ratify.append_ratified_row(row, path=map_path)
             if result["status"] == "appended":
-                ratify.stage_ratified_map(REPO_ROOT)
+                ratify.stage_ratified_map(REPO_ROOT, map_path=map_path)
+            return result
+        except ratify.RatifyError as exc:
+            raise HTTPException(status_code=400, detail={"reason": exc.reason, "detail": exc.message})
+
+    @app.post("/api/curator/k0/correct")
+    def curator_k0_correct(payload: CuratorCorrectRow):
+        """Undo as append (DECISIONS 0046 clause 5). Never edits or removes
+        the row being corrected -- appends a new row for the same
+        session_id, carrying the corrected project_id (or an unchanged one,
+        for a 'revoked' status) and a [status:...] tag, through
+        curator_ratify's own validated correction path."""
+        _need_curator_estate()
+        from . import curator_ratify as ratify
+        from .estate_data import REPO_ROOT
+        map_path = curator.ratified_map_path if curator else None
+        try:
+            row = ratify.build_correction_row(**payload.dict())
+            result = ratify.append_correction_row(row, path=map_path)
+            ratify.stage_ratified_map(REPO_ROOT, map_path=map_path)
             return result
         except ratify.RatifyError as exc:
             raise HTTPException(status_code=400, detail={"reason": exc.reason, "detail": exc.message})
@@ -599,12 +638,13 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         _need_curator_estate()
         from . import curator_ratify as ratify
         from .estate_data import REPO_ROOT
+        map_path = curator.ratified_map_path if curator else None
         try:
             row_a = ratify.build_row(**payload.row_a.dict())
             row_b = ratify.build_row(**payload.row_b.dict())
-            results = ratify.append_ratified_pair(row_a, row_b)
+            results = ratify.append_ratified_pair(row_a, row_b, path=map_path)
             if any(r["status"] == "appended" for r in results):
-                ratify.stage_ratified_map(REPO_ROOT)
+                ratify.stage_ratified_map(REPO_ROOT, map_path=map_path)
             return {"results": results}
         except ratify.RatifyError as exc:
             raise HTTPException(status_code=400, detail={"reason": exc.reason, "detail": exc.message})
@@ -614,7 +654,23 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         _need_curator_estate()
         from . import curator_ratify as ratify
         from .estate_data import REPO_ROOT
-        return {"diff": ratify.staged_diff(REPO_ROOT)}
+        map_path = curator.ratified_map_path if curator else None
+        return {"diff": ratify.staged_diff(REPO_ROOT, map_path=map_path)}
+
+    @app.get("/api/curator/k0/map/raw")
+    def curator_k0_map_raw():
+        """The reviewing view (DECISIONS 0046 clause 4): every row in the
+        ratified map, in file order, each carrying its parsed status and
+        whether it currently wins for its key -- so a superseding row and
+        the row it supersedes are BOTH visible. This is what makes the
+        curator tab the primary review surface for the map (0040 clause 4),
+        not just a convenience over reading the TSV by hand."""
+        _need_curator_estate()
+        from .curator_data import raw_map_rows_annotated
+        ratified_path = curator.ratified_map_path if curator else None
+        rows = raw_map_rows_annotated(ratified_path)
+        return {"rows": rows, "row_count": len(rows),
+                "resolved_count": sum(1 for r in rows if r["is_current"])}
 
     @app.get("/api/curator/control/preflight")
     def curator_control_preflight():
@@ -721,12 +777,15 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
         _need_curator_estate()
         from . import candidates as cd
         from . import curator_findings as cf
-        from .curator_data import Curator as _Curator, K1_INDEX_PATH, _load_json, ratified_map_rows
+        from .curator_data import Curator as _Curator, K1_INDEX_PATH, _load_json, resolved_map_rows
         from .curator_control import K2_CACHE_PATH
         from chronicler.pipeline import ledger as led
         c = curator or _Curator()
         data_dir = c.data_dir
-        map_rows = ratified_map_rows(c.ratified_map_path)
+        # Resolved, never raw (DECISIONS 0046 clause 2) -- a plan built from
+        # a superseded or revoked mapping would approve work against the
+        # wrong project.
+        map_rows = resolved_map_rows(c.ratified_map_path)
         claims_report = _load_json(data_dir / "claims.json")
         knowledge_index = _load_json(data_dir / "knowledge_index.json")
         k2_cache = _load_json(K2_CACHE_PATH)
@@ -850,7 +909,7 @@ def create_app(db_path: Path | None, registry: dict, account_clause: str,
             "search": (index.status() if index is not None else None),
             # Always available: it depends on this checkout, nothing else.
             "docs_board": {"available": True, "read_only": True},
-            "curator": ({"available": False, "reason": "not_work_mcf_estate",
+            "curator": ({"available": False, "reason": CURATOR_ESTATE_GAP_REASON,
                         "detail": curator_estate_gap} if curator_estate_gap
                        else (curator.header() if curator is not None
                              else {"available": False, "reason": "curator_absent"})),

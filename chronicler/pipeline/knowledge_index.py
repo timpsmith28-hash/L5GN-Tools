@@ -19,7 +19,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from dataclasses import dataclass
@@ -37,6 +36,7 @@ if str(_REPO_ROOT) not in sys.path:
 from l5gntools.scanners.doc_census import classify_doc_type  # noqa: E402
 from l5gntools.common import iter_files  # noqa: E402
 from l5gntools import config as l5gn_config  # noqa: E402
+from chronicler.review import curator_data as _cd  # noqa: E402
 
 DEFAULT_MAP = Path("config/mcf_conversation_map.tsv")
 DEFAULT_OUT = Path("data/knowledge_curator/knowledge_index.json")
@@ -56,25 +56,29 @@ class MapRow:
 
 
 def load_map(path: Path) -> list[MapRow]:
-    """Rows with a non-empty ``session_id`` only -- a header-only template
-    (nothing ratified yet) or a still-blank row from K0's candidate output
-    is not a ratified entry and must not silently participate as one."""
+    """The RESOLVED join of record (DECISIONS 0046 clause 2) -- delegates
+    to ``curator_data.resolved_map_rows``, the one place recency resolution
+    happens, rather than re-reading the TSV itself. This module used to
+    open the file with its own ``csv.DictReader`` loop, independent of
+    ``curator_data`` entirely; that was the second implementation 0046
+    clause 2 named directly ("two implementations of the join of record is
+    one more than can be kept correct"). ``match_claims.py`` imports this
+    function too, so fixing it here fixes both consumers.
+
+    A blank ``session_id`` is still excluded here defensively, though
+    ``resolved_map_rows`` already drops blank keys itself."""
     rows: list[MapRow] = []
-    if not path.exists():
-        return rows
-    with path.open(encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for rec in reader:
-            sid = (rec.get("session_id") or "").strip()
-            if not sid:
-                continue
-            rows.append(MapRow(
-                session_id=sid,
-                local_folder=(rec.get("local_folder") or "").strip(),
-                project_id=(rec.get("project_id") or "").strip(),
-                conversation_name=(rec.get("conversation_name") or "").strip(),
-                notes=(rec.get("notes") or "").strip(),
-            ))
+    for rec in _cd.resolved_map_rows(path):
+        sid = (rec.get("session_id") or "").strip()
+        if not sid:
+            continue
+        rows.append(MapRow(
+            session_id=sid,
+            local_folder=(rec.get("local_folder") or "").strip(),
+            project_id=(rec.get("project_id") or "").strip(),
+            conversation_name=(rec.get("conversation_name") or "").strip(),
+            notes=(rec.get("notes") or "").strip(),
+        ))
     return rows
 
 

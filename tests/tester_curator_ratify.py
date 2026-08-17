@@ -168,4 +168,106 @@ def run() -> list[str]:
         if len(pair_results) != 2 or any(r["status"] != "appended" for r in pair_results):
             v.append(f"curator_ratify: pair ratify did not append both rows: {pair_results}")
 
+        v.extend(_run_corrections(mapfile))
+
+    return v
+
+
+def _run_corrections(mapfile: Path) -> list[str]:
+    """DECISIONS 0046: undo is an append, never an edit. append_correction_
+    row's precondition is the OPPOSITE of append_ratified_row's -- the
+    session_id must already exist -- and every refusal path is exercised
+    directly, not inferred."""
+    v: list[str] = []
+    before = mapfile.read_text(encoding="utf-8")
+
+    # A fresh ratification with a [status:...] tag is refused -- that
+    # concept belongs to correction only.
+    try:
+        ratify.append_ratified_row(
+            {"session_id": "local_smuggled", "local_folder": "MCF/X",
+             "project_id": "X", "conversation_name": "X",
+             "notes": "[provenance:hand-mapped:no-candidate] [status:corrected] nope"},
+            path=mapfile)
+        v.append("curator_ratify: a fresh ratify with a [status:...] tag "
+                 "must be refused")
+    except ratify.RatifyError as exc:
+        if exc.reason != "status_on_fresh_row":
+            v.append(f"curator_ratify: wrong refusal reason for a status "
+                     f"tag on a fresh row: {exc.reason}")
+
+    # Correcting a session_id never ratified is refused.
+    try:
+        row = ratify.build_correction_row(
+            session_id="local_never_ratified", local_folder="MCF/Foo",
+            project_id="Foo", conversation_name="Foo",
+            provenance=ratify.PROV_HAND_MAPPED, status=ratify.STATUS_CORRECTED,
+            reason="never existed")
+        ratify.append_correction_row(row, path=mapfile)
+        v.append("curator_ratify: correcting an unratified session_id must "
+                 "be refused")
+    except ratify.RatifyError as exc:
+        if exc.reason != "unknown_session_id":
+            v.append(f"curator_ratify: wrong refusal reason for an unknown "
+                     f"session_id: {exc.reason}")
+
+    # A real correction: local_existing (project_id 'Foo') -> 'Bar'.
+    row = ratify.build_correction_row(
+        session_id="local_existing", local_folder="MCF/Bar", project_id="Bar",
+        conversation_name="Foo - existing thread",
+        provenance=ratify.PROV_HAND_MAPPED, status=ratify.STATUS_CORRECTED,
+        reason="was mapped to the wrong project at ratification time")
+    result = ratify.append_correction_row(row, path=mapfile)
+    if result["status"] != "corrected":
+        v.append(f"curator_ratify: append_correction_row status wrong: {result}")
+
+    after = mapfile.read_text(encoding="utf-8")
+    if not after.startswith(before):
+        v.append("curator_ratify: append_correction_row rewrote existing "
+                 "bytes instead of appending -- undo must be an append")
+
+    # A no-op correction (same project_id as what's already resolved) is refused.
+    try:
+        row2 = ratify.build_correction_row(
+            session_id="local_existing", local_folder="MCF/Bar", project_id="Bar",
+            conversation_name="Foo - existing thread",
+            provenance=ratify.PROV_HAND_MAPPED, status=ratify.STATUS_CORRECTED,
+            reason="trying again for no reason")
+        ratify.append_correction_row(row2, path=mapfile)
+        v.append("curator_ratify: a no-op correction (identical project_id) "
+                 "must be refused")
+    except ratify.RatifyError as exc:
+        if exc.reason != "no_op_correction":
+            v.append(f"curator_ratify: wrong refusal reason for a no-op "
+                     f"correction: {exc.reason}")
+
+    # A correction with no reason text (tags only) is refused.
+    try:
+        bad_row = {"session_id": "local_existing", "local_folder": "MCF/Baz",
+                   "project_id": "Baz", "conversation_name": "Foo",
+                   "notes": "[provenance:hand-mapped:no-candidate] [status:corrected]"}
+        ratify.append_correction_row(bad_row, path=mapfile)
+        v.append("curator_ratify: a correction with no reason text must be refused")
+    except ratify.RatifyError as exc:
+        if exc.reason != "missing_reason":
+            v.append(f"curator_ratify: wrong refusal reason for a blank "
+                     f"correction reason: {exc.reason}")
+
+    # A revocation drops the key from the resolved view (checked via
+    # curator_data, the one resolver -- not re-derived here).
+    from chronicler.review import curator_data as cd
+    revoke_row = ratify.build_correction_row(
+        session_id="local_pair_a", local_folder="MCF/Baz", project_id="Baz",
+        conversation_name="Baz - a", provenance=ratify.PROV_HAND_MAPPED,
+        status=ratify.STATUS_REVOKED, reason="this conversation should not be mapped")
+    ratify.append_correction_row(revoke_row, path=mapfile)
+    resolved = cd.resolved_map_rows(mapfile)
+    if any(r["session_id"] == "local_pair_a" for r in resolved):
+        v.append("curator_ratify: a revoked session_id must not appear in "
+                 "the resolved map")
+    raw = cd.ratified_map_rows(mapfile)
+    if not any(r["session_id"] == "local_pair_a" for r in raw):
+        v.append("curator_ratify: a revoked row must still appear in the "
+                 "raw map -- undo is an append, never a deletion")
+
     return v
