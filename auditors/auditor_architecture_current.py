@@ -36,7 +36,14 @@ from l5gntools.common import TOOLKIT_ROOT
 from l5gntools.report import ARCHITECTURE_SHAPE_RELPATH, render_architecture_shape
 from l5gntools.scanners.architecture_census import census
 
-_COMMIT_LINE = re.compile(r"Producing commit: \S+ -->")
+# Matches the whole variable tail of the header's "Producing commit: ..."
+# line, up to " -->" -- both the commit SHA and the ", dirty at generation
+# time" suffix report.py appends when the tree was dirty, since "was the
+# tree dirty when this was generated" is provenance about the moment of
+# generation in exactly the same sense the commit is (see report.py's
+# `_DO_NOT_EDIT` comment). One pattern, one masked span, one place this
+# auditor has to know about -- not two facts tracked by two regexes.
+_COMMIT_LINE = re.compile(r"Producing commit: [^\n]* -->")
 
 
 def _mask_commit_line(text: str) -> str:

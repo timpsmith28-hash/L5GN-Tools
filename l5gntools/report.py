@@ -299,7 +299,7 @@ _DO_NOT_EDIT = (
     "l5gntools/report.py:render_architecture_shape -- DO NOT HAND-EDIT.\n"
     "     Regenerate with `python run.py render-architecture` after any "
     "change to routes, schema, scanners, the gate or the dependency wall.\n"
-    "     Producing commit: {commit} -->\n"
+    "     Producing commit: {commit}{dirty} -->\n"
 )
 
 
@@ -329,8 +329,19 @@ def render_architecture_shape(data: dict) -> str:
     calls the other's I/O."""
     sections = data["sections"]
     commit = data.get("provenance", {}).get("commit") or "(unknown)"
+    dirty = ", dirty at generation time" if data.get("provenance", {}).get("dirty") else ""
 
-    out: list[str] = [_DO_NOT_EDIT.format(commit=commit)]
+    # Both facts about *when this was generated* (the commit, and whether
+    # the tree was dirty) live in this one header line and nowhere else in
+    # the file -- `auditor_architecture_current` masks this whole line from
+    # its diff (see that auditor's docstring): a commit that lands a
+    # regeneration always gets a new SHA the moment it's made, so the render
+    # it commits necessarily names its own parent, never itself, and "was
+    # the tree dirty" is the same kind of fact about the moment of
+    # generation, not about the tree's shape. A second copy of either fact
+    # anywhere else in the file would be a second place that auditor has to
+    # know to mask.
+    out: list[str] = [_DO_NOT_EDIT.format(commit=commit, dirty=dirty)]
     out.append("# The toolkit's own shape\n")
     out.append(
         "Generated, never hand-edited (DECISIONS 0030). `docs/ARCHITECTURE.md` "
@@ -445,14 +456,10 @@ def render_architecture_shape(data: dict) -> str:
     else:
         out.append("None -- every source file this census attempted to parse, parsed.\n")
 
-    # The commit itself is named once, in the do-not-edit header -- not
-    # repeated here. A second copy would be a second place
-    # `auditor_architecture_current` has to know to mask from its diff (see
-    # that auditor's docstring on why the header's copy is masked at all);
-    # one location for the same fact is simpler than two kept in sync.
-    dirty_note = "dirty working tree at generation time" if data["provenance"].get("dirty") else "clean working tree at generation time"
-    out.append(f"---\n\n_Provenance: {dirty_note}. See the header above for "
-               f"the producing commit._\n")
+    # No footer provenance paragraph: the commit and dirty bit are named
+    # once, in the do-not-edit header, and nowhere else -- see that
+    # constant's comment for why a second copy anywhere in this file would
+    # be a second place `auditor_architecture_current` has to know to mask.
     return "\n".join(out) + "\n"
 
 
