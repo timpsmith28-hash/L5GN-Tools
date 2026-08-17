@@ -1,5 +1,5 @@
-<!-- actioned: 2026-08-17 · A4 · commit=27bf126 · architecture_census (DECISIONS 0030) independently reproduced A4 from AST alone: chronicler/review/core.py writes {projects, review_rulings, threads}, never review_queue -- see docs/_architecture_shape.md §4 -->
-<!-- actioned: 2026-08-17 · A12 · commit=27bf126 · architecture_census (DECISIONS 0030) independently reproduced A12 from schema introspection: render_log present in schema_frozen.sql, absent from schema.sql -- see docs/_architecture_shape.md §5 -->
+<!-- actioned: 2026-08-17 · A4 · commit=001d037 · architecture_census (DECISIONS 0030) independently reproduced A4 from AST alone: chronicler/review/core.py writes {projects, review_rulings, threads}, never review_queue -- see docs/_architecture_shape.md §4 -->
+<!-- actioned: 2026-08-17 · A12 · commit=001d037 · architecture_census (DECISIONS 0030) independently reproduced A12 from schema introspection: render_log present in schema_frozen.sql, absent from schema.sql -- see docs/_architecture_shape.md §5 -->
 
 # Response — ARCHITECTURE drift audit
 

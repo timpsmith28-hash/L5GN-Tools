@@ -1,4 +1,4 @@
-<!-- uat: commit=27bf126 dirty=false host=vm walked=2026-08-17 -->
+<!-- uat: commit=001d037 dirty=false host=LucasGoonPC walked=2026-08-17 -->
 
 # UAT results — architecture census (DECISIONS 0030)
 
@@ -30,11 +30,21 @@ Walked against `docs/UAT_architecture_census.md`. All ten items **pass**.
 - [x] `[H]` `docs/ARCHITECTURE.md` is unchanged by this round (`git diff`
   against it, empty).
 
-**Gate at the walked commit:** `python verify.py` → GREEN, 10 auditors + 74
+**Gate at the walked commit:** `python verify.py` → GREEN, 10 auditors + 75
 testers (printed counts match `docs/COWORK_REPORT_architecture_census.md`).
 
-**Found during the walk, not named in the brief, both fixed before this
+**Found during the walk, not named in the brief, three fixed before this
 stamp:**
+
+0. The build had started from a stale base: this session's cloud clone was
+   taken from GitHub at `afc246b`, eight commits behind the actual local
+   checkout (`a0c3901`, the unpushed `correctness_sweep` round). Caught
+   before syncing anything back, by checking `git log` on the local device
+   directly rather than assuming the GitHub clone was current. The whole
+   round was rebased onto `a0c3901` — clean, no conflicts, including on
+   `pyproject.toml`, which both this round and `correctness_sweep` touch —
+   and every count/fact in the report and this results log reflects the
+   rebased state, not the stale one.
 
 1. `doc_census.classify_provenance` checked only directory segments for a
    leading `.`/`_`, never the filename itself -- `docs/_architecture_shape.md`

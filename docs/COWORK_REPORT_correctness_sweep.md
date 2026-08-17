@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=a0c3901 -->
 # Cowork report — correctness sweep
 
 Built against `docs/COWORK_BRIEF_correctness_sweep.md`, commit series

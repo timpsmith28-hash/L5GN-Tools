@@ -5,12 +5,21 @@
 ARCHITECTURE.md keeps the half that can't be derived") was already ratified
 and accepted before this session began — the brief's precondition clause was
 satisfied on entry, not negotiated during the build.
-**Gate:** `python verify.py` → **GREEN, 10 auditors + 74 testers** (was 9 + 72;
-+1 auditor: `auditor_architecture_current` [Task 4], +2 testers:
+**Gate:** `python verify.py` → **GREEN, 10 auditors + 75 testers** (was
+9 + 73 at `a0c3901`, this round's true base commit; +1 auditor:
+`auditor_architecture_current` [Task 4], +2 testers:
 `tester_architecture_census` [Task 2] and `tester_architecture_current` (the
 new auditor's own pure-logic tester -- the commit-line mask below).
-**Base commit at time of writing:** working tree dirty (this round's own
-changes, uncommitted at report time).
+**Base commit:** `a0c3901` — this session's cloud clone had been taken from
+`github.com/timpsmith28-hash/L5GN-Tools` at `afc246b`, eight commits behind
+the actual local checkout (`LucasGoonPC`'s `correctness_sweep` round,
+unpushed). Discovered when the local device's `git log` was checked before
+syncing changes back; the whole round was rebased from `afc246b` onto
+`a0c3901` before landing (clean rebase, no conflicts even on
+`pyproject.toml`, which both this round's Task 6 and the correctness sweep
+touch). Every fact and figure below is from the tree at `a0c3901` plus this
+round's changes, not from the stale `afc246b` snapshot the build started
+against.
 
 This is testimony about what was built, not a status board — it will not be
 updated as the tree moves on.
@@ -61,7 +70,7 @@ have been a special case earned by nothing).
 
 ## Section 2 — Gate composition
 
-`verify.py`: **10 auditors, 74 testers**, both lists read directly from
+`verify.py`: **10 auditors, 75 testers**, both lists read directly from
 `verify.py`'s `AUDITORS`/`TESTERS` via `ast` (the file uses annotated
 assignment, `NAME: list[str] = [...]` — the census's `_string_list_assign`
 handles both `Assign` and `AnnAssign`, found by the count first coming back
@@ -141,16 +150,23 @@ stdlib-only claim holds, checked rather than assumed.
 `chronicler/` (top-level, `scrape_gemini_share.py`): matches `scrape`
 (`playwright`) exactly.
 
-**`chronicler/review/`: one undeclared import — `pydantic`.** `app.py`'s
-own docstring already says why ("pydantic ships with fastapi"), so the code
-is not wrong and nothing is silently missing at runtime — but `pyproject.toml`'s
-`review` extra lists only `fastapi>=0.110` and `uvicorn>=0.29`; `pydantic`
-is a real, imported, load-bearing dependency (every request/response model
-in `app.py` is a `pydantic.BaseModel`) that rides in unlisted, on the
-assumption that FastAPI's own pin will always be compatible. Not fixed here
-— Task 6 emits facts, and "declare pydantic explicitly" is a one-line
-`pyproject.toml` edit that is not this brief's to make unasked. Recorded so
-it doesn't have to be rediscovered.
+**`chronicler/review/`: one undeclared import, one unused extra.**
+`pydantic` is imported (every request/response model in `app.py` is a
+`pydantic.BaseModel`) but not declared — `app.py`'s own docstring already
+says why ("pydantic ships with fastapi"), so nothing is silently missing at
+runtime, but it is a real, load-bearing dependency riding in unlisted on
+the assumption that FastAPI's own pin stays compatible. `httpx2` is the
+opposite shape: declared in the `review` extra (added by the
+`correctness_sweep` round, `142c11f`, this round's true base) but never
+`import`ed anywhere in `chronicler/review/` — it exists only so
+`starlette.testclient` prefers it over `httpx` in the gate's own test
+routes, a transitive need the census correctly cannot see from imports
+alone (nothing in this repo names `httpx2` in a Python `import` statement;
+`pip` resolves it as a dependency of `fastapi.testclient.TestClient`'s
+preferred backend). Neither is fixed here — Task 6 emits facts, and both a
+one-line `pyproject.toml` addition and a documented exception for
+transitive-only extras are edits this brief did not ask for. Recorded so
+neither has to be rediscovered.
 
 ---
 
