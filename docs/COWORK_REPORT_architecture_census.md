@@ -5,9 +5,10 @@
 ARCHITECTURE.md keeps the half that can't be derived") was already ratified
 and accepted before this session began — the brief's precondition clause was
 satisfied on entry, not negotiated during the build.
-**Gate:** `python verify.py` → **GREEN, 10 auditors + 73 testers** (was 9 + 72;
-+1 auditor: `auditor_architecture_current` [Task 4], +1 tester:
-`tester_architecture_census` [Task 2]).
+**Gate:** `python verify.py` → **GREEN, 10 auditors + 74 testers** (was 9 + 72;
++1 auditor: `auditor_architecture_current` [Task 4], +2 testers:
+`tester_architecture_census` [Task 2] and `tester_architecture_current` (the
+new auditor's own pure-logic tester -- the commit-line mask below).
 **Base commit at time of writing:** working tree dirty (this round's own
 changes, uncommitted at report time).
 
@@ -60,7 +61,7 @@ have been a special case earned by nothing).
 
 ## Section 2 — Gate composition
 
-`verify.py`: **10 auditors, 73 testers**, both lists read directly from
+`verify.py`: **10 auditors, 74 testers**, both lists read directly from
 `verify.py`'s `AUDITORS`/`TESTERS` via `ast` (the file uses annotated
 assignment, `NAME: list[str] = [...]` — the census's `_string_list_assign`
 handles both `Assign` and `AnnAssign`, found by the count first coming back
@@ -184,6 +185,22 @@ All three checked by `tests/tester_architecture_census.py`, in the gate:
   SQL string — parsing SQL text, not Python source).
 
 ## The gate refusing a stale render (Task 4, walked by hand)
+
+**A real chicken-and-egg found while walking this, not a hypothetical.** The
+do-not-edit header names "the producing commit" — but the commit that
+*adds or updates* the render necessarily gets a new SHA the moment it is
+made, so the render a commit lands always names its own *parent*, never
+itself. First commit of this round went RED on the very next `verify.py`
+run for exactly that reason: `auditor_architecture_current` regenerated
+fresh, saw the freshly-regenerated header now naming the just-made commit,
+compared it against the committed header naming the commit *before* that,
+and correctly called them different. Fixed by excluding the header's
+commit line from the auditor's red/green diff — the identical shape as
+`census()`'s own "no wall-clock inside the compared payload" rule, applied
+to the one line that is provenance about *when this was committed*, not
+about the tree's shape. Everything else in the file is still compared in
+full, and `tests/tester_architecture_current.py` proves the mask hides
+*only* a commit-line difference, never a real one.
 
 One line of `docs/_architecture_shape.md` was hand-edited; `python verify.py`
 went RED with `auditor_architecture_current` printing a unified diff and the

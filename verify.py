@@ -28,6 +28,7 @@ AUDITORS: list[str] = [
 TESTERS: list[str] = [
     "tests.tester_common",
     "tests.tester_architecture_census",
+    "tests.tester_architecture_current",
     "tests.tester_scanners",
     "tests.tester_scanner_scope",
     "tests.tester_report_selfcheck",
