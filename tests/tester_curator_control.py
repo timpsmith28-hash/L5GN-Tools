@@ -85,6 +85,54 @@ def run() -> list[str]:
                  "method in code today (difflib.SequenceMatcher), not an "
                  "aspirational embedding path")
 
+    # --- K2 must be map-scoped, exactly like K1/K4 --------------------------
+    # Found live, on a personal-estate machine, after the original curator-
+    # correction round shipped: K2 (extract_claims.py) reads the ratified
+    # map via its own --map flag exactly like K1/knowledge_index.py and
+    # K4/match_claims.py do, but was left out of MAP_SCOPED_STAGES. It ran
+    # "successfully" (a valid, empty claims.json is not a script failure)
+    # while silently falling back to extract_claims.py's own CLI default --
+    # the work-estate map -- and scanning zero conversations against a map
+    # that was never ratified on that machine. K2's own claims.json showed
+    # conversations_scanned: 0 against a 3-row ratified personal map.
+    for stage in ("K1", "K2", "K4"):
+        if stage not in ctl.MAP_SCOPED_STAGES:
+            v.append(f"curator_control: {stage} must be in MAP_SCOPED_STAGES -- "
+                     f"its script reads the ratified map and must be told THIS "
+                     f"machine's estate-resolved path explicitly")
+
+    # the subprocess argv actually receives --map for K2 -- not just that the
+    # stage is declared map-scoped, but that run_stage really appends it.
+    with tempfile.TemporaryDirectory() as tmp:
+        captured_argv: list[str] = []
+
+        class _CapturingPopen(_FakePopen):
+            def __init__(self, argv, **kw):
+                captured_argv.clear()
+                captured_argv.extend(argv)
+                super().__init__(["ok"], 0)
+
+        real_get_models = ctl.get_curator_models
+        ctl.get_curator_models = lambda host=None, path=None: {"K2": "fake-model"}
+        try:
+            outcome = ctl.run_stage(
+                "K2", host="RENAME-ME-WORK-LAPTOP",  # committed template host, estate "work"
+                popen_factory=lambda argv, **kw: _CapturingPopen(argv, **kw))
+        finally:
+            ctl.get_curator_models = real_get_models
+        if outcome.state == "blocked":
+            v.append(f"curator_control: K2 run_stage on a work-estate host with a "
+                     f"model selected should not be blocked, got: {outcome.detail}")
+        elif "--map" not in captured_argv:
+            v.append("curator_control: K2's actual subprocess argv is missing --map -- "
+                     "it will silently fall back to extract_claims.py's own CLI "
+                     "default (the work-estate map) on any other estate")
+        else:
+            map_arg = captured_argv[captured_argv.index("--map") + 1]
+            if "mcf_conversation_map.tsv" not in map_arg:
+                v.append(f"curator_control: K2 on a work-estate host must receive "
+                         f"the work-estate map path, got {map_arg!r}")
+
     # --- model selection: config/local.json, keyed by hostname, isolated ---
     with tempfile.TemporaryDirectory() as tmp:
         local_json = Path(tmp) / "local.json"

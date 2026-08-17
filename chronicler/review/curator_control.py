@@ -72,8 +72,17 @@ EXECUTION_ALLOWLIST: frozenset[str] = frozenset(STAGE_TABLE)
 #: THIS machine's estate-resolved path explicitly (DECISIONS 0044 clause 4)
 #: rather than falling back to each script's own hardcoded work-estate
 #: default. K0 produces the CANDIDATE map and does not read the ratified
-#: one; K3/K5 don't touch it either.
-MAP_SCOPED_STAGES: frozenset[str] = frozenset({"K1", "K4"})
+#: one; K3/K5 don't touch it either. K2 (extract_claims.py) DOES read the
+#: ratified map -- it takes its own `--map` flag to build `mapped_ids` --
+#: and was missed in the original curator-correction pass: left out of this
+#: set, K2 silently fell back to extract_claims.py's own CLI default
+#: (`knowledge_index.DEFAULT_MAP`, the work-estate `config/mcf_conversation_
+#: map.tsv`) on every non-work estate, scanning zero conversations against a
+#: map that was never ratified on that machine -- while still reporting
+#: "success" (a valid, empty claims.json is not a script failure). Found by
+#: exactly that symptom on a personal-estate machine: K2's own claims.json
+#: showed `conversations_scanned: 0` against a 3-row ratified map.
+MAP_SCOPED_STAGES: frozenset[str] = frozenset({"K1", "K2", "K4"})
 
 #: Stages that get a model selector at all (Task 3: "only for stages that
 #: call a model"). K0/K1/K3/K5 are deterministic and get none.
