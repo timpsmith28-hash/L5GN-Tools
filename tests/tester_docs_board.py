@@ -65,6 +65,15 @@ def _fixture(root: Path) -> None:
     _write(docs / "UAT_solo.md", "# uat\n- [ ] a\n")
     _write(docs / "UAT_solo_results.md", _UAT_STAMP + "# results\n- [x] a\n")
 
+    # built, not walked -- the post-0031 backticked checkbox form, which must
+    # count exactly like the plain form (correctness sweep, finding 5/2:
+    # UAT_knowledge_curator.md and UAT_project_wizard.md read 0/0 on the real
+    # board before this fix, a confident zero on 38 real open items)
+    _write(docs / "COWORK_BRIEF_backticked.md", "# brief\n")
+    _write(docs / "COWORK_REPORT_backticked.md", "# report\n")
+    _write(docs / "UAT_backticked.md",
+           "# uat\n- `[ ]` a\n- `[ ]` b\n- `[x]` c\n- `[~]` d\n")
+
     # off-board: maintained, not finished
     _write(docs / "DECISIONS.md", "# decisions\n")
     _write(docs / "RUNBOOK_thing.md", "# runbook\n")
@@ -220,6 +229,16 @@ def run() -> list[str]:
             v.append("board: `- [x]` count wrong on the built card")
         if cards.get("ticked", {}).get("done_items") != 2:
             v.append("board: `- [~]` must count as done (walked with a caveat)")
+
+        # --- the backticked checkbox form counts identically to the plain one
+        bt = cards.get("backticked", {})
+        if bt.get("open_items") != 2:
+            v.append("board: `` - `[ ]` `` must count as open, same as `- [ ]` "
+                     f"-- got {bt.get('open_items')!r} (a confident zero here is "
+                     f"exactly the bug this tester exists to catch)")
+        if bt.get("done_items") != 2:
+            v.append("board: `` - `[x]` `` / `` - `[~]` `` must count as done, "
+                     f"same as the plain form -- got {bt.get('done_items')!r}")
 
         # --- the checkbox finding is SURFACED, never normalised -------------
         ev = cards.get("evidence", {})

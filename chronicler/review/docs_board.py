@@ -194,8 +194,13 @@ _UAT_STAMP = re.compile(r"<!--\s*uat:\s*(?P<body>[^>]*?)\s*-->", re.I)
 _FIELD = re.compile(r"(\w+)\s*=\s*(\S+)")
 
 #: A checkbox line. ``[x]`` and ``[~]`` both count as done -- ``~`` is the
-#: house spelling for "walked, with a caveat recorded", which is a walked item.
-_CHECK = re.compile(r"^\s*[-*]\s*\[(?P<mark>[ xX~])\]")
+#: house spelling for "walked, with a caveat recorded", which is a walked
+#: item. The checkbox itself may be wrapped in a single backtick each side --
+#: `` `[ ]` `` -- the post-0031 form several sheets use so the literal
+#: brackets render as code rather than (sometimes) as a live checkbox widget.
+#: Both forms are the same convention; a sheet using the backticked form must
+#: never be silently read as having no items at all.
+_CHECK = re.compile(r"^\s*[-*]\s*`?\[(?P<mark>[ xX~])\]`?")
 
 FINDING_UNSTAMPED = "unstamped_archive_file"
 FINDING_EVIDENCE_IN_RESULTS = "checkbox_evidence_in_results_log"
