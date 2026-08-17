@@ -445,8 +445,14 @@ def render_architecture_shape(data: dict) -> str:
     else:
         out.append("None -- every source file this census attempted to parse, parsed.\n")
 
-    out.append(f"---\n\n_Provenance: toolkit commit `{commit}`"
-               f"{', dirty working tree' if data['provenance'].get('dirty') else ''}._\n")
+    # The commit itself is named once, in the do-not-edit header -- not
+    # repeated here. A second copy would be a second place
+    # `auditor_architecture_current` has to know to mask from its diff (see
+    # that auditor's docstring on why the header's copy is masked at all);
+    # one location for the same fact is simpler than two kept in sync.
+    dirty_note = "dirty working tree at generation time" if data["provenance"].get("dirty") else "clean working tree at generation time"
+    out.append(f"---\n\n_Provenance: {dirty_note}. See the header above for "
+               f"the producing commit._\n")
     return "\n".join(out) + "\n"
 
 
