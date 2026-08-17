@@ -13,6 +13,7 @@ import importlib
 import sys
 
 AUDITORS: list[str] = [
+    "auditors.auditor_architecture_current",
     "auditors.auditor_cli_contract",
     "auditors.auditor_dependency_direction",
     "auditors.auditor_deposit_exclusion",
@@ -26,6 +27,7 @@ AUDITORS: list[str] = [
  
 TESTERS: list[str] = [
     "tests.tester_common",
+    "tests.tester_architecture_census",
     "tests.tester_scanners",
     "tests.tester_scanner_scope",
     "tests.tester_report_selfcheck",

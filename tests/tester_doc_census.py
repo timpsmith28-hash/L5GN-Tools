@@ -64,6 +64,11 @@ def _check_provenance() -> list[str]:
         ".vault/gap/x.md", "_citadel_intel_docs/campaign_modules/y.md",
         "output/report.md", "logs/run.md", "AutoFiles/v1.1/z.md",
         "a/_archive/pipeline_data/w.md",
+        # A leading underscore/dot on the FILENAME itself, directory
+        # otherwise ordinary -- architecture_census's own render
+        # (`docs/_architecture_shape.md`, DECISIONS 0030) is exactly this
+        # shape, and must count as generated even though `docs/` does not.
+        "docs/_architecture_shape.md", "docs/.hidden_note.md",
     ]
     authored = [
         "docs/README.md", "briefs/COWORK_BRIEF_x.md", "PoC/notes.md",

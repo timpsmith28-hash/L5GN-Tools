@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=afc246b -->
 # UAT — curator correction (DECISIONS 0044/0046)
 
 Walk against `docs/COWORK_BRIEF_curator_correction.md`'s acceptance checks. Mark each `[G]`/`[W]`/`[H]` per 0031 as you go.

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .contract import build_manifest
 from .scanners import (
+    architecture_census,
     blast_radius,
     bloat_audit,
     doc_census,
@@ -42,6 +43,7 @@ SCANNERS = [
     vault_reader,
     project_trail,
     drift,
+    architecture_census,
 ]
 
 BY_NAME = {m.NAME: m for m in SCANNERS}

@@ -109,9 +109,10 @@ def classify_doc_type(relpath: str) -> str:
 # --- Task B: provenance ----------------------------------------------------
 #
 # Candidate rule, verified against both estates before shipping (brief Task
-# B): a document is `generated` if any directory segment (not the filename
-# itself) begins with `.` or `_`, or is one of a short explicit list earned by
-# a real project on this estate rather than assumed in the abstract.
+# B): a document is `generated` if any path segment -- a directory, OR the
+# filename itself -- begins with `.` or `_`, or is one of a short explicit
+# list earned by a real project on this estate rather than assumed in the
+# abstract.
 #
 # Verified 2026-07-28 against the personal estate's real `data/estate.json`
 # (824 docs): the dot/underscore rule alone catches 694, the explicit list
@@ -121,12 +122,26 @@ def classify_doc_type(relpath: str) -> str:
 # `AutoFiles` earns its place by one project alone (L5GN-Archive) -- it does
 # not generalise the way the underscore/dot convention does, and is kept
 # because it is real, not hypothetical.
+#
+# The filename check (below) was added by `COWORK_BRIEF_architecture_census.md`
+# (DECISIONS 0030): that round's committed, machine-owned render lives at
+# `docs/_architecture_shape.md` -- a top-level file whose *directory*
+# (`docs/`) does not start with `.`/`_`, only its own name does. Until this
+# fix, `[:-1]` (every segment but the last) skipped the filename entirely, so
+# a file's own leading underscore bought it nothing unless it also sat in a
+# generated *directory* -- verified empirically against this exact path
+# before the fix landed, and every existing fixture case in
+# `tests/tester_doc_census.py` already had the underscore on a directory
+# segment, so widening the check to include the filename could only add
+# `generated` classifications, never remove one (no existing test relies on
+# a leading-underscore *filename* reading as authored).
 _GENERATED_DIR_NAMES = frozenset({"output", "logs", "AutoFiles"})
 
 
 def classify_provenance(relpath: str) -> str:
-    """``authored`` or ``generated``, by directory segment alone (Task B)."""
-    for seg in relpath.split("/")[:-1]:
+    """``authored`` or ``generated``, by path segment alone (Task B) --
+    every directory segment AND the filename itself."""
+    for seg in relpath.split("/"):
         if seg.startswith(".") or seg.startswith("_"):
             return "generated"
         if seg in _GENERATED_DIR_NAMES:

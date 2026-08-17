@@ -10,6 +10,12 @@ Usage:
     python run.py <tool> [--target NAME]     # one tool on one project
     python run.py <tool> --all               # one tool across the whole estate
     python run.py census [--target PATH]     # this machine reports its own domain
+    python run.py architecture_census        # this checkout's own shape -> data/
+    python run.py render-architecture        # render data/architecture_census.json
+                                              # -> docs/_architecture_shape.md (run
+                                              # after any route/schema/gate change,
+                                              # before committing -- the gate refuses
+                                              # a stale render)
 
 Chronicler-runtime commands (knight; resolve paths from CHRONICLER_HOME):
     python run.py app    [--port N] [--host H]   # the deck: queue + estate + docs
@@ -806,6 +812,22 @@ def _cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_render_architecture() -> int:
+    """Task 3/4 (COWORK_BRIEF_architecture_census.md): the human-run generator.
+
+    Regenerates data/architecture_census.json and docs/_architecture_shape.md
+    from one scan, so the two can never disagree with each other on disk.
+    `auditor_architecture_current` (the gate check) never calls this -- it
+    regenerates its own copy in memory and diffs; this is the only path that
+    writes the committed file.
+    """
+    from l5gntools.report import write_architecture_shape
+    dest = write_architecture_shape()
+    print(f"architecture_census: wrote data/architecture_census.json")
+    print(f"render-architecture: wrote {dest}")
+    return 0
+
+
 def _cmd_tool(name: str, args: argparse.Namespace) -> int:
     mod = BY_NAME[name]
     targets = resolve_targets(args.target, args.all, args.include_third_party)
@@ -833,9 +855,10 @@ def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="run.py", add_help=True,
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
-                   help="a tool name, or 'list' / 'build' / 'census' / 'config' / "
-                        "'deposit' / 'consume' / 'ingest' / 'app' / 'window' / "
-                        "'serve' / 'review' / 'backup' / 'scrape' / 'conductor' "
+                   help="a tool name, or 'list' / 'build' / 'census' / "
+                        "'render-architecture' / 'config' / 'deposit' / 'consume' / "
+                        "'ingest' / 'app' / 'window' / 'serve' / 'review' / "
+                        "'backup' / 'scrape' / 'conductor' "
                         "('serve' and 'review' are deprecated aliases for 'app', "
                         "kept for one round)")
     p.add_argument("--target", help="sibling folder name or path")
@@ -874,6 +897,8 @@ def main(argv: list[str]) -> int:
         return _cmd_consume()
     if args.command == "census":
         return _cmd_census(args)
+    if args.command == "render-architecture":
+        return _cmd_render_architecture()
     if args.command == "backup":
         return _cmd_backup(args)
     if args.command == "conductor":

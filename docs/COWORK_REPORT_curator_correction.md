@@ -1,3 +1,4 @@
+<!-- gate-frozen: commit=afc246b -->
 # Cowork report — curator correction (DECISIONS 0044/0046)
 
 Built against `docs/COWORK_BRIEF_curator_correction.md`, ratified 2026-08-17 (commit `0ddf59c`). Gate: **9 auditors + 73 testers, GREEN.**
