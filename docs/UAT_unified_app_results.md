@@ -9,8 +9,14 @@ Sheet: `docs/UAT_unified_app.md`. Pair:
 `dirty=true` — two results logs from this Grand Walk were uncommitted at walk
 time; no code was uncommitted.
 
-**Gate:** `python verify.py` GREEN, 8 auditors + 66 testers, and green via the
-pre-commit hook on every commit in `13fef34..174e57e`.
+**Gate:** `python verify.py` GREEN, and green via the pre-commit hook on every
+commit in `13fef34..174e57e`.
+
+*(No auditor/tester counts are stated here. The `uat` stamp above names the
+commit, and the gate's composition at that commit is derivable from it —
+`docs/README.md` §1: a document earns its place by holding something that
+cannot be derived. The walk-sheet carries the build-time count, frozen, which
+is where a frozen number belongs.)*
 
 The sheet's **14 `[G]` items were already proven and cited during the build**
 and are not re-walked here; the sheet lists them with their proofs. This log
@@ -55,11 +61,32 @@ answer. All five are now walked.
   defect, and a launcher that sometimes needs a second go is the sort of thing
   that erodes exactly the "is this an application" property this item measures.
 
-  `launcher.py` waits on `/api/health` before opening the window, so the
-  suspicion is that wait being too short for a cold start on a slower machine —
-  **suspected, not diagnosed.** Only reproducible on `10280L`. Do not lengthen
-  the timeout without timings from a real cold start there; a timeout extended
-  by guesswork is a longer wait before the same failure.
+  **Diagnosed after the walk**, from a cold-start run on `10280L` with
+  `__pycache__` deleted. It is not a slow start:
+
+  ```
+  INFO:     Uvicorn running on http://127.0.0.1:54553 (Press CTRL+C to quit)
+  app: server did not answer /api/health within 20s
+  ```
+
+  The server came up correctly — startup complete, uvicorn bound, every route
+  ENABLED. `create_app` does its heavy work **before** uvicorn can answer
+  anything: an FTS5 index over **1812 authored documents** plus a Datasette
+  snapshot, all ahead of the bind. On a cold cache that exceeds
+  `HEALTH_TIMEOUT_S` (20s).
+
+  That also explains why it is work-rig-only: `LucasGoonPC` carries **241**
+  authored documents to `10280L`'s 1812.
+
+  **The failure mode matters more than the delay.** The launcher reports failure
+  while the server reports success, and its message — *"see its output above for
+  why"* — points at output stating that everything worked. `H4` passed above;
+  this is the case that would have failed it.
+
+  **The fix is not the timeout.** `/api/health` should mean *the server is up* —
+  bind first and build the index lazily, or have the launcher distinguish *no
+  answer* from *answered, still initialising*. Raising 20s to 60s hides the same
+  failure for a larger corpus.
 
 - [x] **H3. Is anything harder to find than it was across two ports?**
   **Passed.** *"Everything seems to be findable now."* Consolidation did not
@@ -95,28 +122,31 @@ answer. All five are now walked.
 All 19 acceptance checks on the sheet are answered — 14 `[G]` proven at build
 time and cited on the sheet, 5 `[H]` walked here.
 
-**The pair does not close yet.** `docs/COWORK_REPORT_unified_app.md` does not
-exist, which is the only reason the docs board still shows `unified_app` in
-*In flight* — the board's rule is a brief with no report, and the code has been
-complete since `f1d7df3`. The report is the outstanding artefact, not the work.
+**The pair closes with this log and its report.**
+`docs/COWORK_REPORT_unified_app.md` was written 2026-08-17 — the only artefact
+that had been missing, which is why the board showed `unified_app` in *In
+flight* while the code had been complete since `f1d7df3`. The board moved it to
+*Walked* on the report landing.
 
-The brief names what it must record: the 0034 ratification and what
-ARCHITECTURE §3 now says; the module descriptor with the one migrated tab quoted
-in full and the cost of migrating it; the Datasette verdict **and the honest
-answer to what it was used for**; what became of 0013 and 0021; the data-root
-resolution order and the exact migration step an existing install takes; the
-launcher's second-instance behaviour; and everything now behind the `mesh` extra.
+The report carries this walk's two additions: **H2's first-load failure**, now
+diagnosed above, and 0035's deliberate deferral of the physical data-root move
+— Task 4 is partial **by ruling, not by omission**, and the report says so
+plainly so a cold reader does not record it as unfinished work.
 
-Two things this walk adds to that report: **H2's intermittent first load**, and
-0035's deliberate deferral of the physical data-root move — Task 4 is partial by
-ruling, not by omission, and the report should say so plainly so a cold reader
-does not record it as an unfinished task.
+It also records two things it found that this walk did not look for:
+`ARCHITECTURE` §3 is still silent about the app tier (the string `0034` appears
+nowhere in that file), and 0021's supersession entry — flagged by the build as
+due once Task 4 landed — was never written. Both are outstanding deliverables
+of this round rather than follow-ups.
 
 ## Carried findings
 
 1. **Unsubmitted judgement is lost on reload** (H1). Declared, warned about, and
    still the most expensive thing that can go wrong. Evidence for a future
    draft-persistence decision; not a defect against this round.
-2. **Intermittent first-load failure on `10280L`** (H2). Retry succeeds.
-   Suspected `/api/health` wait; needs timings from a real cold start on that
-   rig before anything is changed.
+2. **First load after a `git pull` fails on `10280L`** (H2, diagnosed). Not a
+   slow start: `create_app` builds an FTS5 index over 1812 documents and mounts
+   Datasette before uvicorn binds, so `/api/health` cannot answer inside the
+   launcher's 20s wait on a cold cache. **The launcher reports failure while the
+   server reports success.** Work-rig only — the gaming rig carries 241
+   documents. Fix by binding before building, not by lengthening the timeout.
