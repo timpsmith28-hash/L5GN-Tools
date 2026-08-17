@@ -35,3 +35,49 @@ This log records a verdict and its evidence per item -- never a computed pass. `
 
 - **B3** [DEFERRED] Set an item's verdict to **deferred** and leave the evidence box — added deferred for this box - I was blocked when trying to emit
 - **B4** [BLOCKED] Same as B3, for **blocked**. — added block for this box - I was blocked when trying to emit without a comment
+
+---
+
+## Additional walk — 2026-08-15, LucasGoonPC (<!-- uat: commit=174e57e dirty=true host=LucasGoonPC walked=2026-08-15 -->)
+
+Partner to `docs/UAT_uat_sidebar.md`.
+
+This log records a verdict and its evidence per item -- never a computed pass. `[EVIDENCE]` walked (with evidence) · `[DEFERRED]` deferred, with a reason · `[BLOCKED]` blocked, with a reason · `[N/A]` not applicable.
+
+---
+
+## Machine-verified
+
+Machine-verified items below are cited from a witness run: `data/witness/uat_sidebar.json`, fixture `tests/witness/fixtures/uat_sidebar`, commit `174e57e`, ran 2026-08-15T11:08:51+01:00 on `LucasGoonPC`. Re-run the witness at that commit against that fixture to re-derive these observations.
+
+- **B1** Pick one deterministic-shaped item (a command, an exit code, a
+  [matched] — textarea round-trip of 3 pasted lines survived verbatim=True
+
+- **B7** Press **Resume** on that banner. Confirm previously recorded
+  [matched] — resume_banner_present=True resumed_verdict_populated=True
+
+- **C1** With B1/B2 given real verdicts, emit. Open the emitted
+  [no witness observation] not present in the cited witness artefact for this item id
+
+- **C2** Check the stamp comment on the first line: `commit=` matches
+  [no witness observation] not present in the cited witness artefact for this item id
+
+- **B3** Set an item's verdict to **deferred** and leave the evidence box
+  [matched] — item=W2 flagged=True message_visible=True message="W2: 'deferred' requires a reason recorded in the evidence box -- the useful line in every existing log is the one saying why, not just that."
+
+- **B4** Same as B3, for **blocked**. *(Witness-covered.)*
+  [matched] — item=W3 flagged=True message_visible=True message="W3: 'blocked' requires a reason recorded in the evidence box -- the useful line in every existing log is the one saying why, not just that."
+
+- **B6** Open a sheet whose results log already exists (this one, after
+  [matched] — 'already recorded' badge present on W4=True
+
+## Human ruling
+
+- **B2** Pick one judgement-shaped item (a "does this feel right" call).
+  [EVIDENCE]
+
+---
+
+## Not walked, and why
+
+Everything recorded on this walk carries a `[EVIDENCE]` verdict or a witness observation.

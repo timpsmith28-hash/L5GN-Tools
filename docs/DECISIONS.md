@@ -1850,3 +1850,233 @@ comments alike.
 **Consequences.** Cheap, and it removes a whole class of confident-wrong reading
 before the estate grows a third and fourth repo keeping the same convention. It
 also makes the shared convention visible where today it is only implied.
+
+---
+
+## 0044 — The Curator runs on the personal estate; `data/knowledge_curator/` is outside the deposit contract
+
+**Date:** 2026-08-17 · **Status:** accepted · **Settles:** the question 0039
+left explicitly open · **Builds on:** 0039 (scoped by machine, never by a fixed
+estate name), 0040 (curated maps are per source; the resolved id is the key),
+0027 (summary-only governs artefacts that travel), 0029 (a deposit carrying more
+than its contract is replaced, never edited) · **Source:** Grand Walk, 2026-08-17
+
+**Context.** 0039 already ruled the substance: the Curator is scoped to *the
+estate declared for the machine it runs on*, **never to a fixed estate name**,
+and only a machine declaring `both` (the knight) is excluded. It named one thing
+it did not settle, and required it **before the first personal-estate run**:
+
+> *"whether `data/knowledge_curator/` sits inside the deposit contract. If a
+> Curator report can travel, per-estate outputs are not sufficient on their own
+> and a deposit exclusion is required."*
+
+That run is now wanted. Two facts decide it. A Curator report carries **quoted
+source spans** — literal substrings of conversation content, by 0032's
+`quoted_source` rule — which is content, not summary, and 0027 keeps content out
+of anything that travels. And per-estate outputs prevent *mixing*; they do
+nothing to prevent *travelling*.
+
+**A defect is recorded here because this entry is what corrects it.** The tab
+does not implement 0039. `app.py`'s `curator_estate_gap` gates on *"declared
+estate is not work/MCF"*, reason string `not_work_mcf_estate`, citing **0032**
+— the clause 0039 amended three days before that code was written.
+`curator_data.RATIFIED_MAP_PATH` is hardcoded to
+`config/mcf_conversation_map.tsv`, which is the fixed estate name 0039 clause 1
+forbids and the per-source pattern 0040 clause 2 replaced.
+
+**Decision.**
+
+1. **`data/knowledge_curator/` is outside the deposit contract**, excluded
+   structurally rather than by remembering. The reports hold quoted content.
+2. **The exclusion is enforced twice, deliberately.** A declared path exclusion
+   in the deposit builder, **and** an auditor over the built deposit that fails
+   if the artefact carries anything under `data/knowledge_curator/`. One states
+   the rule, the other proves it held. This follows `auditor_readonly` and
+   `auditor_stdlib`, which police properties the code could otherwise quietly
+   lose, and it follows 0029, which was paid for once already when a deposit was
+   found carrying more than its contract.
+3. **The estate gate is corrected to 0039 clause 2.** The Curator runs on any
+   machine whose declared estate is not `both`. `not_work_mcf_estate` becomes a
+   reason naming the actual condition, and the tab's absence text stops citing a
+   superseded clause.
+4. **The ratified map is resolved from the declared estate name, never a fixed
+   filename.** `config/mcf_conversation_map.tsv` becomes one instance of the
+   pattern 0040 clause 2 declared; each estate's map carries its own committed
+   fingerprint under 0040 clause 4 and 0045.
+5. **The personal estate's sources are the Claude local transcript store and the
+   Gemini share-scrape corpus.** Both carry a stable conversation id and so join
+   under 0040 clause 1:
+   - **Claude local transcripts** — `session_id` is the `local_<uuid>`
+     conversation id, native and stable.
+   - **Gemini personal via the share scrape** — `scraped_gemini/<share_id>.json`,
+     keyed on the **resolved** `gemini.google.com/share/<hex>` form, never the
+     reissuable `share.gemini.google/<token>` short link (0040 clause 1).
+
+   **What is out is the Takeout export taken alone.** My Activity is a flat
+   stream of turn-pairs whose `title` is the user prompt, with no per-record
+   chat id — 0040's finding, unchanged. The distinction matters and was stated
+   wrongly during this walk as *"Gemini personal has no identity"*: the **scrape**
+   supplies identity and boundaries, the **Takeout** supplies real UTC
+   timestamps, and 0040 clause 5 already ruled the two **jointly necessary**.
+6. **Gemini personal enters the Curator only after `reconcile_gemini.py` has run
+   for the conversations concerned.** The skeletons carry `created_date: None`
+   and `published_date: None` — they hold no time at all — and 0032 clause 2
+   makes recency the truth order, excluding and naming unresolvable-timestamp
+   conversations. Reconciliation is not a nicety for this source; it is what
+   makes it admissible.
+7. 0039's clauses (1)–(5) are otherwise **unchanged**, including that the
+   Curator never writes a `KNOWLEDGE*.md` file and never spans two estates in one
+   run or one output.
+
+**Consequences.** The first personal-estate Curator run becomes legal, and this
+toolkit's own build conversations become the test corpus — a fairer test than
+MCF, because the ground truth sits in this file and can be checked rather than
+remembered.
+
+Clause 3 means the estate gate stops being verifiable by reading one constant.
+That weakening is the one 0039 accepted and priced, bounded by the same clause:
+one run, one estate, one output.
+
+Clause 2's double enforcement is the deliberate expense. A deposit that **can**
+carry `data/knowledge_curator/` is a defect regardless of whether one ever has,
+and an exclusion held only in the builder is a rule with no witness.
+
+---
+
+## 0045 — A pinned copy is one mechanism, not three: origin, anchor, hash, reported never repaired
+
+**Date:** 2026-08-17 · **Status:** accepted · **Builds on:** 0040 clause 4 (the
+map's committed fingerprint), `Claude_Migration` 0005 (the vendored parser as a
+pin), ARCHITECTURE §5 (config is a shipped artifact), 0043 (cross-repo citation)
+· **Source:** Grand Walk, 2026-08-17
+
+**Context.** The same shape has now been designed three times, independently,
+for three subjects:
+
+| Subject | Where | State |
+|---|---|---|
+| `local_transcripts.py`, vendored | `Claude_Migration` `vendor/PROVENANCE.md` + `pack_builder/vendor_check.py` | **built, running** |
+| `docs/README.md`, copied to other projects | `COWORK_BRIEF_convention_scaffold.md` Tasks 1–3 | designed, unbuilt |
+| `config/*conversation_map.tsv`, untracked | 0040 clause 4 | fingerprint committed, **no checker** |
+
+Each is *an artefact that cannot live in this repository's git in its live form,
+plus a committed record of which version was ratified, checked at use so drift
+is detected rather than assumed absent.* Three implementations of one mechanism
+is two more than can be kept correct — the argument this estate already made
+about path resolvers.
+
+The field-tested format is the richest and is the one adopted:
+`Claude_Migration`'s `vendor/PROVENANCE.md` records origin repo, origin path, the
+origin commit last touching the file, the origin repo's HEAD at vendoring time,
+the date and rig, and the content hash — **two commits rather than one**, because
+*which release this is* and *what the world looked like when it was taken* are
+different questions. That is the same reasoning 0040 clause 4 used for recording
+a hash as well as a pin, arrived at independently.
+
+**Decision.**
+
+1. **One mechanism, one implementation.** A pin records: origin (repo and path,
+   or `local` for an untracked file in this repo), the anchor commit where one
+   exists, the date and host it was taken on, and the **content hash** of the
+   pinned artefact. Every mention of another repo's anchor carries that repo's
+   name, per 0043.
+2. **Verification reports; it never repairs.** A mismatch is stated with both
+   hashes and the artefact is left exactly as found — `Claude_Migration` 0005
+   clause 4's rule, generalised. A tool that silently re-pins has destroyed the
+   only signal the pin exists to give.
+3. **An unresolvable anchor is a violation, not a silent pass** — the bar
+   `auditor_uat_stamp` and the `gate-frozen` marker already hold.
+4. **Reading a pin is read-only and may live in `l5gntools/`** (`hashlib` is
+   stdlib; 0034 clause 1 untouched). **Writing or bumping one is not a scanner**
+   — it writes, so it is a `run.py` command, dry-run by default.
+5. **Working ahead of a pin is a normal state, not an error.** A live artefact
+   may sit ahead of its pinned release; that is a draft, not drift. Report it as
+   information so a bump is prompted, never forced.
+6. **The pin record is one file per artefact, beside the artefact** — not a
+   central registry. Both built cases already do this (`vendor/PROVENANCE.md`,
+   `<map>.sha256`), and three reasons keep it: a pin must **travel with the
+   artefact** when it is copied into another repository, which a registry in this
+   repository structurally cannot do; a registry is a second place to forget to
+   update, so the pin and the thing it pins can silently disagree; and a central
+   list of the state of things held elsewhere is a status board by another name,
+   which §5 of `docs/README.md` retires by class for exactly the rot it invites.
+
+**Consequences.** `convention_scaffold` stops being a design problem and becomes
+an application of an existing mechanism to a third subject — which is most of why
+that round looked expensive. 0040 clause 4's fingerprint gains the checker it was
+written without. And `Claude_Migration` can adopt this by name under its own 0001
+rather than diverging.
+
+The cost is that the first subject to use the shared helper pays for generalising
+it. Accepted: the alternative is three verifiers with three mismatch messages and
+three ways to be subtly wrong about what a hash covers.
+
+---
+
+## 0046 — The curated map resolves by recency: the last row for a key wins, every consumer resolves it the same way, and a superseding row says so
+
+**Date:** 2026-08-17 · **Status:** accepted · **Builds on:** 0032 clause 2
+(recency as truth order), 0033 (stage, never commit), 0040 (the curated map is
+the join of record) · **Source:** Grand Walk, 2026-08-17
+
+**Context.** A hand-ratification cannot currently be undone. A row clicked to see
+what it did is permanent, and the module is **right** to make it so:
+`curator_ratify.append_ratified_row` is *"a pure byte-append (opened `"a"`, never
+`"r+"` or a rewrite)"* and *"provenance is permanent."*
+
+Deletion is the wrong fix, and this estate has ruled it three times already:
+DECISIONS is append-only and superseded by a later entry naming the earlier;
+`docs/README.md` §4 rules that *"a reverted action is another line, not a
+deletion"*; 0029 replaces a deposit that carried too much rather than editing it.
+
+**The rule that makes correction possible is already written.** 0032 clause 2 —
+recency as truth order — is unchanged by 0039. In an append-only file, **file
+order is recency**, so no timestamp column is needed.
+
+**What is missing is the reader.** `curator_data.ratified_map_rows` returns every
+row with no resolution, so a second row for the same `session_id` today produces
+a **duplicate**, not a correction — and the join of record would disagree with
+itself depending on which consumer asked.
+
+**Decision.**
+
+1. **The last row for a given key wins.** Earlier rows for that key are
+   superseded, retained in the file as provenance, and never deleted. The key is
+   the source's resolved conversation id (0040 clause 1) — `session_id` for the
+   Claude local store.
+2. **Resolution happens in exactly one place**, and every consumer calls it —
+   `knowledge_index.py`, `match_claims.py`, `candidates.py`, `curator_data` and
+   the Curator tab. **Two implementations of the join of record is one more than
+   can be kept correct**, the argument 0027's containment check already won.
+3. **A superseding row carries an explicit status** (`corrected`, `revoked`) as
+   well as being later. Recency alone resolves it; the status makes the *intent*
+   legible to a human reading the raw file, which recency cannot express. A row
+   that supersedes without saying so reads as a duplicate to everyone except the
+   resolver.
+4. **A raw, unresolved view remains available and is the reviewing view.** The
+   superseding row and the row it supersedes are both visible to a human
+   ratifying; only the *consuming* read resolves. A correction that hides what it
+   corrected is a deletion wearing a different hat.
+5. **Undo is an append.** Correcting a ratification means appending a row for the
+   same key with the corrected `project_id` and a status per clause 3, its
+   `notes` stating what it supersedes and why — the per-row provenance discipline
+   0040 clause 2 already requires. Nothing is rewritten.
+6. **Capture is the same act.** A conversation K0 never proposed a candidate for
+   — the case `unmapped_local_folders` already reports — is entered through the
+   same `build_row` → `_validate_new_row` → `append_ratified_row` →
+   `stage_ratified_map` path, from the UI, rather than by hand-editing the TSV.
+   One writer, one validation, one staging rule (0033).
+
+**Consequences.** The map becomes correctable without becoming mutable, which is
+the property that made it trustworthy. A mis-click is recoverable, so
+ratification stops being a decision a human has to be afraid of — and a surface
+people are afraid of is one that gets used carelessly, or not at all.
+
+Clause 6 closes the case K0 structurally cannot reach: a conversation whose
+opener the model never matched. Those were being entered by hand into a file the
+tool owns, which is exactly the side channel that makes an audit trail untrue.
+
+The cost is that the map grows monotonically and now contains rows no longer in
+force. That is the cost DECISIONS pays, for the same reason. 0040 clause 4's
+fingerprint continues to record what was ratified and when — a superseded row is
+part of that history, not noise in it.
