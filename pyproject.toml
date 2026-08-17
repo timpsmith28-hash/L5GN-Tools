@@ -18,7 +18,12 @@ dependencies = []
 #                                     # `run.py app`/`window`, not a truly optional bolt-on;
 #                                     # kept as an extra (not [project.dependencies]) so the
 #                                     # stdlib-only `l5gntools` package itself stays
-#                                     # unweakened -- see DECISIONS 0034 clause 2.
+#                                     # unweakened -- see DECISIONS 0034 clause 2. Also
+#                                     # brings in httpx2, which starlette.testclient (used
+#                                     # by tester_docs_board / tester_uat_sidebar via
+#                                     # fastapi.testclient.TestClient) prefers over httpx --
+#                                     # without it, every gate run that exercises those
+#                                     # routes prints StarletteDeprecationWarning.
 #   pip install -e .[desktop]        # `run.py window` -- pulls in .[review]'s deps too,
 #                                     # since the window has nothing to open without them
 #                                     # (COWORK_BRIEF_unified_app.md Task 5)
@@ -34,7 +39,7 @@ dependencies = []
 chronicler = ["pyyaml>=6", "sentence-transformers>=2"]
 scrape = ["playwright>=1.40"]
 viewer = ["datasette>=0.64"]
-review = ["fastapi>=0.110", "uvicorn>=0.29"]
+review = ["fastapi>=0.110", "uvicorn>=0.29", "httpx2"]
 desktop = ["pywebview>=5", "fastapi>=0.110", "uvicorn>=0.29"]
 mesh = []
 
