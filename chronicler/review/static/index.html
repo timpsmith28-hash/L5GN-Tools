@@ -58,6 +58,13 @@
   .badge { font-size: .7rem; padding: .1rem .4rem; border-radius: 999px;
            border: 1px solid #8886; opacity: .85; }
   .badge.rival { border-color: #d9822b; color: #d9822b; }
+  /* The [G]/[W]/[H] layer badge on a UAT item (DECISIONS 0031): which
+     section this item lands in on emit -- Machine-verified or Human ruling.
+     "unmarked" gets its own muted treatment because it is a real state (it
+     defaults to Human ruling), not an absence of one. */
+  .badge.layer-G, .badge.layer-W { border-color: #3b8f5e; color: #3b8f5e; }
+  .badge.layer-H { border-color: #7a5fd1; color: #7a5fd1; }
+  .badge.layer-none { border-style: dashed; opacity: .6; }
   .title { font-weight: 600; }
   .meta { font-size: .76rem; opacity: .65; }
   .note { font-size: .8rem; opacity: .85; margin: .35rem 0; white-space: pre-wrap; }

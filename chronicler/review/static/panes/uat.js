@@ -21,6 +21,8 @@ const UAT_VERDICT_LABEL = {
   not_applicable: "not applicable",
 };
 
+const UAT_LAYER_LABEL = { G: "gate", W: "witness", H: "human" };
+
 function uatItemHtml(it) {
   const e = UAT_ENTRIES[it.id] || { verdict: "", evidence: "" };
   const prior = (UAT_VIEW.prior_entries || {})[it.id];
@@ -29,6 +31,16 @@ function uatItemHtml(it) {
   // the item view itself, not just from the sheet-level counts up top.
   const priorBadge = prior
     ? `<span class="badge" title="${esc(prior.evidence || "")}">already recorded: ${esc(UAT_VERDICT_LABEL[prior.verdict] || prior.verdict)}</span>` : "";
+  // The [G]/[W]/[H] layer marker (DECISIONS 0031) decides, on emit, whether
+  // this item lands under Machine-verified or Human ruling -- and until this
+  // badge existed, that split was only visible in the emitted results log,
+  // never on the surface where the walker actually marks the sheet. A missing
+  // marker is itself worth showing: it defaults to Human ruling on emit (see
+  // build_results_body), so it is labelled "unmarked", not left blank.
+  const layer = it.layer;
+  const layerBadge = layer
+    ? `<span class="badge layer-${esc(layer)}" title="DECISIONS 0031: ${esc(UAT_LAYER_LABEL[layer] || layer)} layer">[${esc(layer)}] ${esc(UAT_LAYER_LABEL[layer] || layer)}</span>`
+    : `<span class="badge layer-none" title="No [G]/[W]/[H] marker on this item -- defaults to Human ruling on emit (DECISIONS 0031)">unmarked</span>`;
   const opts = [`<option value=""${e.verdict ? "" : " selected"}>— pick a verdict —</option>`]
     .concat(Object.entries(UAT_VERDICT_LABEL).map(([v, label]) =>
       `<option value="${v}"${e.verdict === v ? " selected" : ""}>${esc(label)}</option>`));
@@ -36,6 +48,7 @@ function uatItemHtml(it) {
     <div class="row1">
       <span class="id">${esc(it.id)}</span>
       <span class="badge">${esc(it.state)}</span>
+      ${layerBadge}
       <span>${esc(it.text)}</span>
       ${priorBadge}
     </div>
