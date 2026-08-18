@@ -4,9 +4,11 @@ This folder tracks `docs/COWORK_BRIEF_model_bench.md`'s non-runtime
 deliverables: the committed evaluation set (Task 1) and documentation for the
 widened bench ledger (Task 2, code lives in
 `chronicler/pipeline/bench_ledger.py`, tests in
-`tests/tester_bench_ledger.py`). Task 0 (the control run) and the actual
-candidate runs happen on your machine against LM Studio — nothing here runs
-a model.
+`tests/tester_bench_ledger.py`), the failure taxonomy (Task 3,
+`chronicler/pipeline/bench_failures.py`), and the load-cost measurements
+(Task 4, `chronicler/pipeline/bench_load_cost.py`). Task 0 (the control run)
+and the actual candidate runs happen on your machine against LM Studio —
+nothing here runs a model.
 
 ## Task 1 — the evaluation set (Level 1)
 
@@ -212,3 +214,99 @@ benchmarking models measures neither"):
 Both are real gaps against the full brief, not oversights — they're the
 direct consequence of the round's own stop condition on K2/K4 changes,
 applied consistently rather than quietly worked around.
+
+## Task 3 — the failure taxonomy
+
+`chronicler/pipeline/bench_failures.py` classifies a bench run's failures
+purely from evidence K2/K4 already emit — nothing new is computed by K2/K4
+to support this.
+
+`classify_window_by_size(token_count, context_length)` catches context
+overflow **proactively**, before any call is made: a window's own
+`token_count` (already in every `TIMING_WINDOW` line) plus a fixed reserve
+for the model's reply, checked against the candidate's configured
+`context_length` (part of the settings dict `config_fingerprint` was built
+from). `classify_crash_text`/`classify_stage_outcome` classify a whole-stage
+crash from its captured stdout/stderr text — an uncaught exception in K2/K4's
+`main()` prints a Python traceback into the same merged stream
+`curator_control.run_stage` already captures, and this is matched on the
+**exception class name** (`TimeoutError`, `urllib.error.URLError`/
+`HTTPError`), not on any specific LM Studio server's wording, into `timeout`
+/ `transport_error` / `context_overflow` / `unknown`. `classify_conversation_
+result` reads K2's own `--out` report (`parse_failed`, `scanned_with_zero`)
+to catch failures that never crash the process at all — a conversation that
+scanned fine but yielded nothing worth extracting is correctly returned as
+`None` (not a failure), never mis-tiered as a capability limit.
+
+Failures are recorded to their own file (`bench_failures.jsonl`, separate
+from the throughput ledger) via `record_failure()`, which **structurally
+cannot write a failure without a valid `kind`** — it raises `ValueError` on
+a missing or invalid one. That's the brief's own stop condition ("a failure
+is recorded without its kind") enforced in code, not left as a convention.
+
+**One honest structural gap.** The brief names five failure kinds; this
+module distinguishes four. `schema_violation` and `refusal` collapse into
+one bucket, `schema_violation_or_refusal`, because telling them apart needs
+the model's raw response text from a failed parse, and K2 discards that text
+the moment `_extract_json_array` fails to parse it — nothing persists it
+anywhere this module can read afterwards. Capturing it would mean editing
+`extract_claims.py`, a K2 code change the brief's stop conditions forbid
+this round. Reporting an invented 5-way split on data that can't support it
+would be exactly the fabricated precision 0037 exists to refuse.
+
+## Task 4 — load cost (cold start, switch cost, residency)
+
+`chronicler/pipeline/bench_load_cost.py` measures what Task 4 calls "the
+ladder's hidden tax, never yet measured" (zero true `cool_down_preceded`
+entries across all 116 production measurements). It is a THIRD, independent
+caller of LM Studio's OpenAI-compatible endpoint — it never runs K2 or K4,
+so there is no "K2/K4 logic" for it to change.
+
+- `measure_cold_start(model)` — the first call to a model assumed cold,
+  against the median of several immediately-following calls to the same
+  model (steady state). `cold_start_tax_seconds` is the difference. Matches
+  the brief's own definition verbatim ("seconds from request to first token
+  on a model just loaded, versus steady state").
+- `measure_switch_cost(from_model, to_model)` — warms `from_model`, then
+  measures the first call to `to_model` immediately after (paying an unload
+  + load if the endpoint evicted `from_model` to make room), against a
+  steady-state repeat of `to_model`. `switch_tax_seconds` is what Task 5's
+  decision matrix needs directly: "if moving T1→T2 mid-plan costs 90
+  seconds, a plan that alternates tiers can be slower than one that never
+  leaves T2."
+- `check_residency(model_a, model_b)` — warms both, then checks
+  `GET /v1/models` for whether both ids are still listed. `both_resident`
+  is `True`/`False` only when the probe itself succeeded; `None` (never
+  guessed) if it didn't.
+- `list_loaded_models()` re-implements the same `/v1/models` GET
+  `curator_control.probe_lm_studio` already uses, rather than importing it —
+  that function lives in the app tier, and this module (like
+  `bench_ledger`/`bench_failures`) stays pipeline-tier only.
+
+All three record functions take an explicit `ttl` — LM Studio's auto-unload
+setting changes cold start, switch cost, and residency alike (the brief's
+own words), so every measurement should be taken under a **known, recorded**
+TTL, matching the value already folded into `config_fingerprint`.
+
+**Why a full round-trip stands in for "time to first token."** Same
+constraint as Task 2's TTFT gap: `call_lmstudio`-style requests aren't
+streamed, and streaming is a K2/K4 logic change out of scope. So
+`measure_call_latency` requests the smallest possible completion
+(`max_tokens=1`) — wall-clock time to that reply is dominated by whatever a
+JIT load or prompt processing costs, the closest approximation to "time to
+first token" available without streaming. It's a stated approximation, not
+the real thing; what keeps the *comparisons* meaningful is that cold/switch
+figures are always compared against a steady-state repeat of the identical
+small request, so the same bias sits on both sides of every difference.
+
+**This module cannot run itself here.** There is no LM Studio reachable from
+this session — confirmed directly: even the connected device's own bridge
+has no network route to `localhost:1234` on the host it runs on (blocked by
+a network allowlist before the request ever reaches the port). Every
+function was instead verified against a minimal stdlib `http.server` stand-
+in run for real, over a real loopback socket (`tests/tester_bench_load_
+cost.py`, and a throwaway script run directly against it before the tester
+was written) — that proves the timing/residency/error-handling logic is
+correct. It does **not** prove how long a real model load takes on your
+rig; that number only exists once this runs against real LM Studio, which
+is this round's own UAT item ("Cold start versus steady state, measured").
