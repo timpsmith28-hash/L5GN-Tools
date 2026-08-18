@@ -1394,7 +1394,7 @@ beyond the backup + pipeline stages.
 
 **Date:** 2026-08-08 · **Status:** accepted · **Builds on:** 0032 (recency is
 the truth order), 0033 (propose, ratify, execute), the curator tab's execution
-allowlist · **Source:** design thread, after real K2 runs on the work rig
+allowlist · **Source:** design thread, after real K2 runs on the work rig 
 
 **Context.** The curator tab's execute route accepts a stage key and nothing
 else: no argv, no path, no flag. That rule made the surface's execution remit

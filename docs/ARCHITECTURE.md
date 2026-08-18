@@ -16,7 +16,7 @@ holds everything, without either half being able to corrupt the other.
 
 ## 2. Shape: one application, with an optional mesh mode
 
-The default shape, as of `run.py app` / `run.py window`
+The default shape, as of `run.py app` / `run.py window` 
 (COWORK_BRIEF_unified_app.md Tasks 1-5, DECISIONS 0035), is **one machine, one
 process**: it scans its own repos, holds its own vault, and serves the deck
 (queue, estate, docs board, UAT, Curator, Datasette) locally. No push, no
