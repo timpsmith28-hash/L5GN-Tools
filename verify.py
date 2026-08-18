@@ -99,6 +99,8 @@ TESTERS: list[str] = [
     "tests.tester_governor",
     "tests.tester_planner",
     "tests.tester_ledger",
+    "tests.tester_bench_ledger",
+    "tests.tester_bench_failures",
     "tests.tester_conductor_panel",
     "tests.tester_candidates",
     "tests.tester_conductor_run",

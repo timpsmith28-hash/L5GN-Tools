@@ -1,0 +1,225 @@
+{
+  "_comment": "Task 1 (Level 1) of docs/COWORK_BRIEF_model_bench.md -- a standing, committed evaluation set of real conversation ids for the model bench. Pinned inputs only: well-formedness and throughput, not correctness (that is Level 2, not yet built -- see README.md in this folder). Short and medium are ORDERED PREFIXES of this list, per the brief's working rules -- do not reorder without re-deriving the tiers below.",
+  "source": {
+    "snapshot": "C:/Users/timps/Documents/Backups/claude_migration/2026-08-14",
+    "snapshot_taken_at": "2026-08-14T11:39:40+01:00",
+    "machine": "LucasGoonPC",
+    "note": "Conversation ids were selected from this migration snapshot, not a live store. Before a bench run, confirm each id still resolves in the live cli_transcripts_home / cowork_transcripts_home for the machine the run is on -- a store can rotate or prune between snapshot and run, and a missing id is a stop condition (silent substitution is not)."
+  },
+  "tiers": {
+    "short": {"count": 4, "note": "first 4 items below"},
+    "medium": {"count": 12, "note": "first 12 items below"},
+    "long": {"count": 19, "note": "the full list"}
+  },
+  "conversations": [
+    {
+      "order": 1, "tier_from": "short",
+      "conversation_id": "cli:e99b862f-7bf6-48c1-b903-704170868389",
+      "store": "cli",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-26T14:57:05.474Z",
+      "total_messages": 3,
+      "total_chars": 499,
+      "title": "Generate markdown templates from docs",
+      "why": "Smoke case: trivial CLI-store session (3 records, ~500 chars). Tests whether a candidate can round-trip the smallest possible real input at all before spending time on anything larger."
+    },
+    {
+      "order": 2, "tier_from": "short",
+      "conversation_id": "local_731a804c-f002-4ae4-b108-9cb5e6c6b1d0",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-03T11:20:27.135Z",
+      "total_messages": 2,
+      "total_chars": 1048,
+      "title": "troubleshooting request - seem to be having trouble activate venv :S ...",
+      "why": "Deliberately off-topic edge case: a short venv-troubleshooting exchange with no build-task shape and no decisions in it. Exercises what a candidate does when a conversation has nothing worth extracting -- the correct answer is close to zero claims, not a hallucinated one."
+    },
+    {
+      "order": 3, "tier_from": "short",
+      "conversation_id": "local_ab5b1b90-f6c4-4270-b9a0-30240d900ccc",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-27T09:04:02.858Z",
+      "total_messages": 31,
+      "total_chars": 8568,
+      "title": "COWORK_BRIEF_repo_tier_producers.md",
+      "why": "Ordinary small build-task conversation with a matching committed brief (docs/COWORK_BRIEF_repo_tier_producers.md) and report -- a ground-truth candidate for Level 2 once that's built, since the claims it should yield are checkable against docs/DECISIONS.md and the brief/report pair."
+    },
+    {
+      "order": 4, "tier_from": "short",
+      "conversation_id": "local_e9c85235-78a6-4b6b-8a2a-2bbd370b4e1d",
+      "store": "cowork",
+      "project": "crystal-spire",
+      "real_time": "2026-07-16T07:41:22.777Z",
+      "total_messages": 24,
+      "total_chars": 6666,
+      "title": "CRYSTAL SPIRE -- content thread: DENIZEN DIALOGUE AUDIT, ERAS 1-2 (read-only, analytical)",
+      "why": "Breadth of project: L5GN-Crystal-Spire is a different repo/project entirely, with a different register (content/narrative audit, not engineering). The short tier should not be all-L5GN-Tools, or 'fits the schema on this project' would be mistaken for 'fits the schema'."
+    },
+    {
+      "order": 5, "tier_from": "medium",
+      "conversation_id": "local_d42de6f4-1c04-4195-8bef-9ca9eb830062",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-21T12:45:32.340Z",
+      "total_messages": 22,
+      "total_chars": 8868,
+      "title": "COWORK_BRIEF_file_census.md",
+      "why": "Second small build-task conversation with a matching committed brief (docs/COWORK_BRIEF_file_census.md) -- another Level 2 ground-truth candidate, and adds a second sample at roughly the same length as #3 so run-to-run spread at one size band can be checked."
+    },
+    {
+      "order": 6, "tier_from": "medium",
+      "conversation_id": "local_1f7fa1a4-50e4-4082-a967-7adb69063596",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-03T17:19:00.463Z",
+      "total_messages": 33,
+      "total_chars": 18988,
+      "title": "Hi Co-work - docs/COWORK_BRIEF_uat_sidebar.md, confirm the task list before proceeding...",
+      "why": "Mid-size build-task conversation with a matching committed brief (docs/COWORK_BRIEF_uat_sidebar.md) -- Level 2 candidate; also the first item with a confirm-before-proceeding exchange pattern (plan, confirmation, then work), a shape the smaller items don't have."
+    },
+    {
+      "order": 7, "tier_from": "medium",
+      "conversation_id": "local_b60478e7-6448-4227-99b6-043700f14bf8",
+      "store": "cowork",
+      "project": "crystal-spire",
+      "real_time": "2026-07-16T06:13:03.134Z",
+      "total_messages": 12,
+      "total_chars": 5506,
+      "title": "CRYSTAL SPIRE -- content thread: ROUTE READ-THROUGH (read-only, analytical)",
+      "why": "Second Crystal Spire sample, keeping project breadth present at the medium size band too, not just short."
+    },
+    {
+      "order": 8, "tier_from": "medium",
+      "conversation_id": "cli:430c5135-77f6-4d9d-b5cc-a581a322deaf",
+      "store": "cli",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-26T20:35:44.070Z",
+      "total_messages": 6,
+      "total_chars": 16592,
+      "title": "Create standardized markdown templates",
+      "why": "Largest CLI-store session found (16.6K chars in only 6 records -- long individual turns, unlike the cowork items' many-short-turns shape). Keeps the CLI store represented once past the short-tier smoke case."
+    },
+    {
+      "order": 9, "tier_from": "medium",
+      "conversation_id": "local_592b5d45-0967-4e32-8282-22e4d983e2fc",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-18T11:23:54.728Z",
+      "total_messages": 20,
+      "total_chars": 13008,
+      "title": "Task 0 -- Recover the record (do first, blocks nothing else) ...",
+      "why": "Build-adjacent conversation (record recovery, not a brief) -- adds a case that is real engineering work but has no docs/COWORK_BRIEF_*.md of its own, so it can't lean on a brief's structure to be well-formed."
+    },
+    {
+      "order": 10, "tier_from": "medium",
+      "conversation_id": "local_8eb98916-5327-4252-8f13-727b7b451b18",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-28T23:51:16.857Z",
+      "total_messages": 16,
+      "total_chars": 44115,
+      "title": "build task: docs/cowork_brief_toolkit_self_scan.md",
+      "why": "Matches docs/COWORK_BRIEF_toolkit_self_scan.md -- Level 2 candidate. First item to cross ~40K chars; starts the size ramp toward the long tier's largest items."
+    },
+    {
+      "order": 11, "tier_from": "medium",
+      "conversation_id": "local_50c5e1ac-63ef-482b-a129-ef5f5ae12e69",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-01T11:29:45.640Z",
+      "total_messages": 42,
+      "total_chars": 58145,
+      "title": "Scope: Tasks 1 and 2 only. Task 3 (ratification) and Task 4 (stage the archive) ...",
+      "why": "A scoped-down build conversation (explicit task subset, deferred work named rather than done) -- tests whether a candidate over-extracts claims for work that was explicitly declared out of scope in the same conversation."
+    },
+    {
+      "order": 12, "tier_from": "medium",
+      "conversation_id": "local_d5156fb3-2885-4345-b24b-1533d954cd70",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-01T09:12:35.968Z",
+      "total_messages": 28,
+      "total_chars": 72410,
+      "title": "Hi Co-work - UAT walking thread for docs/UAT-toolset-self-scan, whilst A B and C ...",
+      "why": "A UAT walk-through rather than a build thread -- different shape again (checklist items being confirmed one at a time, not open design). Closes out the medium tier at just over 70K chars."
+    },
+    {
+      "order": 13, "tier_from": "long",
+      "conversation_id": "local_b854b877-04be-4220-9033-69cafe5125c9",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-08T14:06:21.858Z",
+      "total_messages": 38,
+      "total_chars": 70796,
+      "title": "task: docs/COWORK_BRIEF_curator_tab.md",
+      "why": "Matches docs/COWORK_BRIEF_curator_tab.md -- Level 2 candidate. Also the first item with sidechain (subagent) files present (2 of its 3 source files), a shape none of the smaller items carry."
+    },
+    {
+      "order": 14, "tier_from": "long",
+      "conversation_id": "local_9f0a50f0-3815-4cbe-9194-74ee1d59a8bd",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-08T17:14:57.078Z",
+      "total_messages": 136,
+      "total_chars": 66644,
+      "title": "task: docs/COWORK_BRIEF_unified_app.md ...",
+      "why": "Matches docs/COWORK_BRIEF_unified_app.md -- Level 2 candidate. High message count (136) at moderate total size -- many short turns rather than a few long ones, unlike #13 at similar char count."
+    },
+    {
+      "order": 15, "tier_from": "long",
+      "conversation_id": "local_195768c3-99de-4aca-b7f2-7706c7e0787a",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-08T15:14:06.653Z",
+      "total_messages": 198,
+      "total_chars": 357868,
+      "title": "Task: docs/COWORK_BRIEF_knowledge_curator",
+      "why": "Matches docs/COWORK_BRIEF_knowledge_curator.md -- Level 2 candidate. Large (358K chars) -- the K2/K4 stage this whole bench cares about most (the Curator's own build thread), and a real test of context-window headroom for smaller candidates."
+    },
+    {
+      "order": 16, "tier_from": "long",
+      "conversation_id": "local_b8fff6f6-111d-4fb5-9ee0-01367cc3a717",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-08-13T17:34:04.092Z",
+      "total_messages": 237,
+      "total_chars": 241103,
+      "title": "task: docs/COWORK_BRIEF_conductor.md",
+      "why": "Matches docs/COWORK_BRIEF_conductor.md -- Level 2 candidate. Second-largest item; highest message count among the non-extreme items (237), a stress case for windowing behaviour distinct from raw char count."
+    },
+    {
+      "order": 17, "tier_from": "long",
+      "conversation_id": "local_602a1aed-e771-45a7-a351-5a0e179ac685",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-27T16:29:58.011Z",
+      "total_messages": 199,
+      "total_chars": 1010341,
+      "title": "# Task list -- close out the golden UAT pass ...",
+      "why": "KNOWN-HARD, deliberately included: over 1M characters, by far the largest item in the set. Expected to trigger 'context overflow' (Task 3's taxonomy) on most local candidates -- the point is to see which candidates fail that way versus which fail some other way, not to avoid the failure."
+    },
+    {
+      "order": 18, "tier_from": "long",
+      "conversation_id": "local_0e1635a0-b1f4-4635-8704-85a0851cbbe0",
+      "store": "cowork",
+      "project": "crystal-spire",
+      "real_time": "2026-07-10T10:58:05.866Z",
+      "total_messages": 177,
+      "total_chars": 48108,
+      "title": "<uploaded_files> MECHANICS_BETA_v1.0.md ...",
+      "why": "Third Crystal Spire sample and the highest message-to-char ratio in the set (177 messages, 48K chars -- many very short turns). Keeps project breadth present in the long tier and adds a shape (rapid back-and-forth) none of the L5GN-Tools items have."
+    },
+    {
+      "order": 19, "tier_from": "long",
+      "conversation_id": "local_97cb487e-bd98-42b2-849d-8ce263c8194b",
+      "store": "cowork",
+      "project": "l5gn-tools",
+      "real_time": "2026-07-13T15:42:57.390Z",
+      "total_messages": 319,
+      "total_chars": 302837,
+      "title": "hiya co-work! I've given you access to my projects folders that we have been building ...",
+      "why": "Foundational, broad-scope conversation spanning multiple projects rather than one brief -- highest message count in the set (319). Closes the long tier with a case that is large in both dimensions (messages and chars) but not the single largest by chars (#17 already covers that extreme)."
+    }
+  ]
+}
