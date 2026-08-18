@@ -1,3 +1,15 @@
+> **ARCHIVED** 2026-08-17 · completed pair (brief) · Report:
+> `archive/COWORK_REPORT_architecture_census.md` · Walked:
+> `archive/UAT_architecture_census_results.md`
+> Superseded by nothing — the round completed. Original purpose: commission a
+> scanner that emits the toolkit's shape as data, and a rendered view of it the
+> gate refuses to let go stale (DECISIONS 0030).
+> Accurate as the request that was made. Its live output is
+> `docs/_architecture_shape.md`, which is generated and stays in core `docs/` —
+> do not look for it here. The brief's **AST-never-regex** rule and its
+> **report-parse-failure-as-`unparsed`** rule are load-bearing and were met;
+> read them before changing the census, not after.
+
 # Cowork brief — the toolkit describes its own shape, deterministically
 
 **Origin:** design thread, 2026-08-02, out of

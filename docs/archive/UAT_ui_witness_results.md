@@ -1,5 +1,17 @@
 <!-- uat: commit=174e57e dirty=false host=LucasGoonPC walked=2026-08-15 -->
 
+> **ARCHIVED** 2026-08-17 · completed pair (results) · Sheet:
+> `archive/UAT_ui_witness.md`
+> Superseded by nothing. Original purpose: the record of the 2026-08-15..17
+> walk — 19 of 19 items, with ten carried findings.
+> Findings 5, 7 and 10 were closed by the 2026-08-17 correctness sweep: the
+> `[G]`/`[W]`/`[H]` marker now renders as a badge, and the checkbox parser
+> counts the backticked form (`UAT_knowledge_curator.md` and
+> `UAT_project_wizard.md` read 22 and 16 open where they read 0). Finding 8
+> closed as **no defect** — see this pair's report stamp for why. The remaining
+> findings, including finding 9's unexplained `200 OK`, were live when this was
+> written and **their disposition is not recorded here.**
+
 # UAT results — the third check layer (`COWORK_BRIEF_ui_witness.md`)
 
 Sheet: `docs/UAT_ui_witness.md`. Pair:

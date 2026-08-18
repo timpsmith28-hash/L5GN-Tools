@@ -1,4 +1,16 @@
 <!-- gate-frozen: commit=69d1112 -->
+
+> **ARCHIVED** 2026-08-17 · completed pair (walk-sheet) · Results:
+> `archive/UAT_ui_witness_results.md`
+> Superseded by nothing. Original purpose: the 19 acceptance checks for the
+> witness layer, marked ready-to-walk and never ticked in place.
+> This sheet reads 0 done because the walk was recorded in the results log
+> rather than against the sheet — a known convention split the docs board flags,
+> **not untouched work**. **Item C3's instruction is stale**: it names
+> `chronicler/review/static/index.html`'s `uatItemHtml`, which the `unified_app`
+> round moved to `chronicler/review/static/panes/uat.js`. This sheet is
+> `gate-frozen: commit=69d1112`, which predates that move.
+
 # UAT walk-sheet — the third check layer: rendered state, deterministically
 
 Pair: `docs/COWORK_BRIEF_ui_witness.md` + `docs/COWORK_REPORT_ui_witness.md`.

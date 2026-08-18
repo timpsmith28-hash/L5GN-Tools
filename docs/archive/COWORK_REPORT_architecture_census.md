@@ -1,4 +1,18 @@
 <!-- gate-frozen: commit=5016eb8 -->
+
+> **ARCHIVED** 2026-08-17 · completed pair (report) · Brief:
+> `archive/COWORK_BRIEF_architecture_census.md` · Walked:
+> `archive/UAT_architecture_census_results.md`
+> Superseded by nothing. Original purpose: record what the census emits, how it
+> proves its own determinism, and which of the 2026-08-02 drift findings it
+> reproduced without being told.
+> Accurate history. The census independently reproduced **A4** (the review
+> endpoint writes `{projects, review_rulings, threads}`, never `review_queue`)
+> and **A12** (`render_log` in `schema_frozen.sql`, absent from `schema.sql`) —
+> the two findings the brief named as its known-correct answers. Numbers in the
+> body describe the tree at `5016eb8` and are not claims about now; the live
+> answer is always `docs/_architecture_shape.md`, regenerated.
+
 # Cowork report — architecture census (DECISIONS 0030)
 
 **Pair:** `docs/COWORK_BRIEF_architecture_census.md`. Session 2026-08-17.

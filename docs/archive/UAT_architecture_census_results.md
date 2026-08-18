@@ -1,6 +1,16 @@
 <!-- uat: commit=001d037 dirty=false host=LucasGoonPC walked=2026-08-17 -->
 <!-- gate-frozen: commit=5016eb8 -->
 
+> **ARCHIVED** 2026-08-17 · completed pair (results) · Sheet:
+> `archive/UAT_architecture_census.md`
+> Superseded by nothing. Original purpose: the record of the 2026-08-17 walk —
+> ten of ten items, all passing.
+> Worth keeping for one item in particular: the stale-render gate was tested
+> **two ways** — a hand-edited line drove `verify.py` RED with a printed diff,
+> and deleting the render entirely produced a *distinct* "does not exist"
+> failure. The brief asked only for the first. That distinction is what stops a
+> missing generated document reading as an unchanged one.
+
 # UAT results — architecture census (DECISIONS 0030)
 
 Walked against `docs/UAT_architecture_census.md`. All ten items **pass**.

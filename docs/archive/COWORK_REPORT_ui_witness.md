@@ -1,4 +1,18 @@
 <!-- gate-frozen: commit=69d1112 -->
+
+> **ARCHIVED** 2026-08-17 · completed pair (report) · Brief:
+> `archive/COWORK_BRIEF_ui_witness.md` · Walked:
+> `archive/UAT_ui_witness_results.md`
+> Superseded by nothing. Original purpose: record what the witness layer is, how
+> it was built, and where its findings land.
+> **Task 1's assignment counts — 18 gate / 40 witness / 2 human / 1 unplaceable
+> — were true when written on 2026-08-07 and no longer match the sheets.** They
+> now read 17 / 41 / 2 / 1, because `UAT_local_deck_docs_and_time.md` was
+> re-marked and committed at `a2aa1ec` on 2026-08-15. The total (61) is
+> unchanged; one item crossed the `[G]`/`[W]` line. **This is testimony ageing,
+> not an error — do not "correct" it.** Task 5's reasoning about where the
+> witness runs, and why it needs no resolution of N10, remains accurate.
+
 # Report — the third check layer: rendered state, deterministically
 
 **Brief:** `docs/COWORK_BRIEF_ui_witness.md`

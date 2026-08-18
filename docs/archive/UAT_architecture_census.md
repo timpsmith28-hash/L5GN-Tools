@@ -1,3 +1,15 @@
+> **ARCHIVED** 2026-08-17 · completed pair (walk-sheet) · Results:
+> `archive/UAT_architecture_census_results.md`
+> Superseded by nothing. Original purpose: ten acceptance checks — 4 `[G]`,
+> 5 `[W]`, 1 `[H]` — for the shape census.
+> All ten walked and passed; see the results log. The single `[H]` asked that
+> `ARCHITECTURE.md` be unchanged **by this round**, and it was.
+> **`ARCHITECTURE.md` has since changed**, on 2026-08-17, by a later and
+> unrelated act: §3 gained the app-tier subsection that `unified_app` owed and
+> never wrote (DECISIONS 0034), alongside DECISIONS 0047. A cold reader diffing
+> that file today will find changes — they are not this round's, and they do not
+> contradict this item.
+
 # UAT — architecture census (DECISIONS 0030)
 
 Walk against `docs/COWORK_BRIEF_architecture_census.md`'s acceptance checks.

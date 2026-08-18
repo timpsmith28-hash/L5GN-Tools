@@ -1,3 +1,18 @@
+> **ARCHIVED** 2026-08-17 · completed pair (brief) · Report:
+> `archive/COWORK_REPORT_ui_witness.md` · Walked:
+> `archive/UAT_ui_witness_results.md`
+> Superseded by nothing — the round completed. Original purpose: commission a
+> third check layer that observes rendered UI state deterministically and emits
+> findings, never a verdict (DECISIONS 0031).
+> Accurate as the request that was made, and what it asked for was built and
+> walked — `tests/witness/` and `data/witness/<sheet>.json` are the result. Two
+> things it specified have since moved: the `[G]`/`[W]`/`[H]` layer marker it
+> introduced is now **rendered** in the UAT sidebar (it was parse-only when this
+> round shipped, which the 2026-08-15..17 walk found as a real defect), and the
+> docs board's checkbox parser it relied on was corrected in the 2026-08-17
+> correctness sweep. Read as the origin of the witness layer, not as a
+> description of how the sidebar behaves now.
+
 # Cowork brief — the third check layer: rendered state, deterministically
 
 **Origin:** the 2026-08-03 UAT-sidebar build thread, handed back to the design

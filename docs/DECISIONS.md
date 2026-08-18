@@ -2080,3 +2080,51 @@ The cost is that the map grows monotonically and now contains rows no longer in
 force. That is the cost DECISIONS pays, for the same reason. 0040 clause 4's
 fingerprint continues to record what was ratified and when — a superseded row is
 part of that history, not noise in it.
+
+
+---
+
+## 0047 — 0021's supervisor is superseded: there are no longer three processes to coordinate
+
+**Date:** 2026-08-17 · **Status:** accepted · **Supersedes:** 0021 (the
+supervisor runs the read/review/deck trio) · **Builds on:** 0013 (serve a
+snapshot, never the live vault), 0034, 0035 (`run.py app` is the single entry
+point) · **Source:** `COWORK_REPORT_unified_app.md`, closing out an obligation
+the build flagged and could not yet discharge
+
+**Context.** 0021 ruled that one supervisor should bring up `serve`, `review` and
+the deck together, because the knight was starting to run three long-lived
+processes and keeping them alive in step was becoming a real cost.
+
+`COWORK_BRIEF_unified_app.md` Task 3 mounted Datasette as an **ASGI sub-app** of
+the review app, and Task 4 made `run.py app` the single entry point (0035 clause
+1). After both, there are **zero processes left to supervise for this half**:
+one process, one port, one loopback bind.
+
+`chronicler/review/datasette_mount.py` recorded this at the time and declined to
+act on it, correctly — *"0021 is not wrong, it is moot — superseded by there
+being nothing left to coordinate. Record it here rather than editing 0021 (the
+log is append-only); a future DECISIONS entry can mark 0021 formally superseded
+when Task 4 lands the single entry point."* Task 4 landed. This is that entry.
+
+**Decision.**
+
+1. **0021 is superseded.** The coordination problem it solved no longer exists.
+   Its reasoning was correct for the shape it addressed and is preserved
+   unedited, as the log requires.
+2. **The supervisor is not to be rebuilt** as a way of running the deck. A
+   second long-lived process for this purpose would recreate the problem 0021
+   was written to manage, and `unified_app` was largely about removing it.
+3. **0013 is untouched.** Datasette still serves a snapshot, never the live
+   vault. The process boundary moved; the reason did not — a co-resident writer
+   breaking `--immutable` is the identical failure 0013 diagnosed, and this
+   process contains one.
+4. **If a second long-lived process is ever proposed**, this entry is not an
+   objection to it — but 0021 is the precedent for what it costs, and it should
+   be read before, not after.
+
+**Consequences.** One fewer standing obligation, and the deck's operational story
+becomes a shortcut rather than a supervised trio. The cost is that Datasette's
+staleness is now tied to the app's lifetime rather than its own — *"restart the
+app"* replaces *"re-launch `run.py serve`"*. That is one fewer thing to remember,
+not a new promise about freshness.

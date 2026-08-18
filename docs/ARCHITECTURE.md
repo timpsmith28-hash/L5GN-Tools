@@ -79,6 +79,41 @@ no upstream. The `l5gntools/` ↔ `chronicler/` boundary governs **what each sub
 may do** (read-only vs writer, stdlib vs deps, audited vs not), never **who owns
 it**. All of it is yours; the wall is about capability, not custody.
 
+### The third tier: the application layer (DECISIONS 0034)
+
+The two-subsystem split above is about **capability**, and it held while the
+review app was a bolt-on. It stopped being the whole picture when the app became
+the way the system is used at all. DECISIONS 0034 scoped the stdlib-only
+contract to what it was always protecting:
+
+| | `l5gntools/` (+ scanners) | `chronicler/` | `chronicler/review/` (+ launcher) |
+|---|---|---|---|
+| Role | read the estate + interpret | build/update the vault | **serve it** |
+| Contract | read-only, stdlib-only | writer, own deps | writer, **declared deps** |
+| Deps optional? | n/a | on demand | **no — required to run** |
+| Enforced by | auditors over `registry.SCANNERS` | not audited | `auditor_dependency_direction` |
+
+**`l5gntools/` remains stdlib-only and read-only, unchanged and unweakened.**
+What 0034 gave up was the claim that the *repository* runs on a bare Python;
+what it kept is the property that actually mattered — the scanners are
+independently installable and independently testable, and `verify.py` proves it
+with no web stack present.
+
+**The direction is one-way, and that is what makes the above survivable.** The
+app imports `l5gntools`; `l5gntools` never imports the app.
+`auditors/auditor_dependency_direction.py` walks the imports and fails on any
+reach from the scanner package into the app tier — so the boundary is a gate,
+not a request. Without it, 0034 clause 1 would decay into "please don't import
+that", which INTENT §5 rules out: guarantees are structural, not behavioural.
+
+**One packaging detail reads like non-compliance and is not.** FastAPI and
+uvicorn sit in `[project.optional-dependencies].review` rather than
+`[project.dependencies]`, deliberately, so the `l5gntools` package itself stays
+free of them. They are required to run `run.py app` / `window`, and a missing
+web stack there is an install error with a stated remedy, not a graceful skip.
+The mechanism differs from 0034 clause 2's literal wording in service of clause
+1; `pyproject.toml`'s own comment says so.
+
 ## 4. The loop (data flow)
 
 Standalone (the default — one machine, no mesh flag):
