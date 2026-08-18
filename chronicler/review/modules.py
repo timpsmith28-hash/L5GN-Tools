@@ -32,10 +32,20 @@ module here, rather than only flipping a `legacy` one, is the first real
 proof of the claim Task 1's UAT line makes -- "a new module is one
 registration plus one view file" -- ahead of that line's own throwaway-tab
 walk.
+
+**`desk` is the ninth, added whole by COWORK_BRIEF_desk_stale_card.md (DECISIONS
+0048/0049, Phase 1).** Front of the strip (order 5, below every existing
+module) on purpose -- "the front door aspiration made literal": the Desk is
+where a decision is raised, everything else in the strip is reference,
+reached from a card's evidence rather than patrolled. `requires=()` on the
+`project_wizard` precedent immediately below: its inputs are this checkout's
+manifests and the Desk's own sidecar event log, both reachable by
+construction, so an empty allowlist is an honest empty desk, not a degraded
+tab.
 """
 from __future__ import annotations
 
-from . import estate_report, estate_time, project_wizard
+from . import desk, estate_report, estate_time, project_wizard
 from .module_contract import (
     STATUS_LEGACY,
     STATUS_REGISTRY,
@@ -46,6 +56,14 @@ from .module_contract import (
 #: module can land between two existing tabs without renumbering the file --
 #: a renumbering diff hides the actual change inside noise.
 MODULES: list[ModuleDescriptor] = [
+    ModuleDescriptor(
+        # No `requires`, on the `project_wizard` entry below's own precedent:
+        # the Desk's inputs (this checkout's allowlisted manifests, and its
+        # own sidecar event log under data/desk/) are reachable by
+        # construction, not gated by a vault or an estate build.
+        id="desk", label="Desk", order=5,
+        status=STATUS_REGISTRY, requires=(),
+        router=desk.router, view="desk.js"),
     ModuleDescriptor(
         id="queue", label="Review queue", order=10,
         status=STATUS_LEGACY, requires=("vault",)),

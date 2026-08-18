@@ -20,6 +20,16 @@
       "cwd": ".",
       "output_glob": "data/estate.json",
       "freshness_source": "self",
+      "depends_on": ["verify"]
+    },
+    {
+      "key": "estate_freshness",
+      "label": "estate_freshness_check.py -- delegated staleness answer for data/estate.json",
+      "kind": "other",
+      "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "estate_freshness_check.py"],
+      "cwd": ".",
+      "output_glob": null,
+      "freshness_source": {"type": "delegated", "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "estate_freshness_check.py"]},
       "depends_on": []
     }
   ]
