@@ -58,15 +58,33 @@ _TAG = {"walked": "EVIDENCE", "deferred": "DEFERRED",
 #: practice (`## A · label`, `## Part 0 ▸ label`) -- the sidebar does not need
 #: to distinguish heading depth, only to group items under the nearest one.
 _SECTION = re.compile(r"^#{1,3}\s+(?P<label>.+?)\s*$")
-#: An item line: `- [ ] **<id>** text`, with an optional layer marker between
-#: the checkbox and the id -- `- [ ] [W] **B7.** ...` (DECISIONS 0031, the
-#: gate/witness/walk-sheet assignment rule). The id is whatever sits between
-#: the bold markers -- `A1`, `2.1`, `0.4`, `E7` all match, because the sheets
-#: we have actually use all three shapes (see UAT_docs_board.md,
-#: UAT_work_rig_solo.md).
+#: An item line. Five dialects exist across the sheets in this repo and all
+#: five are load-bearing -- a sheet is frozen when written, so the parser
+#: accommodates the sheets rather than the sheets being rewritten:
+#:
+#:   - [ ] [W] **B7** text        bare marker, bold id       (uat_sidebar)
+#:   - [ ] `[G]` **1.** text      backticked marker          (curator_tab)
+#:   - [ ] `[G]` text             no bold id at all          (conductor_governor)
+#:   - `[ ]` `[G]` text           backticked checkbox too    (knowledge_curator)
+#:   - [ ] **P1. `[H]`** text     marker inside the bold     (pin_mechanism)
+#:
+#: Before this widened, SIX sheets parsed as zero items and one dropped 66 of
+#: 85 -- silently, because an unmatched line is skipped, not reported. Worse,
+#: `sheet_view` returns `sheet_boxes` from `_count_checkboxes` alongside these
+#: sections, so one response could say "18 open" over an empty list. See
+#: auditors/auditor_uat_sheet_readable.py, which exists to stop that recurring.
+#: The id is whatever sits between the bold markers -- `A1`, `2.1`, `0.4`, `E7`
+#: all match; an item with no bold id gets a synthesised `i<n>`.
 _ITEM = re.compile(
-    r"^\s*[-*]\s*\[(?P<mark>[ xX~])\]\s*(?:\[(?P<layer>[GWH])\]\s*)?"
-    r"\*\*(?P<id>[^*]+)\*\*\s*(?P<text>.*)$")
+    r"^\s*[-*]\s*`?\[(?P<mark>[ xX~])\]`?\s*"
+    r"(?:`?\[(?P<layer>[GWH])\]`?(?P<ann>\S*)\s*)?"
+    r"(?:\*\*(?P<id>[^*]+)\*\*\s*)?"
+    r"(?P<text>.*)$")
+
+#: A marker written INSIDE the bold id -- ``**P1. `[H]`**``. Split out rather
+#: than swallowed: left alone the marker becomes part of the id *and* the layer
+#: is lost, so the item emits into Human ruling under a corrupt id.
+_ID_LAYER = re.compile(r"^(?P<id>.*?)[\s.]*`?\[(?P<layer>[GWH])\]`?\s*$")
 
 #: The inverse of `build_results_body`'s per-item shape, for resuming a walk
 #: already partly recorded in an emitted results log:
@@ -130,6 +148,7 @@ def parse_sheet(path: Path) -> dict:
     sections: list[dict] = []
     cur: dict | None = None
     cur_item: dict | None = None
+    n_items = 0
     for line in text.splitlines():
         sm = _SECTION.match(line)
         if sm:
@@ -142,11 +161,21 @@ def parse_sheet(path: Path) -> dict:
             if cur is None:
                 cur = {"label": "(preamble)", "items": []}
                 sections.append(cur)
+            n_items += 1
             mark = im.group("mark")
             state = "open" if mark == " " else ("caveat" if mark in "~" else "done")
-            cur_item = {"id": im.group("id").strip(), "state": state,
+            iid, layer = (im.group("id") or "").strip(), im.group("layer")
+            if iid:
+                sub = _ID_LAYER.match(iid)
+                if sub and not layer:
+                    iid, layer = sub.group("id").strip(), sub.group("layer")
+            # A sheet with no bold id still has items. Synthesise one, prefixed
+            # so it is visibly machine-made and never taken for an author's.
+            if not iid:
+                iid = f"i{n_items}"
+            cur_item = {"id": iid, "state": state,
                         "text": im.group("text").strip(),
-                        "layer": im.group("layer"), "_note": []}
+                        "layer": layer, "_note": []}
             cur["items"].append(cur_item)
             continue
         if not line.strip():

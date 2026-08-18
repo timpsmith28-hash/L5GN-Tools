@@ -23,6 +23,7 @@ AUDITORS: list[str] = [
     "auditors.auditor_readonly",
     "auditors.auditor_stdlib",
     "auditors.auditor_tool_contract",
+    "auditors.auditor_uat_sheet_readable",
     "auditors.auditor_uat_stamp",
 ]
  
