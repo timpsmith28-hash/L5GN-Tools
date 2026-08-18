@@ -6,9 +6,10 @@ widened bench ledger (Task 2, code lives in
 `chronicler/pipeline/bench_ledger.py`, tests in
 `tests/tester_bench_ledger.py`), the failure taxonomy (Task 3,
 `chronicler/pipeline/bench_failures.py`), and the load-cost measurements
-(Task 4, `chronicler/pipeline/bench_load_cost.py`). Task 0 (the control run)
-and the actual candidate runs happen on your machine against LM Studio —
-nothing here runs a model.
+(Task 4, `chronicler/pipeline/bench_load_cost.py`), and the comparison
+renderer (Task 5, `chronicler/pipeline/bench_report.py`). Task 0 (the
+control run) and the actual candidate runs happen on your machine against
+LM Studio — nothing here runs a model.
 
 ## Task 1 — the evaluation set (Level 1)
 
@@ -310,3 +311,53 @@ was written) — that proves the timing/residency/error-handling logic is
 correct. It does **not** prove how long a real model load takes on your
 rig; that number only exists once this runs against real LM Studio, which
 is this round's own UAT item ("Cold start versus steady state, measured").
+
+## Task 5 — the comparison
+
+`chronicler/pipeline/bench_report.py` reads the three logs Tasks 2–4 built
+(`bench_ledger.jsonl`, `bench_failures.jsonl`, `bench_load_cost.jsonl`) plus
+a K2 `--out` report, and assembles one `ComparisonRow` per `(source, host,
+model, config, prompt)` unit — throughput, unit cost, quality, reliability
+and load cost side by side, exactly the columns Task 5's own decision-matrix
+table asks for. **This round declares no tiers** — the module renders
+evidence; it doesn't rank or recommend.
+
+`build_row(source="bench", ...)` summarizes via `bench_ledger.summarize`;
+`build_row(source="production", ...)` summarizes gemma-4's existing 116
+entries via `ledger.summarize` instead — labelled `production`, carrying no
+config/prompt fingerprint, with a `caveats` field the renderer surfaces
+explicitly, per the brief: "shown as such and labelled production rather
+than bench, since they were not taken over the evaluation set and carry no
+config fingerprint." `quality_from_k2_report` reads `claims_extracted`/
+`claims_rejected`/`quote_rejection_rate` straight off K2's own `_build_
+report` output — `acceptance_rate = 1 - quote_rejection_rate`.
+`correctness_rate` (quality against ground truth) is `None` on every row
+this round, because Task 1's Level 2 ground truth was never built (see
+above) — a correctness figure with nothing to check it against would be
+fabricated precision.
+
+**`compare_medians(a, b)` is the brief's "not tie-broken by preference"
+rule, in code.** Two IQRs (`[p25, p75]`) that overlap return
+`"indistinguishable"`, never a direction. Either row having fewer than 2
+repeats returns `"insufficient_data"` instead — not even
+`"indistinguishable"` is offered, because that verdict itself presumes both
+sides had a measurable spread to compare, and a single run doesn't have
+one. `detectable_difference_floor(control_row)` gives `(p75-p25)/median` as
+a fraction — the brief's own smallest-honestly-claimable-difference number,
+derived from Task 0's control spread, `None` until that control has
+actually been run.
+
+`render_markdown_table(rows)` renders one row per unit with an em-dash for
+anything never measured (never a fabricated zero) and surfaces every row's
+`caveats` as blockquotes beneath the table.
+
+**What this module has never seen: real data.** Task 0 hasn't run on this
+machine, so nothing here has touched a populated ledger. `tests/tester_
+bench_report.py` proves the aggregation and comparison logic against
+hand-built entries in the real shapes Tasks 2–4 and K2 already produce — it
+cannot prove what an actual comparison will say. That's Task 0's job, then
+the candidate sweeps', then this module's, run for real, in that order —
+the brief's own stop condition ("Any candidate is run before Task 0's
+control has been taken and its spread reported → stop") applies to running
+this report too: a comparison table built before the control exists has
+nothing to state a detectable-difference floor against.
