@@ -2128,3 +2128,125 @@ becomes a shortcut rather than a supervised trio. The cost is that Datasette's
 staleness is now tied to the app's lifetime rather than its own — *"restart the
 app"* replaces *"re-launch `run.py serve`"*. That is one fewer thing to remember,
 not a new promise about freshness.
+
+---
+
+## 0048 — The unit of throughput is a decision; a surface that wants attention raises a card
+
+**Date:** 2026-08-18 · **Status:** proposed · **Builds on:** 0031 (findings,
+never verdicts), 0033 (propose, ratify, execute) · **Source:** the Quartermaster
+vision thread, `docs/investigation/2026-08-17_quartermaster_fable_2-response.md`
+(carried there as **D-A**) · **Depends on:** INTENT §8
+
+**Context.** Every surface this estate has built shows *artifacts* — scans,
+reports, boards, threads — because artifacts are what the system produces. But
+artifacts are not why it exists. INTENT §8 now states the widened thesis: the
+decision is the product, and the record exists so decisions arrive cheaper,
+fewer and durable.
+
+That reframe only becomes operative if it changes what a surface is allowed to
+be. Today a new tab is justified by the facts it can display. Nine tabs later,
+the cost of that justification is visible: surfaces are visited on patrol rather
+than because something needs deciding.
+
+**Decision.**
+
+1. **The unit of throughput is a decision, not an artifact.** A surface that
+   asks for the operator's attention raises a **card**. Everything else —
+   dashboards, browsers, transcripts, free query — is the reference room,
+   reached from a card's evidence, not patrolled.
+2. **The card's anatomy is fixed**: the question in one sentence; the trigger
+   that made it necessary now; the evidence, pre-assembled, each item carrying
+   its provenance; the options, with their cost where a measurement exists and
+   no estimate where none does (0037 clause 4); a default; an expiry. **A card
+   missing any field is not raised** — an unassembled card spends the attention
+   it was built to save.
+3. **Silence is an input, and its consequence is stated on the card.** What
+   happens if the operator does not rule, and when, is never implicit.
+4. **`default` and `expiry` are declared now and inert until a policy engine
+   exists.** Every default reads `hold — nothing runs`; expiry only re-raises a
+   card marked `aged`. This is deliberate, and named because a field identical
+   on every card for months trains the eye past it — their going live later is a
+   change the operator should be told to expect, not discover.
+5. **A standing ruling carries a sunset.** A policy expires unless renewed, and
+   renewal is itself a card carrying that policy's own firing record as
+   evidence. A policy that has authorised nothing since the week it was made
+   answers its own renewal question. This is preferred to a policy-watching
+   actor for INTENT §5's reason: prefer *can't* to *shouldn't*. A watcher is one
+   more thing to own at 2am; an expiry needs owning by no one.
+
+**Consequences.** A new surface must now be justified by the decisions it moves,
+not the facts it shows — which is a harder bar, and meant to be. The estate's
+existing surfaces are not retired by this entry; they are reclassified as
+reference, and the Desk becomes the front door aspiration made literal.
+
+Clause 2's "not raised" is the expensive clause: a trigger the system cannot
+evidence produces no card at all, so some real staleness will go unreported
+rather than reported thinly. That is the intended trade — INTENT §5's fail-loud
+rule says a plausible wrong answer is worse than none, and a bare accusation
+with no evidence is exactly that.
+
+**What would show this wrong.** If cards arrive faster than they are ruled, or
+if the operator rules without reading the evidence because assembling it was
+never the expensive part, the anatomy is wrong and this entry is the thing to
+re-argue — not the surface built on it. INTENT §8's first added failure mode
+(*"the desk becomes a feed"*) is this entry's own alarm.
+
+---
+
+## 0049 — Frontier conversations are a sensed input; the system moves work down-tier rather than budgeting spend it cannot see
+
+**Date:** 2026-08-18 · **Status:** proposed · **Builds on:** 0037 (measurement
+before estimation; refuse, never clamp), 0040 (the conversation corpus and its
+joins) · **Source:** the Quartermaster vision thread,
+`docs/investigation/2026-08-17_quartermaster_fable_2-response.md` (carried there
+as **D-B**), redrafted 2026-08-18 · **Depends on:** INTENT §8
+
+**Context.** The vision proposed a frontier *envelope*: a weekly allowance drawn
+down by logged spend, with the planner refusing a plan that would exceed it.
+That version does not survive contact with how the frontier is actually used
+here.
+
+The toolkit does not invoke frontier models and is not going to — a frontier
+step in a plan is a prepared handoff, not an API call. So spend happens in
+vendor interfaces, outside any ledger, and an envelope would be drawn down by
+numbers the operator typed in about work the system never saw. **A figure
+nothing observes must not be given the authority to refuse a plan.** That is the
+fabricated-number failure 0037 already refuses in the estimation case.
+
+What the estate does have is the conversations themselves: ingested, and already
+mined for claims by the Curator. The useful question is not *how much was
+spent* but *what was asked repeatedly that a local tier could have prepared*.
+
+**Decision.**
+
+1. **The toolkit invokes no frontier model.** A frontier step in any plan is a
+   prepared handoff — assembled context and a stated question — never a direct
+   call. Direct invocation, if ever wanted, is its own entry.
+2. **There is no spend envelope, and no plan is refused on a spend number.**
+   This clause exists to prevent a precise-looking number nobody measured from
+   acquiring authority.
+3. **The conversation corpus is a sensed input for down-tier opportunities.**
+   Recurring asks — work of a shape that keeps coming back — are surfaced as
+   findings against the corpus, the same way any other sensor reports.
+4. **A down-tier proposal names the local capability that would replace the ask,
+   and the evidence that it can.** Without both it is a wish, and wishes are the
+   thing INTENT §6's first failure mode is watching for.
+5. **Success is the recurrence declining in the corpus, observed** — never a
+   claimed saving, and never the label on a purchase.
+
+**Consequences.** The economic half of the Quartermaster frame stops being a
+budget mechanism and becomes an observation mechanism, which is the only half
+this estate can honestly build. It also relocates the work: finding repeated
+asks is a query over claims, so it belongs beside the Curator's linking work
+rather than in a separate accounting round.
+
+The cost is that nothing stops an expensive week. This entry offers no brake,
+because the brake it replaced was decorative — and a decorative brake is worse
+than none, since it invites the belief that spending is governed.
+
+**What would show this wrong.** If the corpus turns out to hold no legible
+repetition — if every frontier session is genuinely novel — then clause 3 has
+nothing to sense and the entry is an elegant description of nothing. That is
+testable against the corpus that already exists, and should be tested before
+anything is built on it.

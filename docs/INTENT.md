@@ -105,6 +105,12 @@ Named because each one, unstated, invites scope creep that looks like progress:
   here as a standing *value*, not a v1 limitation to be optimised away later. If it
   is really just a v1 limitation, move it to ARCHITECTURE and delete it here, or
   this section is lying to future-you.
+  **Narrowed by §8, deliberately and at a stated cost.** A ruling may be
+  *standing* — made once, explicitly, revocable in one act — so a settled shape
+  of decision is applied without being asked again. What does not move: no
+  judgment is ever the system's. What narrows: per-instance review, given up
+  only where looking again adds nothing. §8 states the price and the test; this
+  bullet is not softened to fit it, it is amended by it.
 - **Not a rewrite of git.** Git holds what changed. This holds why.
 
 ## 5. Standing constraints
@@ -170,3 +176,85 @@ that proves too tempting to let rot, cut it and let the reader derive it.
 
 Everything else this doc might want to say about the present belongs in
 `ARCHITECTURE.md`, the git log, or `verify.py`.
+
+---
+
+## 8. The widened thesis: Quartermaster
+
+The original thesis stands: chat history, linked to the code it produced, is a
+recoverable record of reasoning. What it under-claimed is *why* the record is
+worth keeping. The record is not the product. **The decision is the product.**
+The record exists so decisions arrive cheaper, fewer, and durable.
+
+So the widened thesis: **this system is an allocator of three scarce resources
+— the operator's attention, frontier tokens, and machine time — and everything
+in it exists to spend those three well.** The picture of the estate is the
+allocator's input, not its output. A surface that shows facts without moving a
+decision is furniture.
+
+What "spending well" means, as wants:
+
+- **A decision should arrive assembled, or not arrive.** The question, the
+  trigger, the evidence with provenance, the options with their costs, a
+  default and an expiry. Assembling context is the system's job; judging is
+  the operator's. Any card that makes the operator go hunting has failed at
+  the desk's one purpose.
+- **A decision made three times is a policy not yet written down.** The system
+  should notice repetition and offer promotion. A ratified policy is a
+  standing ruling that executes with citation — it is not the system deciding;
+  it is a decision the operator already made, still binding, finally cheap.
+- **Frontier tokens are capital, not fuel.** They may buy exactly two things:
+  judgment that unblocks stalled work, and artifacts that permanently lower
+  the cost of future work by moving it down to local tiers. Spend that buys
+  only an answer, once, is the spend to eliminate.
+- **Work runs at the cheapest capable tier**, escalates only on evidence, and
+  every escalation is recorded with its cost — so the question "what does
+  each tier deliver per pound and per hour" is always answerable from the
+  record, never from impression.
+
+### What a standing ruling is, and what it costs
+
+§4 says *nothing closes, links, or reopens without a human*, and says it as a
+standing value rather than a limitation to be optimised away. Promotion tests
+that sentence, so the test is taken head-on rather than argued around.
+
+**What does not move.** No judgment is made by the system. Nothing is inferred,
+scored into action, or decided by a confidence threshold. Every action the
+system takes still traces to a human decision, and where there is no such
+decision, work waits for a hand.
+
+**What narrows, deliberately.** *A human* becomes *a human ruling*, and a ruling
+may be **standing** rather than per-instance. The operator may decide once that
+a recurring shape of decision has a settled answer, and have that answer applied
+without being asked again.
+
+**What that costs, stated rather than dissolved.** Per-instance review is given
+up for that shape of decision. That is a real reduction in oversight, chosen,
+not a technicality — and calling a policy "a ruling made once" does not make the
+tenth application of it something the operator looked at. It is worth paying only
+where looking again adds nothing.
+
+**What the narrowing is worth only if it holds.** A standing ruling must be
+raised as a question and answered explicitly — never inferred from repetition
+alone. It must cite the decisions that prompted it. It must be revocable in one
+act. Every action taken under it must say which ruling authorised it. And the
+operator must be able to enumerate every standing ruling in force, on demand.
+
+**The test, in one line:** if the operator cannot say what the system is
+currently allowed to do without asking, the value in §4 has been breached —
+whatever the mechanism is called. That is the failure to watch for, and it is a
+better alarm than any wording.
+
+### How we'd know *this* failed (additions to §6)
+
+- **The desk becomes a feed.** Cards arriving faster than rulings, defaults
+  firing unread — attention routed, then flooded. The desk's worth is measured
+  in decisions retired per week, not cards raised.
+- **Policies harden into automation the operator no longer recognises.** A
+  promoted policy the operator can't recall ratifying is §4's "not automated
+  judgment" quietly breached. Every policy must trace to its rulings, and
+  revoking one must be one act.
+- **The economy gets gamed by its own metric.** Frontier spend that launders
+  itself as "distillation" while the local tiers never actually keep more
+  work. The test is the retirement of future spend, measured, not the label
+  on the purchase.
