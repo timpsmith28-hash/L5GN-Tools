@@ -24,9 +24,9 @@
     },
     {
       "key": "estate_freshness",
-      "label": "estate_freshness_check.py -- delegated staleness answer for data/estate.json",
-      "kind": "other",
-      "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "estate_freshness_check.py"],
+      "label": "run.py build (via the freshness card) -- rebuilds data/estate.json when the delegated check reports STALE",
+      "kind": "report_build",
+      "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "run.py", "build"],
       "cwd": ".",
       "output_glob": null,
       "freshness_source": {"type": "delegated", "command": ["C:/Users/timps/Documents/GitHub/L5GN-Tools/.venv/Scripts/python.exe", "estate_freshness_check.py"]},
