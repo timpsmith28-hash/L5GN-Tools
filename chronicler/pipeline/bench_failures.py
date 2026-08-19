@@ -102,14 +102,25 @@ _TRANSPORT_MARKERS = (
     "urlerror", "httperror", "connectionreseterror", "connectionrefusederror",
     "connection refused", "urllib.error", "oserror",
 )
-#: NOT verified against a real LM Studio error body -- this repo has never
-#: run a request that actually overflowed a model's context (T1 has never
-#: run, per the brief's own "why this round exists"). Starting hypothesis
-#: only; refine against real Task 0/candidate evidence once it exists,
-#: exactly as the brief's own honesty bar asks of every other figure here.
+#: Real-run evidence (2026-08-18/19, gemma-4-e4b, work rig): this repo's
+#: real LM Studio backend (llama.cpp server, embedded in LM Studio) rejects
+#: an over-budget request with `error: request (N tokens) exceeds the
+#: available context size (M tokens), try increasing it` -- literal text
+#: `"exceeds the available context size"`, which the four markers below
+#: (all still plausible synonyms, kept as a starting hypothesis for OTHER
+#: backends/wordings) do NOT match: not "context length" (has "context
+#: size"), not "context window", not "n_ctx", not "exceeds the model" (has
+#: "exceeds the available"). Confirmed live: every one of 25 real
+#: whole-stage K2 crashes recorded in `bench_failures.jsonl` between
+#: 2026-08-18 and 2026-08-19 (all the SAME deterministic oversized-message
+#: conversation, all `HTTP 400`) was misclassified `"transport_error"`
+#: instead of `"context_overflow"` because of exactly this gap -- refining
+#: against real evidence, exactly as this constant always said to do once
+#: it existed.
 _CONTEXT_OVERFLOW_MARKERS = (
     "context length", "context_length", "context window", "n_ctx",
-    "exceeds the model", "too many tokens", "maximum context",
+    "exceeds the model", "exceeds the available context size",
+    "available context size", "too many tokens", "maximum context",
     "prompt is too long", "trying to keep the first",
 )
 

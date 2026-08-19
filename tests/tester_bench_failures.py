@@ -41,6 +41,12 @@ def run() -> list[str]:
         ("Traceback (most recent call last):\n  ...\nurllib.error.HTTPError: HTTP Error 400: "
          "the request exceeds the model context length"): "context_overflow",
         "Traceback (most recent call last):\n  ...\nKeyError: 'choices'": "unknown",
+        # Real-run evidence (2026-08-18/19, gemma-4-e4b, work rig): llama.cpp's
+        # ACTUAL wording, previously unmatched by any marker -- 25 real crashes
+        # were misclassified transport_error before this marker was added.
+        ("Traceback (most recent call last):\n  ...\nurllib.error.HTTPError: HTTP Error 400: "
+         "Bad Request\nsend_error: task id = 66732, error: request (79115 tokens) exceeds "
+         "the available context size (32768 tokens), try increasing it"): "context_overflow",
     }
     for text, expected in cases.items():
         got = bf.classify_crash_text(text)
