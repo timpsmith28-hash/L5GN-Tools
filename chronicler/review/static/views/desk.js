@@ -5,13 +5,17 @@
  * call (chronicler/review/desk.py's own "derived, never stored" rule); this
  * view does the same -- no client-side cache between loads.
  *
- * "Rebuild now" calls the wizard's OWN execute route directly
- * (/api/project_wizard/execute, same body the Project Wizard pane already
- * uses) and then records the ruling separately via POST /api/desk/rule. This
- * view has no execution path of its own -- every stop condition in the
- * brief about that is enforced server-side, but the client mirrors it so a
- * reviewer can see it at a glance: nothing here posts a repo path or an argv
- * anywhere except through the wizard's existing route.
+ * "Rebuild now" records the ruling via POST /api/desk/rule FIRST, then calls
+ * the wizard's OWN execute route directly (/api/project_wizard/execute, same
+ * body the Project Wizard pane already uses). Ruling before executing is
+ * deliberate, not incidental (2026-08-19 fix): /api/desk/rule refuses any
+ * fingerprint that isn't currently derived, and a successful rebuild is
+ * exactly what makes a card stop being derived -- executing first would
+ * refuse its own ruling on every single successful rebuild. This view has no
+ * execution path of its own -- every stop condition in the brief about that
+ * is enforced server-side, but the client mirrors it so a reviewer can see it
+ * at a glance: nothing here posts a repo path or an argv anywhere except
+ * through the wizard's existing route.
  */
 import { esc, jget, degraded } from "../shared.js";
 
@@ -123,6 +127,17 @@ async function handleAction(view, cardEl, action, card) {
   msg.style.display = "block";
   try {
     if (action === "rebuild") {
+      // Rule FIRST, execute SECOND. /api/desk/rule refuses any fingerprint
+      // that isn't currently derived (desk.py's `known_fingerprints` guard) --
+      // and a successful rebuild is exactly what makes this card stop being
+      // derived. Executing first would race the guard against its own fix
+      // every single time, refusing the ruling the rebuild was supposed to
+      // record. Recording the human's decision before the mechanical action
+      // also matches what's actually being measured: the moment someone
+      // chose "rebuild", not the moment the stage's command finished running.
+      msg.textContent = "recording ruling…";
+      await ruleFingerprint(card.fingerprint, "rebuild",
+        reason || "rebuilt via card", null);
       msg.textContent = "rebuilding…";
       const res = await fetch("/api/project_wizard/execute", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -131,10 +146,12 @@ async function handleAction(view, cardEl, action, card) {
       const outcome = await res.json();
       if (!res.ok) {
         const d = outcome && outcome.detail;
-        throw new Error((d && (d.detail || d.reason)) || res.status);
+        // The ruling already landed -- the decision is recorded even though
+        // the mechanical rebuild failed. Surface both facts rather than
+        // hiding the successful ruling behind the execute error.
+        throw new Error(
+          `ruling recorded, but rebuild failed: ${(d && (d.detail || d.reason)) || res.status}`);
       }
-      await ruleFingerprint(card.fingerprint, "rebuild",
-        reason || `rebuilt via card: ${outcome.state}`, null);
       msg.textContent = `rebuilt — ${outcome.state}`;
     } else if (action === "snooze") {
       if (!reason.trim()) { msg.textContent = "snooze needs an until-condition in the box above."; return; }
