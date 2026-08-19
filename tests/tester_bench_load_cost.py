@@ -47,6 +47,17 @@ def _make_handler(state: dict):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
             model = body.get("model")
+            if model == "not-actually-loaded":
+                # Real-run evidence (2026-08-19): LM Studio's actual body on
+                # this failure -- a plain-text 400, not JSON -- confirming
+                # _http_error_detail must not assume the body parses as JSON.
+                msg = ("No models loaded. Please load a model in the "
+                       "developer page or use the 'lms load' command.")
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(msg.encode())
+                return
             with state["lock"]:
                 resident = state["resident"]
                 was_resident = model in resident
@@ -96,6 +107,15 @@ def run() -> list[str]:
         if lerr is not None or secs is None or secs < 0:
             v.append(f"measure_call_latency against a real server should succeed with a "
                      f"non-negative duration: {(secs, lerr)}")
+
+        # --- error surfacing: a non-2xx response's BODY (the actually
+        #     useful text, e.g. LM Studio's "No models loaded...") must
+        #     reach the caller, not just HTTPError's generic "Bad Request"
+        _, body_err = blc.measure_call_latency("not-actually-loaded", endpoint=endpoint)
+        if body_err is None or "No models loaded" not in body_err:
+            v.append(f"measure_call_latency on a 400 with a real body should surface that "
+                     f"body's text (e.g. 'No models loaded'), not just a generic HTTPError "
+                     f"string: {body_err!r}")
 
         # --- cold start: first call to a genuinely cold model must be
         #     measurably slower than the steady-state median that follows

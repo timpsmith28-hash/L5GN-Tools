@@ -88,6 +88,33 @@ _ALL_FIELDS = _REQUIRED_FIELDS + _OPTIONAL_FIELDS
 # studio` already applies to the same endpoint.
 # ---------------------------------------------------------------------------
 
+#: Real-run evidence (2026-08-19, gemma-4-e4b, work rig): `urllib.error.
+#: HTTPError`'s own `str()` is a generic `"HTTP Error 400: Bad Request"` --
+#: it never includes the response BODY, which is exactly where LM Studio
+#: puts the actually-useful text (`"No models loaded. Please load a model
+#: in the developer page or use the 'lms load' command."`, confirmed live
+#: in LM Studio's own debug log for this exact failure). Every caller of
+#: this module was reading only the generic message and had no way to tell
+#: "the model needs to be loaded" apart from any other 400, without going
+#: to LM Studio's own log window by hand. `HTTPError` is itself a readable
+#: file object (it wraps the response) -- `.read()` on it recovers the body
+#: LM Studio already sent, once, before it's consumed/closed.
+def _http_error_detail(exc: BaseException) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        try:
+            raw = exc.read()
+        except Exception:
+            raw = b""
+        if raw:
+            try:
+                text = raw.decode("utf-8", errors="replace").strip()
+            except Exception:
+                text = ""
+            if text:
+                return f"{type(exc).__name__}: HTTP {exc.code}: {text}"
+    return f"{type(exc).__name__}: {exc}"
+
+
 def list_loaded_models(endpoint: str = DEFAULT_ENDPOINT,
                         timeout: float = 5.0) -> tuple[list[str], str | None]:
     """`GET /v1/models` -- same endpoint, same interpretation ("the loaded
@@ -104,7 +131,7 @@ def list_loaded_models(endpoint: str = DEFAULT_ENDPOINT,
                if isinstance(m, dict) and m.get("id")]
         return ids, None
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        return [], f"{type(exc).__name__}: {exc}"
+        return [], _http_error_detail(exc)
 
 
 def measure_call_latency(model: str, *, endpoint: str = DEFAULT_ENDPOINT,
@@ -118,7 +145,10 @@ def measure_call_latency(model: str, *, endpoint: str = DEFAULT_ENDPOINT,
     `extract_claims.call_lmstudio` does, so a measurement can be taken
     under a specific TTL/auto-unload setting -- part of Task 2's
     `config_fingerprint` (the brief's own words: "record the setting; it is
-    part of config_fingerprint")."""
+    part of config_fingerprint"). On a non-2xx response, `error` carries the
+    real response BODY when the endpoint sent one (see `_http_error_detail`)
+    -- e.g. LM Studio's `"No models loaded..."` -- not just the generic
+    `HTTPError` string."""
     body: dict = {
         "model": model, "temperature": 0.0, "max_tokens": 1,
         "messages": [{"role": "user", "content": "hi"}],
@@ -134,7 +164,7 @@ def measure_call_latency(model: str, *, endpoint: str = DEFAULT_ENDPOINT,
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             resp.read()
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        return None, f"{type(exc).__name__}: {exc}"
+        return None, _http_error_detail(exc)
     return time.perf_counter() - started, None
 
 
