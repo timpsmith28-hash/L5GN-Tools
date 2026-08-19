@@ -2133,7 +2133,7 @@ not a new promise about freshness.
 
 ## 0048 — The unit of throughput is a decision; a surface that wants attention raises a card
 
-**Date:** 2026-08-18 · **Status:** accepted · **Builds on:** 0031 (findings,
+**Date:** 2026-08-18 · **Status:** accepted 2026-08-19· **Builds on:** 0031 (findings,
 never verdicts), 0033 (propose, ratify, execute) · **Source:** the Quartermaster
 vision thread, `docs/investigation/2026-08-17_quartermaster_fable_2-response.md`
 (carried there as **D-A**) · **Depends on:** INTENT §8
@@ -2196,7 +2196,7 @@ re-argue — not the surface built on it. INTENT §8's first added failure mode
 
 ## 0049 — Frontier conversations are a sensed input; the system moves work down-tier rather than budgeting spend it cannot see
 
-**Date:** 2026-08-18 · **Status:** accepted · **Builds on:** 0037 (measurement
+**Date:** 2026-08-18 · **Status:** accepted 2026-08-19 · **Builds on:** 0037 (measurement
 before estimation; refuse, never clamp), 0040 (the conversation corpus and its
 joins) · **Source:** the Quartermaster vision thread,
 `docs/investigation/2026-08-17_quartermaster_fable_2-response.md` (carried there
