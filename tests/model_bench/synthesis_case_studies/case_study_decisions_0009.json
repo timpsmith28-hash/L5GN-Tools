@@ -1,0 +1,46 @@
+{
+  "_comment": "Low-tier case study (2 conversations touching the ruling in the current backup). Built the same way as case_study_decisions_0017.json: real quotes, real conversation ids/timestamps, no invented connections.",
+  "ruling": "0009",
+  "ruling_title_in_decisions_md": "Deferred: a self-hosted git-backed notes vault (separate toolset)",
+  "census_method": "scan_all_decisions.py --root against the 2026-08-18 backup (C:\\Users\\timps\\backups\\claude_migration); 0009 hit 2 conversations, 10 mentions total",
+  "timeline": [
+    {
+      "seq": 1,
+      "event": "raised as an unresolved analogy while designing something unrelated",
+      "conversation_id": "local_2beef53e-e99c-4a02-a46e-b34e52ac6e50",
+      "conversation_title": "L5GN-Tools - Design Thread - Restart 2026-07-20",
+      "timestamp": "2026-07-20T14:49:40.433Z",
+      "speaker": "user",
+      "quoted_substring": "(Drive as read-only mirror) or two-way (which reintroduces the sync-conflict problem 0009 wrestled with). My lean, unstated until now: one-way repo->Drive mirror, because two-w[ay...]",
+      "note": "0009 is invoked here purely as a cautionary precedent for a different design question (Drive sync direction) -- the user is reasoning by analogy to a ruling that already exists, not deciding anything new about 0009 itself."
+    },
+    {
+      "seq": 2,
+      "event": "same precedent re-invoked, same conversation, 8 hours later",
+      "conversation_id": "local_2beef53e-e99c-4a02-a46e-b34e52ac6e50",
+      "timestamp": "2026-07-21T11:22:12.885Z",
+      "speaker": "assistant",
+      "quoted_substring": "in folders too creates a second source of truth that can drift -- the notes-vault problem 0009 wrestled with, in a new costume.",
+      "note": "Same conversation as seq 1, so this is not yet cross-conversation evidence on its own -- included because it shows the analogy compounding within one thread before the ruling gets formally re-stated elsewhere."
+    },
+    {
+      "seq": 3,
+      "event": "formally logged as a still-standing, deliberately deferred ruling in a status table",
+      "conversation_id": "local_e9841a20-5eed-4d79-a613-b5f17b8f49fd",
+      "timestamp": "2026-07-27T16:36:25.537Z",
+      "speaker": "assistant",
+      "quoted_substring": "| 6 | **Git-backed notes vault** | 0009 -- accepted as a direction, deferred, fork decision recorded | Separate toolset, expli[citly out of scope]",
+      "note": "Six days after seq 1/2. This is the same conversation that later, in the same session, discovers and ratifies DECISIONS 0017 (see case_study_decisions_0017.json seq 4) -- 0009 appears here as one row of a broader status audit of all outstanding decisions, not something actively being worked."
+    }
+  ],
+  "cross_check_against_decisions_md": {
+    "decisions_md_states": "Deferred: a self-hosted git-backed notes vault (separate toolset)",
+    "transcript_evidence": "Consistent throughout -- every mention treats 0009 as an already-settled, deliberately-parked direction, never as something being reopened or executed. No contradiction found.",
+    "caveat": "This transcript window (starts 2026-07-20) never shows 0009 being ORIGINALLY ruled -- only it being invoked as precedent and later status-audited. The original ruling conversation, if one exists as a Cowork session, is outside the corpus this scan covers."
+  },
+  "why_this_is_a_good_benchmark_item": [
+    "It's a genuine two-conversation, week-apart story, but a much smaller one than 0017's -- a good test of whether a model can correctly scope a small story small, rather than padding it with invented detail to look more thorough.",
+    "It tests whether a model distinguishes 'cited as precedent' from 'being actively decided' -- every mention here is the former, and a naive read could mistake the repeated invocation for ongoing debate.",
+    "It has an honest gap (the original ruling isn't in this transcript window) that DECISIONS.md alone can't fill either -- a good answer should say so rather than fabricate an origin scene."
+  ]
+}

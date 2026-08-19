@@ -1,0 +1,72 @@
+{
+  "_comment": "Mid-tier case study (4 conversations touching the ruling). Built the same way as case_study_decisions_0017.json.",
+  "ruling": "0026",
+  "ruling_title_in_decisions_md": "Knowledge documents are a first-class governance artefact with their own shape, not malformed ADRs",
+  "census_method": "scan_all_decisions.py --root against the 2026-08-18 backup; 0026 hit 4 conversations, 110 mentions total (the vast majority in one conversation -- see note)",
+  "timeline": [
+    {
+      "seq": 1,
+      "event": "the ruling's origin phrase, attributed to the user's own words",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-07-28T22:34:48.030Z",
+      "speaker": "user",
+      "quoted_substring": "\"Knowledge is a decision that was made\" produced 0026. \"Local only\" produced 0025 and 0027.",
+      "note": "This line retrospectively credits the ruling's core insight to a specific user phrase -- 0026, 0025 and 0027 are described together as three rulings that all trace back to short reframings the user made in his own words."
+    },
+    {
+      "seq": 2,
+      "event": "drafted with grounding measurements from both estates",
+      "conversation_id": "local_e9841a20-5eed-4d79-a613-b5f17b8f49fd",
+      "timestamp": "2026-07-28T20:20:30.857Z",
+      "speaker": "assistant",
+      "quoted_substring": "0026 drafted, with the real measurements from both estates in the context so it can't be r[eopened casually / disputed later]",
+      "note": "This precedes seq 1 by about 2 hours and is in a DIFFERENT conversation -- so the drafting happened in local_e9841a20, and the retrospective attribution of its origin phrase happened later the same evening in local_3aee1905."
+    },
+    {
+      "seq": 3,
+      "event": "committed to the log and immediately used to drive a real code change",
+      "conversation_id": "local_e9841a20-5eed-4d79-a613-b5f17b8f49fd",
+      "timestamp": "2026-07-28T20:20:30.857Z",
+      "speaker": "assistant",
+      "quoted_substring": "git commit -m \"docs(decisions): 0026 - knowledge documents",
+      "note": "Same conversation and timestamp bucket as seq 2 -- drafting and ratifying happened in the same short window, unlike 0017's multi-day gap between draft and ratification."
+    },
+    {
+      "seq": 4,
+      "event": "the ruling exercised in a scanner change the same day",
+      "conversation_id": "local_d4b5d50c-84bf-401f-a18f-19f303a6e1cf",
+      "timestamp": "2026-07-28T21:11:43.040Z",
+      "speaker": "assistant",
+      "quoted_substring": "git commit -m \"doc_census: provenance tier + type classification, coverage grid (0026)",
+      "note": "A different conversation from seq 2/3, about an hour later the same evening -- 0026 goes from ratified text to a shipped scanner change (`doc_census.py`) within hours."
+    },
+    {
+      "seq": 5,
+      "event": "referenced in a retrospective audit alongside its sibling rulings",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-08-02T14:09:11.542Z",
+      "speaker": "assistant",
+      "quoted_substring": "the three-tier registry (0012), estate-scoped visibility (0025), knowledge documents (0026), render-time reads (002[7])",
+      "note": "Five days later, 0026 appears in a list of rulings being checked against ARCHITECTURE.md's staleness -- confirming it as one of the 'live' rulings a stale doc should have but doesn't."
+    },
+    {
+      "seq": 6,
+      "event": "cited nearly two weeks later as the precedent that justifies documenting governance rationale generally",
+      "conversation_id": "local_0cfd772f-7c12-46bc-816f-8111497eff54",
+      "timestamp": "2026-08-10T17:09:50.345Z",
+      "speaker": "assistant",
+      "quoted_substring": "the reasoning behind 37 decisions and a dozen investigations is exactly the non-derivable material 0026 made first-class.",
+      "note": "13 days after drafting -- another 'ruling reused as precedent for a new proposal' moment, structurally similar to 0018's seq 6."
+    }
+  ],
+  "cross_check_against_decisions_md": {
+    "decisions_md_states": "Knowledge documents are a first-class governance artefact with their own shape, not malformed ADRs",
+    "transcript_evidence": "Consistent -- the transcript's own description ('knowledge is a decision that was made') matches DECISIONS.md's framing directly. No contradiction found.",
+    "caveat": "80 of the 110 raw mentions are inside ONE conversation (local_3aee1905, seq 1 and 5's source) as part of a long retrospective discussion that touches many rulings at once (0012, 0025, 0026, 0027 together repeatedly) -- raw mention count here overstates how much of the STORY is cross-conversation. The n_conversations=4 signal is the more honest volume measure, per this folder's README."
+  },
+  "why_this_is_a_good_benchmark_item": [
+    "It shows a MUCH tighter draft-to-ratification-to-shipped-code loop than 0017 (hours, not days) -- a good contrast case for timing questions.",
+    "It has a real 'credited origin phrase' (seq 1) that a shallow read of only the ratification conversation (seq 2/3) would miss entirely -- testing whether a model finds attribution evidence that isn't co-located with the drafting itself.",
+    "Its high raw mention count is mostly boilerplate co-mention with sibling rulings in one retrospective conversation, not independent discussion -- a good test of whether a model's synthesis distinguishes genuine narrative beats from a ruling simply appearing in a list."
+  ]
+}

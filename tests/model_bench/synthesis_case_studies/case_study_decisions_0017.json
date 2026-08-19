@@ -1,0 +1,80 @@
+{
+  "_comment": "A cross-conversation ground-truth case study, built from scan_ruling_mentions.py's census + direct transcript reads. This is the answer key for a candidate synthesis benchmark item: 'reconstruct the full story of DECISIONS 0017 from these conversations.' Every event below is a literal quote with conversation id + timestamp, not a summary invented after the fact -- if a candidate model's answer covers these beats with correct chronology and no invented ones, that's the pass bar.",
+  "ruling": "0017",
+  "ruling_title_in_decisions_md": "The projects table is reset and rebuilt, not migrated; 0011's debt is paid",
+  "census_method": "scan_ruling_mentions.py --token 0017 against the claude_migration backup snapshot (71 session files scanned, 6 conversations matched)",
+  "timeline": [
+    {
+      "seq": 1,
+      "event": "drafted",
+      "conversation_id": "local_2beef53e-e99c-4a02-a46e-b34e52ac6e50",
+      "conversation_title": "L5GN-Tools - Design Thread - Restart 2026-07-20",
+      "timestamp": "2026-07-21T10:38:53.460Z",
+      "speaker": "assistant",
+      "quoted_substring": "It also drafts DECISIONS 0017 for your ratification rather than appending to the log itself. That's your file.",
+      "n_mentions_in_conversation": 1
+    },
+    {
+      "seq": 2,
+      "event": "referenced as still-unratified while other work assumes it",
+      "conversation_id": "local_26104f03-2e47-47bc-889b-3d16e4649e73",
+      "timestamp_range": ["2026-07-25T13:24:54.348Z", "2026-07-27T08:34:27.380Z"],
+      "speaker": "assistant",
+      "quoted_substring": "Numbering assumes the reconciliation's one-identity ruling claims **0017** (still a draft, not yet in the log) -- bump these down one if it hasn't la[nded]",
+      "n_mentions_in_conversation": 24,
+      "note": "Highest mention count of any conversation in the census -- this thread is where downstream numbering/sequencing work kept having to hedge around 0017 not being ratified yet. Last mention in this conversation explicitly proposes ratifying it: 'ratify DECISIONS 0017 into the log now the reset has executed.'"
+    },
+    {
+      "seq": 3,
+      "event": "reset execution planned, explicitly gated on 0011+0017 together",
+      "conversation_id": "local_4a268f40-8e1e-4f66-9f77-7b3dfc60e48b",
+      "timestamp_range": ["2026-07-25T14:25:41.320Z", "2026-07-27T08:24:40.555Z"],
+      "speaker": "user/assistant (mixed)",
+      "quoted_substring": "the two irreplaceable inputs are on disk -> fresh-build (this executes the 0011/0017 reset) -> re-derive S4/S5 live -> relink DRY-RUN as the GO/NO-GO gate",
+      "n_mentions_in_conversation": 8
+    },
+    {
+      "seq": 4,
+      "event": "the gap noticed, then rediscovered and ratified",
+      "conversation_id": "local_e9841a20-5eed-4d79-a613-b5f17b8f49fd",
+      "timestamp": "2026-07-27T16:36:25.537Z to 2026-07-27T16:58:25.371Z",
+      "speaker": "assistant then user then assistant",
+      "quoted_substring_1": "One housekeeping nit: **DECISIONS jumps 0016 -> 0018.** There is no 0017 -- worth checking whether one was drafted and lost, or the number was just s[kipped]",
+      "quoted_substring_2_user_reply": "decision 0017 was pending from one of the UAT items (must have missed the task to write i[t]",
+      "quoted_substring_3": "Found it -- and it's not lost, just never ratified. DECISIONS 0017 was drafted in docs/COWORK_REPORT_projects_reconciliation.md, under a section headed \"Drafted DECISIONS 0017 -- for ratification, not appended\". Dated 2026-07-21, status proposed",
+      "n_mentions_in_conversation": 13,
+      "note": "THIS is the conversation the user's screenshots are from -- confirmed by exact quote match. This is where the number gap was noticed, traced back to the seq-1 draft, and (per the git log evidence in seq 5) ratified the same evening."
+    },
+    {
+      "seq": 5,
+      "event": "ratification confirmed in git history",
+      "conversation_id": "local_1c846ab9-65d6-4f8e-9565-f83c2d7ecbf7",
+      "timestamp": "2026-07-27T18:37:46.083Z",
+      "speaker": "user",
+      "quoted_substring": "git log --oneline -1 | 5e5fee2 (HEAD -> main) docs: confirmed decision 0017",
+      "n_mentions_in_conversation": 2,
+      "note": "Commit 5e5fee2 'docs: confirmed decision 0017' is the actual ratifying commit. This conversation starts about 1h39m after seq-4's 'Found it' moment and treats the ratification as already done -- so the ratifying edit itself happened inside local_e9841a20, and this conversation is verifying it landed."
+    },
+    {
+      "seq": 6,
+      "event": "post-ratification follow-up work references it as executed",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp_range": ["2026-07-28T22:34:48.030Z", "2026-08-02T18:46:18.608Z"],
+      "speaker": "user/assistant (mixed)",
+      "quoted_substring": "The vault was then rebuilt fresh (0017, executed 2026-07-27) with link_evidence and project_link both starting",
+      "n_mentions_in_conversation": 19,
+      "note": "Also the conversation where the still-open 0017 follow-ups (relink.load_registry's flat-registry guard, evidence_votes' key-presence-only check) get carried forward -- matching DECISIONS.md's own 'two named follow-ups are both still open' line."
+    }
+  ],
+  "cross_check_against_decisions_md": {
+    "decisions_md_states": "drafted 2026-07-21, ratified 2026-07-27",
+    "transcript_evidence": "drafted 2026-07-21T10:38:53Z (seq 1) matches exactly; ratifying commit 5e5fee2 dated 2026-07-27 (seq 5) matches exactly. No contradiction found.",
+    "decisions_md_source_attribution": "docs/COWORK_REPORT_projects_reconciliation.md, section 'Drafted DECISIONS 0017' -- confirmed verbatim in seq 4's quote, so the ratified text and the report section are the same artifact, not two independent drafts."
+  },
+  "why_this_is_a_good_benchmark_item": [
+    "It requires reading at least 4-6 separate conversations spanning 11 days to get right -- no single conversation contains the full story.",
+    "It has a verifiable ground truth: DECISIONS.md's own two-line summary, plus a real git commit hash (5e5fee2), that a model's synthesis can be checked against without guessing.",
+    "It has a plausible wrong answer that a shallow (single-conversation) read would produce -- e.g. concluding from local_e9841a20 alone that 0017 was 'lost' rather than 'drafted but not yet appended', which the assistant's own text there explicitly corrects.",
+    "It naturally separates retrieval (finding the mentions) from synthesis (assembling them into a chronologically and causally correct narrative) -- exactly the T1-vs-T2 distinction proposed."
+  ]
+}

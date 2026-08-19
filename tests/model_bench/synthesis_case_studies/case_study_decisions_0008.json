@@ -1,0 +1,45 @@
+{
+  "_comment": "Low-tier case study (1 conversation touching the ruling in the current backup, but a real multi-week retrospective story within it). Built the same way as case_study_decisions_0017.json.",
+  "ruling": "0008",
+  "ruling_title_in_decisions_md": "Rendered .md is read-only output; sync-back to be removed",
+  "census_method": "scan_all_decisions.py --root against the 2026-08-18 backup; 0008 hit 1 conversation, 14 mentions total, all within a single session on 2026-08-02",
+  "timeline": [
+    {
+      "seq": 1,
+      "event": "flagged as one of several stale, unexecuted rulings during an estate-wide audit",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-08-02T14:09:11.542Z",
+      "speaker": "assistant",
+      "quoted_substring": "twenty decisions stale. Last written c1c81ee, 2026-07-18. It references decisions 0002-0008 and nothing after. It has no mention of the deposit wall (0010), the three-tier regis[try]",
+      "note": "0008 surfaces here as evidence of a document (ARCHITECTURE.md) being stale, not as a subject in its own right."
+    },
+    {
+      "seq": 2,
+      "event": "identified as a live, actionable item rather than settled history",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-08-02T14:21:00.505Z",
+      "speaker": "assistant",
+      "quoted_substring": "A2 isn't drift, it's a live item. 0008 said sync_back() could be retired *once the write endpoint exists to receive the ru[lings]*",
+      "note": "Same conversation, 12 minutes later -- this is where the thread pivots from 'stale doc' framing to 'this precondition may actually be satisfied now.'"
+    },
+    {
+      "seq": 3,
+      "event": "the precondition re-examined against live code, and the ruling reframed as a two-week-old authorization waiting to be exercised",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-08-02T14:30:14.995Z",
+      "speaker": "assistant",
+      "quoted_substring": "It's that the brief is already written and has been for two weeks -- 0008 is the authorisation, ratified 2026-07-18, waiting on a precondition that opened on 2[026-07-...]. The precondition is satisfied more strongly than 0008 anticipated.",
+      "note": "The strongest single quote in this case study: it dates the ruling (2026-07-18) and explicitly frames the whole episode as 're-checking an old authorization against new facts', not as re-deciding anything."
+    }
+  ],
+  "cross_check_against_decisions_md": {
+    "decisions_md_states": "Rendered .md is read-only output; sync-back to be removed",
+    "transcript_evidence": "Consistent -- the transcript treats 0008 as already-ratified (2026-07-18) and is entirely about whether its stated precondition now holds, never about the ruling's content itself.",
+    "caveat": "All 14 mentions are in ONE conversation on ONE day (2026-08-02). This is not a cross-conversation story in the way 0017, 0009, or 0018 are -- it's a single retrospective session reasoning carefully about an old ruling's status."
+  },
+  "why_this_is_a_good_benchmark_item": [
+    "It's the deliberate null case for the tier: a model asked to 'assemble the full story across conversations' should recognize there is effectively ONE conversation here and say so, rather than inventing a multi-thread arc to match the format of richer case studies.",
+    "It tests date discipline -- the ruling's ratification date (2026-07-18) is stated explicitly in-transcript and must be reproduced correctly, not confused with the date of this retrospective conversation (2026-08-02).",
+    "It's a good contrast against 0009 in the same tier: 0009 is genuinely two conversations, 0008 is genuinely one -- a model that can't tell these apart is pattern-matching on ruling number, not reading the evidence."
+  ]
+}

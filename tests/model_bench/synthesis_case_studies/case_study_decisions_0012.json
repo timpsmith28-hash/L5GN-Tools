@@ -1,0 +1,91 @@
+{
+  "_comment": "High-tier case study, 0017's tier partner (10 conversations touching the ruling -- the widest spread of any ruling in the census). Built the same way as case_study_decisions_0017.json, but see the boilerplate caveat below before trusting the raw n_conversations=10 figure at face value.",
+  "ruling": "0012",
+  "ruling_title_in_decisions_md": "The registry is three-tier: program -> project -> repo",
+  "census_method": "scan_all_decisions.py --root against the 2026-08-18 backup; 0012 hit 10 conversations, 76 mentions total",
+  "boilerplate_caveat": "Five of the ten conversations that match (local_1c846ab9, local_a9c1841b, local_602a1aed, local_8eb98916, local_d5156fb3) contain the identical block '=== THREE-TIER REGISTRY -- program > project > repo (DECISIONS 0012) === id scheme: id (every tier is a link target; project_link always holds an id) ===' verbatim -- this reads as a pinned reference header pasted at the start of unrelated sessions (likely a schema/context primer), not organic per-conversation discussion of the ruling. Counting these as five independent 'conversations about 0012' would overstate the story's real cross-conversation richness. The timeline below is built only from conversations where 0012 is actually being reasoned about, not just quoted as a header -- five genuinely substantive conversations, not ten.",
+  "timeline": [
+    {
+      "seq": 1,
+      "event": "invoked as an already-settled architectural argument against filesystem mirroring",
+      "conversation_id": "local_2beef53e-e99c-4a02-a46e-b34e52ac6e50",
+      "timestamp": "2026-07-21T11:22:12.885Z",
+      "speaker": "assistant",
+      "quoted_substring": "DECISIONS 0012 put program->project->repo in the **registry** precisely so the filesystem doesn't have [to mirror it]",
+      "note": "This is the same conversation (local_2beef53e) that drafted DECISIONS 0017 the same morning, and here it is nine days BEFORE the 0018-0043 numbering block even started -- 0012 is already load-bearing history by 2026-07-21, confirming it predates this transcript's earliest capture window."
+    },
+    {
+      "seq": 2,
+      "event": "reaffirmed minutes later against a concrete folder-structure proposal",
+      "conversation_id": "local_2beef53e-e99c-4a02-a46e-b34e52ac6e50",
+      "timestamp": "2026-07-21T11:30:07.759Z",
+      "speaker": "assistant",
+      "quoted_substring": "Program->project->repo stays in the registry, where DECISIONS 0012 put it, rather than being duplicated in folders where the two can silently disagree.",
+      "note": "Same conversation as seq 1, eight minutes later -- the ruling directly shapes a concrete design decision (one-level folder hierarchy, hierarchy stays in the registry, not on disk)."
+    },
+    {
+      "seq": 3,
+      "event": "listed as one of a block of rulings a build round implemented and that remain live",
+      "conversation_id": "local_26104f03-2e47-47bc-889b-3d16e4649e73",
+      "timestamp": "2026-07-25T12:42:30.802Z",
+      "speaker": "assistant",
+      "quoted_substring": "(23b5ffa -- build_inventory now reads the deposited census, not a folder walk). DECISIONS 0012-0016 hold the rulings this brief implemented and remain live.",
+      "note": "Four days after seq 1/2, different conversation -- confirms 0012 was actually built against, not just discussed in the abstract."
+    },
+    {
+      "seq": 4,
+      "event": "used to characterize a repo-lineage question as program-shaped rather than single-project",
+      "conversation_id": "local_4a268f40-8e1e-4f66-9f77-7b3dfc60e48b",
+      "timestamp": "2026-07-25T15:17:36.111Z",
+      "speaker": "assistant",
+      "quoted_substring": "The lineage is program-shaped (DECISIONS 0012 logic -- a portfolio of substantial repos, not one project): v1 proto (10 threads) -> A[rmory...]",
+      "note": "Same day as seq 3, different conversation -- 0012's tiering logic gets applied to classify a specific ambiguous repo lineage."
+    },
+    {
+      "seq": 5,
+      "event": "diagnosed as the source of a real, previously-invisible bug",
+      "conversation_id": "local_e9841a20-5eed-4d79-a613-b5f17b8f49fd",
+      "timestamp": "2026-07-27T09:18:02.395Z",
+      "speaker": "user/assistant",
+      "quoted_substring": "a real 0012 gap rather than a patch. [...] Under 0012 the deposits are repo-named, so the repo tier is invisible.",
+      "note": "This is the SAME conversation that discovers the DECISIONS 0016->0018 gap and ratifies 0017 later that day (see case_study_decisions_0017.json seq 4) -- 0012's story physically overlaps with both 0017's and 0018's in this one session."
+    },
+    {
+      "seq": 6,
+      "event": "the 0012 blind-spot fix committed",
+      "conversation_id": "local_602a1aed-e771-45a7-a351-5a0e179ac685",
+      "timestamp": "2026-07-27T09:32:50.604Z",
+      "speaker": "user",
+      "quoted_substring": "because all four evidence producers were blind to the repo tier under DECISIONS 0012. That blocker is now fixed in the working tree.",
+      "note": "A different conversation, same morning as seq 5 -- the fix diagnosed in local_e9841a20 gets landed here."
+    },
+    {
+      "seq": 7,
+      "event": "cited retrospectively as a live ruling a stale document is missing",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-08-02T14:09:11.542Z",
+      "speaker": "assistant",
+      "quoted_substring": "the three-tier registry (0012), estate-scoped visibility (0025), knowledge documents (0026), render-time reads (0027)",
+      "note": "Six days after seq 5/6 -- same audit pass referenced in 0026's case study seq 5."
+    },
+    {
+      "seq": 8,
+      "event": "used to explain a legacy-id naming collision as a versioning artefact rather than a bug",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-08-02T18:46:18.608Z",
+      "speaker": "assistant",
+      "quoted_substring": "l5gn-os is precisely the id that changed meaning between generations (0012's program tier, 0017's reset).",
+      "note": "Same conversation as seq 7, later that day -- 0012 and 0017 are explicitly linked together again, this time to explain a naming quirk, not a design decision."
+    }
+  ],
+  "cross_check_against_decisions_md": {
+    "decisions_md_states": "The registry is three-tier: program -> project -> repo",
+    "transcript_evidence": "Consistent throughout -- every substantive mention (seq 1-8) treats the tiering as settled and applies it, never revisits or contradicts it. No contradiction found.",
+    "note": "Unlike 0017, no draft/ratify gap is visible for 0012 in this transcript window -- it appears to already be settled doctrine from the earliest conversation available (2026-07-21), consistent with it being one of the earlier-numbered rulings."
+  },
+  "why_this_is_a_good_benchmark_item": [
+    "It's the deliberate 'high volume, but check your sources' trap: the raw n_conversations=10 signal is inflated by five conversations that only contain a pasted reference header, not discussion -- a good synthesis answer should notice and exclude the boilerplate, not report all ten as equally substantive.",
+    "Its real story (5 substantive conversations, 6 days) is comparable in size to 0018's, despite the raw scan numbers making it look far bigger than 0018 or 0026 -- testing whether a model's account of 'how much was this really discussed' tracks the evidence rather than the scan's surface count.",
+    "It intersects BOTH 0017's story (seq 5, seq 8) and touches the same conversation as 0018's audit moment (seq 5 is local_e9841a20, same as 0018's seq 4 and 0017's seq 4) -- a model given all three case studies should be able to describe 2026-07-27's local_e9841a20 session as the point where three separate rulings' stories converge."
+  ]
+}

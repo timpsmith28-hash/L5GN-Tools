@@ -1,0 +1,72 @@
+{
+  "_comment": "Mid-tier case study (5 conversations touching the ruling, spanning two weeks). Built the same way as case_study_decisions_0017.json.",
+  "ruling": "0018",
+  "ruling_title_in_decisions_md": "Persona / LLM inference is a separate, pluggable service, never inside the toolkit wall",
+  "census_method": "scan_all_decisions.py --root against the 2026-08-18 backup; 0018 hit 5 conversations, 30 mentions total",
+  "timeline": [
+    {
+      "seq": 1,
+      "event": "number proposed as the start of a new decisions block for the Command Deck design",
+      "conversation_id": "local_26104f03-2e47-47bc-889b-3d16e4649e73",
+      "timestamp": "2026-07-25T13:03:05.181Z",
+      "speaker": "assistant",
+      "quoted_substring": "decide what the deck *is*. Want me to fold your rulings into a DECISIONS-style addendum (0018+) for the deck, or straight into a build brief once you've called 1 and 2?",
+      "note": "At this point 0018 is not yet a specific ruling -- it's a placeholder for 'whatever comes next after 0017', and the same message flags that 0017 itself was still a draft."
+    },
+    {
+      "seq": 2,
+      "event": "drafted with its actual content",
+      "conversation_id": "local_26104f03-2e47-47bc-889b-3d16e4649e73",
+      "timestamp": "2026-07-25T13:24:54.348Z",
+      "speaker": "assistant",
+      "quoted_substring": "## 0018 -- Persona / LLM inference is a separate, pluggable service, never inside the toolkit [wall]",
+      "note": "Same conversation as seq 1, ~20 minutes later. Numbering assumed 0017 would land first; the thread explicitly flags 0017 was still a draft at this point."
+    },
+    {
+      "seq": 3,
+      "event": "used same-day as an established constraint to scope a different design question (where the inference service lives on disk)",
+      "conversation_id": "local_4a268f40-8e1e-4f66-9f77-7b3dfc60e48b",
+      "timestamp": "2026-07-25T15:21:33.644Z",
+      "speaker": "assistant",
+      "quoted_substring": "the gaming rig only, with the deck backend/UI and the vertex-3-derived inference service (0018) as projects under it. There's no Command Deck repo on disk yet",
+      "note": "Different conversation from seq 1/2, same day -- shows the ruling being treated as settled and load-bearing within hours of being drafted, before it was formally logged."
+    },
+    {
+      "seq": 4,
+      "event": "audited as part of the '0016->0018 gap' discovery that also surfaced 0017's missing ratification",
+      "conversation_id": "local_e9841a20-5eed-4d79-a613-b5f17b8f49fd",
+      "timestamp": "2026-07-27T16:36:25.537Z",
+      "speaker": "assistant",
+      "quoted_substring": "The Command Deck | DECISIONS 0018-0023 -- six accepted entries: pluggable inference service outside the wall, structur[al...]",
+      "note": "This is the SAME conversation and the same audit pass that discovers DECISIONS jumps 0016->0018 with no 0017 in the log (see case_study_decisions_0017.json seq 4) -- 0018 and 0017's stories physically intersect here. 0018 itself is confirmed as one of the entries that DID land, unlike 0017."
+    },
+    {
+      "seq": 5,
+      "event": "referenced two days later as part of a larger unbuilt roadmap",
+      "conversation_id": "local_3aee1905-bc38-4032-9f51-05ec05fb1795",
+      "timestamp": "2026-07-28T22:34:48.030Z",
+      "speaker": "user",
+      "quoted_substring": "The Command Deck mesh roadmap -- 0022 run ledger, 0021 supervisor, 0023 TOTP gate, 0018/0019 personas and inference. All specced at decision level, none briefed.",
+      "note": "Confirms 0018 is ratified-but-unbuilt as of this date -- 'specced, not briefed' is a distinct status from both 'drafted' and 'executed.'"
+    },
+    {
+      "seq": 6,
+      "event": "cited nearly two weeks later as settled precedent to answer a new architectural question",
+      "conversation_id": "local_5d4561a0-6aee-46c9-a881-680eaceec9d8",
+      "timestamp": "2026-08-08T15:52:33.802Z",
+      "speaker": "assistant",
+      "quoted_substring": "Already ruled: 0018 (separate pluggable service) + 0019 (read-only handle). The extract arrives two weeks[...]",
+      "note": "13 days after seq 2. This is the clearest 'ruling as reusable precedent' moment in the arc -- a new design question gets resolved by pointing back at 0018 rather than re-litigating it."
+    }
+  ],
+  "cross_check_against_decisions_md": {
+    "decisions_md_states": "Persona / LLM inference is a separate, pluggable service, never inside the toolkit wall",
+    "transcript_evidence": "Consistent throughout all six events -- content matches DECISIONS.md's title almost verbatim from the moment it's drafted (seq 2) onward. No contradiction found.",
+    "note": "Unlike 0017, this ruling landed cleanly on its first attempt (part of the same 0018-0023 block) -- its story is about a ruling being drafted, immediately relied upon, then reused as precedent, not about a ruling going missing."
+  },
+  "why_this_is_a_good_benchmark_item": [
+    "It genuinely spans 5 conversations and 14 days, with a clean drafted -> relied-upon -> audited -> referenced-as-precedent arc -- a good mid-volume complexity target.",
+    "Its story physically intersects with 0017's at seq 4, in the same conversation and even the same status table -- a model given both case studies should notice the overlap rather than treating them as unrelated.",
+    "It distinguishes three different maturity states a ruling can be in (drafted, specced-but-unbuilt, used-as-precedent) at different points in the same short window -- testing whether a model tracks status transitions accurately rather than treating 'mentioned' as a single undifferentiated state."
+  ]
+}
