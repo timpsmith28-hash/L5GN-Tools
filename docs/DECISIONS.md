@@ -2133,7 +2133,7 @@ not a new promise about freshness.
 
 ## 0048 — The unit of throughput is a decision; a surface that wants attention raises a card
 
-**Date:** 2026-08-18 · **Status:** accepted 2026-08-19· **Builds on:** 0031 (findings,
+**Date:** 2026-08-18 · **Status:** accepted 2026-08-19 · **Builds on:** 0031 (findings,
 never verdicts), 0033 (propose, ratify, execute) · **Source:** the Quartermaster
 vision thread, `docs/investigation/2026-08-17_quartermaster_fable_2-response.md`
 (carried there as **D-A**) · **Depends on:** INTENT §8
@@ -2324,6 +2324,20 @@ opinion about a question the source can already answer.
    own Desk against its own feeds, allowlist and sidecar. What is shared
    between rigs is this schema and the card anatomy, copied. There is no
    aggregation, no listener, no shared store — 0036 stands unamended.
+8. **The ruling vocabulary belongs to the card, not the module.** An item may
+   declare the options it offers; the Desk validates a ruling against the
+   options *that card actually offered*, not against a module-level list.
+   `rebuild / snooze / dismiss` was staleness's vocabulary and generalises
+   badly: a ratification decision is `ratify` or `refuse`, and recording a
+   refusal as `dismiss` would erase exactly the distinction promotion
+   detection is built to read (0048 clause 5; the Dispatcher's Task 3). **An
+   option that carries no action is a first-class outcome, not a lesser one**
+   — recording which way the operator decided is the point, and a card whose
+   consequence is a human act elsewhere still produces a real ruling. Where
+   the record and the world then disagree, the world wins and the card
+   re-raises: cards derive, so a ruling that claims a thing was done, on a
+   source that still reports it undone, is self-correcting rather than
+   authoritative.
 
 **Consequences.**
 
@@ -2358,3 +2372,11 @@ concrete — count the schema changes per source wired. One extension across
 three sources vindicates this entry; three extensions across three sources
 refutes it, and the refutation should be written as its own entry rather than
 absorbed as maintenance.
+
+**Noted against that test before it starts:** clause 8 was added to this
+entry *while it was still `proposed`*, prompted by its first intended
+consumer (the workcycle feed) needing a ruling vocabulary that staleness's
+three verbs could not express. That is legitimate — an unratified entry is
+meant to change on re-read — but it is also one extension banked before a
+single source is wired, and it should be counted as such rather than
+forgotten because it happened before the clock started.
