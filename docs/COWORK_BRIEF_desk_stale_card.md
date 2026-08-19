@@ -339,3 +339,107 @@ Implementation: `chronicler/review/desk.py` (silent-week state removed,
 `chronicler/review/static/views/desk.js` (trial messaging removed, cards
 render from the first load). Full account goes in
 `COWORK_REPORT_desk_stale_card.md` per the Reporting section above.
+
+---
+
+## Addendum (b), 2026-08-19 — the events log stops recording after the first occurrence
+
+Found by reading the live `data/desk/events.jsonl` on `LucasGoonPC` one day
+into the trial, not by reasoning about the code. Five events, and between them
+they establish that the instrument has gone quiet on the only fingerprint the
+fixture can produce:
+
+```
+sighting   fp=57860823ba56c2c7  ts=2026-08-18T16:16:44Z  aged=true
+                                condition_first_observable=2026-08-15T12:13:09Z
+ruling     fp=57860823ba56c2c7  ts=2026-08-19T09:43:17Z  rebuild
+ruling     fp=57860823ba56c2c7  ts=2026-08-19T09:43:43Z  rebuild
+ruling     fp=57860823ba56c2c7  ts=2026-08-19T09:43:57Z  rebuild
+resolution fp=57860823ba56c2c7  ts=2026-08-19T09:50:24Z  detected_by=absence
+```
+
+**Three defects, one root cause: the fingerprint is being treated as the unit
+of measurement when the unit is actually an *occurrence* of it.**
+
+1. **No sighting is ever written again.** `_sync_events` writes a sighting
+   when `not history`, or on the first aged transition. This fingerprint has
+   history, and its only sighting was already `aged: true` (the condition had
+   stood three days before the Desk first ran). When `data/estate.json` goes
+   stale again tonight the card re-derives on the board and **the log records
+   nothing**.
+2. **No resolution is ever written again either.** `_open_fingerprints`
+   compares the latest resolution against the latest sighting; with the
+   resolution now newer and no further sighting possible, the fingerprint is
+   permanently "closed" and can never re-open. The absence-detection the
+   2026-08-19 addendum added to replace the silent week is, for this
+   fingerprint, already spent.
+3. **Latency inflates without bound.** `latency_summary` anchors every ruling
+   to `min(sightings)`'s `condition_first_observable` — so all three rulings
+   above record ≈93.5h, and a rebuild ruled promptly next month would record
+   ≈750h. Meanwhile `cards_ruled` counts *distinct fingerprints*, so the
+   footer reads `cards_ruled: 1` no matter how many decisions were actually
+   taken. **"Rule ten real cards" is unreachable on this fixture as the
+   instrument is written**, and the median it would report would not describe
+   any decision anyone made.
+
+### This is breakage, and it may be fixed mid-trial
+
+The standing stop condition is *"card thresholds are tuned mid-trial →
+stop"*, and this is not that: no threshold moves, no trigger widens, no card
+population changes. What changes is whether the log records events that are
+already happening. A trial whose instrument cannot record its own subject is
+the silent week's failure repeating — same class, same remedy, same day.
+
+### The correction: the occurrence is the unit
+
+A **fingerprint** names a standing *kind* of problem (this repo, this stage,
+this trigger). An **occurrence** is one instance of it: opened by a sighting,
+closed by a resolution, and capable of recurring any number of times. D-A's
+card is an occurrence; the fingerprint is only how the Desk knows two
+occurrences are the same kind.
+
+- **Sightings.** Compute the open set first (`_open_fingerprints`). A derived
+  card whose fingerprint is **not open** opens a **new occurrence** and writes
+  a sighting — whether it has never been seen or was resolved last week. A
+  card already open writes a sighting only on the aged transition *within
+  this occurrence* (aged checked against sightings **since the last
+  resolution**, not against all history).
+- **Rulings carry their occurrence.** `rule()` resolves the currently-open
+  occurrence at ruling time and stamps `occurrence_started_at` on the event.
+  Explicit, written once, never inferred by timestamp ordering at read time.
+- **Latency is one figure per occurrence**, from *that occurrence's*
+  `condition_first_observable` to its **first** ruling. Later rulings on the
+  same open occurrence are re-rulings and do not each contribute a data point
+  — three clicks on one card is one decision, and counting it three times
+  would triple-weight a single observation.
+- **`cards_ruled` counts occurrences ruled, not fingerprints.** This is what
+  makes the UAT's "ten real cards" both reachable and meaningful on a fixture
+  that recurs daily.
+- **Nothing in the existing log is rewritten.** It is append-only and stays
+  that way; the five events above are simply *read* under the corrected model
+  — one occurrence, three rulings, first at 09:43:17.
+
+### What the existing five events are worth
+
+They are a button test, not trial data, and the report must say so rather
+than quietly folding a 93.5h figure into a median. Record that as a `finding`
+event through the existing `append_finding()` — which is precisely the
+manual-entry path Task 2 left importable for cases like this — so the
+judgement lives in the same log as the data it disqualifies.
+
+Also on disk and now dead: `data/desk/trial_state.json`, left from the
+silent-week state the earlier addendum removed. Delete it, or leave it and
+say why in the report; do not leave it unexplained.
+
+### Acceptance, added to this brief's UAT
+
+- `[G]` Let the fixture card resolve and re-raise (rebuild, wait for
+  staleness, re-render): the log shows **a second sighting**, and the second
+  occurrence's latency is measured from *its own* condition timestamp, not
+  the first's.
+- `[G]` Rule the same open card three times: **one** latency figure, from the
+  first ruling; `cards_ruled` increments by one.
+- `[G]` Every ruling event written after this fix carries
+  `occurrence_started_at`.
+- `[G]` The pre-fix events still parse and the footer still renders; the
+  disqualifying `finding` is present and legible.

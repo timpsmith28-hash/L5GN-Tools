@@ -53,6 +53,44 @@ render (`_trial_state`/`trial_status`/`SILENT_WEEK_DAYS` removed; `GET
 otherwise have hidden: a card that stops deriving without ever being ruled
 -- rebuilt by hand, fixed by something else -- is now a recorded fact
 instead of a silent disappearance.
+
+**Addendum (b), 2026-08-19 -- the occurrence, not the fingerprint, is the
+unit of measurement.** Found one day into the trial by reading the real
+`data/desk/events.jsonl`, not by reasoning about the code: a fingerprint
+that recurs (this fixture's one stage goes stale nightly) only ever wrote
+ONE sighting, because `_sync_sightings` (as first written) checked history
+against the fingerprint's entire lifetime, not against what had happened
+since it was last resolved. A resolved-then-reopened fingerprint could never
+sight again, could never resolve again, and every ruling on it inflated
+`latency_summary`'s number against a `condition_first_observable` that had
+nothing to do with the ruling in front of it -- three rulings on one visit
+would have recorded three near-identical multi-day latencies instead of one.
+
+A **fingerprint** names a standing *kind* of problem (this repo, this
+stage, this trigger). An **occurrence** is one instance of it -- opened by a
+sighting, closed by a resolution, capable of recurring any number of times.
+D-A's card is an occurrence; the fingerprint is only how the Desk knows two
+occurrences are the same kind. `_reconstruct_occurrences` replays a
+fingerprint's sighting/resolution events in order to answer "is there
+currently an open occurrence, and when did it open" -- the same question
+`_sync_events` needs to decide whether a derived card opens a new occurrence
+or continues one, and the same question `rule()` needs to stamp
+`occurrence_started_at` on every ruling, explicitly, so a reader never has
+to re-infer it from timestamp ordering. `latency_summary` groups rulings by
+occurrence (not fingerprint): one latency figure per occurrence, from that
+occurrence's own `condition_first_observable` to its FIRST ruling -- later
+rulings on the same open occurrence are re-rulings on one decision, not new
+data points. `cards_ruled` counts occurrences ruled, which is what makes
+"rule ten real cards" (the UAT line) reachable on a fixture with exactly one
+recurring fingerprint.
+
+The five events written before this fix are a button test, not trial data --
+recorded as a disqualifying `finding` (via `append_finding`, one-off, after
+this fix lands) rather than silently folded into the median. Nothing already
+on disk is rewritten;
+the append-only log stays that way, and legacy rulings (no
+`occurrence_started_at`) are still matched to an occurrence at read time by
+`_occurrence_key_for_ruling`'s replay fallback, so old data keeps parsing.
 """
 from __future__ import annotations
 
@@ -199,71 +237,106 @@ def append_finding(text: str, *, refs: list[str] | None = None) -> dict:
     })
 
 
-def _events_by_fingerprint(events: list[dict], kind: str) -> dict[str, list[dict]]:
-    out: dict[str, list[dict]] = {}
+def _reconstruct_occurrences(events: list[dict]) -> dict[str, list[dict]]:
+    """Per fingerprint, the ordered list of occurrences -- replayed from that
+    fingerprint's `sighting`/`resolution` events in timestamp order (Addendum
+    (b), 2026-08-19). Each occurrence is
+    `{"opened_at": ts, "sightings": [...], "resolved_at": ts | None}`.
+
+    A `sighting` opens a new occurrence when there is no currently-open one
+    (never seen, or the last one was resolved); otherwise it is an
+    aged-transition sighting appended to the occurrence already open. A
+    `resolution` closes whichever occurrence is currently open, if any -- one
+    with nothing open to close (should not happen in practice) is ignored
+    rather than raising, since a log is a record of what happened, not a
+    thing this read path refuses to tolerate.
+
+    This is the one place "is there an open occurrence, and when did it
+    open" gets answered, so :func:`_sync_events`, :func:`rule` and
+    :func:`latency_summary` all see the same replay rather than three
+    slightly different ideas of it.
+    """
+    fp_events: dict[str, list[dict]] = {}
     for e in events:
-        if e.get("kind") == kind and e.get("fingerprint"):
-            out.setdefault(e["fingerprint"], []).append(e)
-    return out
+        if e.get("kind") in ("sighting", "resolution") and e.get("fingerprint"):
+            fp_events.setdefault(e["fingerprint"], []).append(e)
+
+    by_fp: dict[str, list[dict]] = {}
+    for fp, evs in fp_events.items():
+        occurrences: list[dict] = []
+        current: dict | None = None
+        for e in sorted(evs, key=lambda e: e.get("ts") or ""):
+            if e["kind"] == "sighting":
+                if current is None or current["resolved_at"] is not None:
+                    current = {"opened_at": e.get("ts"), "sightings": [e], "resolved_at": None}
+                    occurrences.append(current)
+                else:
+                    current["sightings"].append(e)
+            elif e["kind"] == "resolution" and current is not None and current["resolved_at"] is None:
+                current["resolved_at"] = e.get("ts")
+        by_fp[fp] = occurrences
+    return by_fp
 
 
-def _open_fingerprints(events: list[dict]) -> dict[str, str]:
-    """Every fingerprint this log currently believes is still open -- sighted
-    at least once, with no `resolution` event since its most recent
-    `sighting`. Returns `{fingerprint: last_known_sighting_ts}`, the bracket's
-    lower bound a resolution event (below) needs."""
-    sightings = _events_by_fingerprint(events, "sighting")
-    resolutions = _events_by_fingerprint(events, "resolution")
-    open_fps: dict[str, str] = {}
-    for fp, hist in sightings.items():
-        last_sighting_ts = max(h.get("ts") or "" for h in hist)
-        last_resolution_ts = max((r.get("ts") or "" for r in resolutions.get(fp, [])), default="")
-        if last_resolution_ts < last_sighting_ts:
-            open_fps[fp] = last_sighting_ts
-    return open_fps
+def _open_occurrence(occurrences: list[dict] | None) -> dict | None:
+    """The last occurrence in a fingerprint's reconstructed list, if it is
+    still open (unresolved). `None` if the fingerprint has never been sighted
+    or its last occurrence was resolved."""
+    if not occurrences:
+        return None
+    last = occurrences[-1]
+    return last if last["resolved_at"] is None else None
 
 
 def _sync_events(current_cards: list[dict]) -> None:
     """Writes `sighting` and `resolution` events from one comparison between
-    what the log last knew was open and what just derived.
+    what the log last knew was open and what just derived. The unit is the
+    OCCURRENCE (Addendum (b)), not the fingerprint -- a fingerprint that
+    recurs (resolved, then goes stale again) opens a fresh occurrence and
+    sights again; a fingerprint with an occurrence already open only sights
+    again on that occurrence's own aged transition.
 
-    **Sighting:** written only when a fingerprint is new, or newly aged --
-    "a render that changes nothing writes nothing" (Task 2).
+    **Sighting:** written when a derived card's fingerprint has no open
+    occurrence (opens a new one), or when its open occurrence has not yet
+    logged an aged sighting and this render is aged (Task 2's "a render that
+    changes nothing writes nothing", now scoped to the current occurrence
+    rather than the fingerprint's whole history).
 
-    **Resolution:** written when a fingerprint the log still believes is
-    open (:func:`_open_fingerprints`) is absent from this render -- a card
-    that stopped deriving without ever being ruled (rebuilt by hand, fixed
-    by something else). `ts` is an upper bound on when the fix happened --
-    the Desk only learns a card vanished when someone loads the tab, and the
-    event says so with `previous_render_ts`, the bracket's other edge
-    (2026-08-19 addendum, Task 4).
+    **Resolution:** written when a fingerprint with an open occurrence is
+    absent from this render -- a card that stopped deriving without ever
+    being ruled. `ts` is an upper bound on when the fix happened; the event
+    says so with `previous_render_ts`, the open occurrence's most recent
+    sighting.
     """
     events = _read_events()
+    occ_by_fp = _reconstruct_occurrences(events)
     now = _utcnow_iso()
     current_fps = {c["fingerprint"] for c in current_cards}
 
     for card in current_cards:
         fp = card["fingerprint"]
-        history = _events_by_fingerprint(events, "sighting").get(fp, [])
+        open_occ = _open_occurrence(occ_by_fp.get(fp))
         aged_now = bool(card["expiry"]["aged"])
-        if not history:
+        if open_occ is None:
             _append_event({
                 "kind": "sighting", "fingerprint": fp, "card_summary": card["question"],
                 "ts": now, "condition_first_observable": card["condition_first_observable"],
                 "aged": aged_now,
             })
-        elif aged_now and not any(h.get("aged") for h in history):
+        elif aged_now and not any(s.get("aged") for s in open_occ["sightings"]):
             _append_event({
                 "kind": "sighting", "fingerprint": fp, "card_summary": card["question"],
                 "ts": now, "condition_first_observable": card["condition_first_observable"],
                 "aged": True,
             })
 
-    for fp, last_sighting_ts in _open_fingerprints(events).items():
-        if fp not in current_fps:
+    for fp, occurrences in occ_by_fp.items():
+        open_occ = _open_occurrence(occurrences)
+        if open_occ is not None and fp not in current_fps:
             _append_event({
                 "kind": "resolution", "fingerprint": fp, "ts": now,
-                "previous_render_ts": last_sighting_ts, "detected_by": "absence",
+                "previous_render_ts": open_occ["sightings"][-1].get("ts"),
+                "detected_by": "absence",
             })
 
 
@@ -274,7 +347,16 @@ def rule(fingerprint: str, ruling: str, reason: str, *,
     freshly-derived set from :func:`cards`; a fingerprint not on it is
     refused (UAT: "refuses an unknown fingerprint"). A `dismiss` without a
     reason is refused -- "the un-promotable decision" (Task 2): promotion
-    detection (Phase 4) feeds on reasons, so an empty one is worse than none."""
+    detection (Phase 4) feeds on reasons, so an empty one is worse than none.
+
+    Stamps `occurrence_started_at` -- the currently-open occurrence's opening
+    sighting, resolved once here via :func:`_reconstruct_occurrences` and
+    written explicitly, never left for a reader to re-infer from timestamp
+    ordering (Addendum (b), 2026-08-19). `None` if no occurrence is open for
+    this fingerprint at ruling time -- an edge case (a ruling landing between
+    a resolution and the next sighting) `latency_summary` treats as
+    unattributable rather than guessing.
+    """
     if ruling not in VALID_RULINGS:
         raise DeskRefused("unknown_ruling",
                           f"{ruling!r} is not one of {sorted(VALID_RULINGS)}.")
@@ -288,10 +370,12 @@ def rule(fingerprint: str, ruling: str, reason: str, *,
     if ruling == "snooze" and not (until or "").strip():
         raise DeskRefused("missing_snooze_until",
                           "a snooze ruling requires an until-condition.")
+    open_occ = _open_occurrence(_reconstruct_occurrences(_read_events()).get(fingerprint))
     payload = {
         "kind": "ruling", "fingerprint": fingerprint, "ruling": ruling,
         "reason": reason or "", "evidence_refs": list(evidence_refs or []),
         "ts": _utcnow_iso(),
+        "occurrence_started_at": open_occ["opened_at"] if open_occ else None,
     }
     if ruling == "snooze":
         payload["until"] = until
@@ -494,53 +578,87 @@ def cards(allowlist: dict[str, Path] | None = None, *, db_path: Path | None = No
 # the correction Task 2 records).
 # ---------------------------------------------------------------------------
 
-def latency_summary(current_cards: list[dict] | None = None) -> dict:
-    """`desk.py`'s own small footer number: cards raised, ruled, median
-    latency, oldest open. `current_cards` -- when given, a fresh
-    :func:`cards` result -- is only used for "oldest open"; the rest reads
-    purely from the events log.
+def _occurrence_key_for_ruling(ruling: dict, occ_by_fp: dict[str, list[dict]]) -> tuple[str, str] | None:
+    """The `(fingerprint, opened_at)` key identifying which occurrence a
+    ruling belongs to. Trusts an explicit `occurrence_started_at` when
+    present (every ruling written after Addendum (b)) rather than re-deriving
+    it. Falls back, for legacy rulings written before that fix, to replaying
+    which occurrence was open at the ruling's own timestamp -- so old data
+    keeps parsing without being rewritten (UAT: "the pre-fix events still
+    parse and the footer still renders")."""
+    fp = ruling.get("fingerprint")
+    started_at = ruling.get("occurrence_started_at")
+    if started_at:
+        return (fp, started_at)
+    r_ts = ruling.get("ts") or ""
+    candidates = [o for o in (occ_by_fp.get(fp) or [])
+                  if (o.get("opened_at") or "") <= r_ts
+                  and (o["resolved_at"] is None or o["resolved_at"] >= r_ts)]
+    if not candidates:
+        return None
+    chosen = max(candidates, key=lambda o: o.get("opened_at") or "")
+    return (fp, chosen["opened_at"])
 
-    **Simplification, named rather than hidden:** "ruled" here means "at
-    least one ruling event exists for this fingerprint, ever" -- there is
-    only one card type in this round (Task 4's own control) and no re-open
-    tracking beyond the `aged` marker, so a fingerprint that was dismissed
-    once and re-raised aged later still counts as ruled for this v1 footer.
-    Phase 2's ledger migration is where per-recurrence tracking belongs, not
-    a home-grown addition here.
+
+def latency_summary(current_cards: list[dict] | None = None) -> dict:
+    """`desk.py`'s own small footer number: cards (occurrences) raised,
+    ruled, median latency, oldest open. `current_cards` -- when given, a
+    fresh :func:`cards` result -- is only used for "oldest open"; the rest
+    reads purely from the events log.
+
+    **The unit is the occurrence, not the fingerprint** (Addendum (b),
+    2026-08-19): a fingerprint that recurs opens a new occurrence each time,
+    and re-ruling one open occurrence several times is one decision, counted
+    once, with one latency figure -- from that occurrence's own
+    `condition_first_observable` to its FIRST ruling only. Grouping by
+    fingerprint instead (the original v1 shape) undercounted `cards_raised`/
+    `cards_ruled` on any recurring stage and could triple-count one visit's
+    worth of clicking as three latency data points.
     """
     events = _read_events()
-    sightings = _events_by_fingerprint(events, "sighting")
-    rulings = _events_by_fingerprint(events, "ruling")
-    resolutions = _events_by_fingerprint(events, "resolution")
+    occ_by_fp = _reconstruct_occurrences(events)
+    rulings = [e for e in events if e.get("kind") == "ruling"]
 
-    # 2026-08-19 addendum: a fingerprint that was resolved (absence-detected)
-    # without ever being ruled is a real outcome the trial needs counted --
-    # it is NOT folded into `median_latency_hours`, which stays anchored to
-    # `ruling` events only, per Task 2's own clock. Comparative latency
-    # claims against a baseline are Phase 2's, not this footer's.
-    resolved_without_ruling = sum(1 for fp in resolutions if fp not in rulings)
+    by_occurrence: dict[tuple[str, str], list[dict]] = {}
+    for r in rulings:
+        key = _occurrence_key_for_ruling(r, occ_by_fp)
+        if key is not None:
+            by_occurrence.setdefault(key, []).append(r)
 
     latencies: list[float] = []
-    for fp, rs in rulings.items():
-        hist = sightings.get(fp) or []
-        if not hist:
-            continue
-        first = min(hist, key=lambda h: h.get("ts") or "")
-        cfo_epoch = _parse_iso(first.get("condition_first_observable"))
+    for (fp, opened_at), rs in by_occurrence.items():
+        occurrence = next((o for o in occ_by_fp.get(fp, []) if o.get("opened_at") == opened_at), None)
+        # sightings[0] is always the opening sighting -- the first one
+        # appended when _reconstruct_occurrences opened this occurrence.
+        opening_sighting = occurrence["sightings"][0] if occurrence and occurrence["sightings"] else None
+        cfo_epoch = _parse_iso(opening_sighting.get("condition_first_observable")) if opening_sighting else None
         if cfo_epoch is None:
-            cfo_epoch = _parse_iso(first.get("ts"))  # last resort, not the design
+            cfo_epoch = _parse_iso(opened_at)  # last resort, not the design
         if cfo_epoch is None:
             continue
-        for r in rs:
-            r_epoch = _parse_iso(r.get("ts"))
-            if r_epoch is not None and r_epoch >= cfo_epoch:
-                latencies.append(r_epoch - cfo_epoch)
+        first_ruling = min(rs, key=lambda r: r.get("ts") or "")
+        r_epoch = _parse_iso(first_ruling.get("ts"))
+        if r_epoch is not None and r_epoch >= cfo_epoch:
+            latencies.append(r_epoch - cfo_epoch)
+
+    cards_raised = sum(len(occs) for occs in occ_by_fp.values())
+    cards_ruled = len(by_occurrence)
+
+    # An occurrence that closed (resolved) without ever appearing in
+    # by_occurrence is a real outcome the trial needs counted -- NOT folded
+    # into median_latency_hours, which stays anchored to ruling events only.
+    resolved_without_ruling = 0
+    for fp, occurrences in occ_by_fp.items():
+        for o in occurrences:
+            if o["resolved_at"] is not None and (fp, o.get("opened_at")) not in by_occurrence:
+                resolved_without_ruling += 1
 
     oldest_open_days = None
     if current_cards:
         now = time.time()
         for card in current_cards:
-            if card["fingerprint"] in rulings:
+            open_occ = _open_occurrence(occ_by_fp.get(card["fingerprint"]))
+            if open_occ is None or (card["fingerprint"], open_occ.get("opened_at")) in by_occurrence:
                 continue
             cfo_epoch = _parse_iso(card.get("condition_first_observable"))
             if cfo_epoch is None:
@@ -550,8 +668,8 @@ def latency_summary(current_cards: list[dict] | None = None) -> dict:
                 oldest_open_days = age_days
 
     return {
-        "cards_raised": len(sightings),
-        "cards_ruled": len(rulings),
+        "cards_raised": cards_raised,
+        "cards_ruled": cards_ruled,
         "cards_resolved_without_ruling": resolved_without_ruling,
         "median_latency_hours": (statistics.median(latencies) / 3600.0) if latencies else None,
         "oldest_open_days": oldest_open_days,
