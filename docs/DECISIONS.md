@@ -2133,7 +2133,7 @@ not a new promise about freshness.
 
 ## 0048 — The unit of throughput is a decision; a surface that wants attention raises a card
 
-**Date:** 2026-08-18 · **Status:** proposed · **Builds on:** 0031 (findings,
+**Date:** 2026-08-18 · **Status:** accepted · **Builds on:** 0031 (findings,
 never verdicts), 0033 (propose, ratify, execute) · **Source:** the Quartermaster
 vision thread, `docs/investigation/2026-08-17_quartermaster_fable_2-response.md`
 (carried there as **D-A**) · **Depends on:** INTENT §8
@@ -2196,7 +2196,7 @@ re-argue — not the surface built on it. INTENT §8's first added failure mode
 
 ## 0049 — Frontier conversations are a sensed input; the system moves work down-tier rather than budgeting spend it cannot see
 
-**Date:** 2026-08-18 · **Status:** proposed · **Builds on:** 0037 (measurement
+**Date:** 2026-08-18 · **Status:** accepted · **Builds on:** 0037 (measurement
 before estimation; refuse, never clamp), 0040 (the conversation corpus and its
 joins) · **Source:** the Quartermaster vision thread,
 `docs/investigation/2026-08-17_quartermaster_fable_2-response.md` (carried there
@@ -2250,3 +2250,111 @@ repetition — if every frontier session is genuinely novel — then clause 3 ha
 nothing to sense and the entry is an elegant description of nothing. That is
 testable against the corpus that already exists, and should be tested before
 anything is built on it.
+
+---
+
+## 0050 — A source declares its own staleness as a feed; the Desk consumes declared feeds, and a source it cannot reach reads as unknown, never as fresh
+
+**Date:** 2026-08-19 · **Status:** proposed · **Builds on:** 0042 (a consumer
+repo declares its own runnable stages; clause 7 — where a repo answers a
+question about itself, ask it), 0048 (the card anatomy; a card missing any
+field is not raised), 0047 (one process, modules in it), 0025 and 0036 (a
+loopback single-estate surface is not gated; the mesh stands down) ·
+**Source:** design thread, 2026-08-19, following the Desk's first build round
+· **Brief:** `COWORK_BRIEF_staleness_feeds.md`
+
+**Context.** `desk.py` derives cards from two hard-coded triggers, both read
+out of wizard manifests: delegated staleness and dependency staleness. That
+was the right size for one card type on one fixture repo, and it worked.
+
+The next source of staleness is a cloud-export manager on the work rig which
+already knows, on its own terms and against its own schedule, which exports
+are stale. The obvious implementation is a third branch in `cards()`. The one
+after that is a fourth for `sf-data-service`.
+
+Follow that line and the Desk becomes what the deck was before
+`modules.ModuleDescriptor`: one surface accumulating a special case per
+source, where every new source requires a change to *this* repo before
+another repo's staleness can be seen at all. This estate has already paid to
+learn that lesson twice — once with the module registry, once with 0042's
+manifests — and both times the fix was the same shape: **the thing that owns
+the work declares it; the surface consumes the declaration.**
+
+There is a second, quieter reason. Two of the sources that matter most are
+**cadence-shaped**, not dependency-shaped: a statement due by the 5th of the
+month, a sync that should have run last night. No arrangement of mtimes and
+`depends_on` expresses those. Teaching the Desk a calendar would be building
+the second freshness engine 0042 clause 7 exists to forbid — a competing
+opinion about a question the source can already answer.
+
+**Decision.**
+
+1. **Staleness is declared, not detected.** A repo may declare a
+   `staleness_feed` in its committed manifest: a read-only command, run under
+   the existing allowlist, containment and literal-argv rules, printing a
+   list of items. The Desk renders those answers as cards. It computes no
+   staleness of its own and applies no threshold to a feed's verdict.
+2. **One contract, not one integration per source.** A new source is a new
+   declaration in the repo that owns it — never a new branch in `desk.py`.
+   The two existing triggers become one provider of the same item shape,
+   behaviour and fingerprints unchanged.
+3. **Cadence lives in the source.** An item whose staleness comes from a
+   schedule is an ordinary item whose source computed it and whose evidence
+   states the schedule out loud. The Desk holds no cron, no expected-interval
+   field, and no opinion about the 5th of the month.
+4. **A source that cannot be reached reads as `unknown`, never as fresh.** A
+   feed that times out, exits non-zero, or prints unparsable output raises no
+   cards — and an empty Desk is indistinguishable from good news, so it must
+   not be the only signal. Every declared feed's last outcome is rendered as
+   a health line, and a failure is recorded as an event. Silence is never
+   evidence of freshness.
+5. **An item that cannot fill 0048's anatomy raises no card, visibly.** In
+   particular an item claiming staleness without stating when it became
+   observable has no latency clock and no expiry, so it is not raised — and
+   the reason appears on the health line rather than nowhere. 0048 clause 2's
+   trade, taken again, with its cost made visible this time.
+6. **A feed may name an action; it may not name work.** An item's optional
+   action is an existing `(repo_key, stage_key)` pair from a validated
+   manifest the host's allowlist already permits, checked at parse time. The
+   Desk gains no execution path: the button posts the wizard's existing
+   execute route with that pair and nothing else (0037, 0042 clauses 3–4).
+   An item with no valid action is an acknowledge-only card, which is a
+   legitimate and expected shape.
+7. **The contract crosses machines; data never does.** A second rig runs its
+   own Desk against its own feeds, allowlist and sidecar. What is shared
+   between rigs is this schema and the card anatomy, copied. There is no
+   aggregation, no listener, no shared store — 0036 stands unamended.
+
+**Consequences.**
+
+**The Desk's card quality is now bounded by its sources' honesty, and the
+Desk cannot tell.** A source with a broken clock or a wrong schedule reports
+confident nonsense and the Desk repeats it faithfully. This is the same trade
+0042 clause 7 already took, one gate further out, and the mitigation is the
+same and only partial: the answer is quoted verbatim with its source named,
+so a wrong card is legibly *that source's* wrong answer rather than an
+anonymous claim by the system. It is worth restating that this is a real cost
+and not a technicality — the previous design's triggers were dumb, but they
+read the filesystem directly and could not be lied to.
+
+**The two rigs will drift.** Feed implementations on the work rig will learn
+things this contract does not know, and there is no mechanism here to
+reconcile them — deliberately, because every mechanism that would is a mesh.
+Reconciliation is a human reading both and amending the contract, which is
+Phase 5's extraction work and is named here so it is expected rather than
+discovered.
+
+**The Desk now costs wall clock to open.** Feeds are polled on render, with
+timeouts. A slow feed makes a slow tab, and a slow tab gets visited less —
+which is the exact failure the whole programme is trying to remove. The
+budget and its overrun must be measured and stated, never hidden behind a
+cache that quietly serves an old answer.
+
+**What would show this wrong.** If, after two or three real sources, the
+contract has had to be extended for each one, then the seam is in the wrong
+place: the variation is in the sources, not at their boundary, and three
+honest branches in `desk.py` would have been the cheaper truth. The test is
+concrete — count the schema changes per source wired. One extension across
+three sources vindicates this entry; three extensions across three sources
+refutes it, and the refutation should be written as its own entry rather than
+absorbed as maintenance.
