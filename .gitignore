@@ -10,6 +10,20 @@ data/urls.txt
 # codenames. Authored here, shipped by scp like local.json, never committed.
 /config/project_registry.json
 
+# Project Wizard repo allowlist (DECISIONS 0042) -- per-host absolute paths to
+# every repo the toolkit may read or execute stages in, which on the work rig
+# means employer repo paths. Same class as project_registry.json: authored
+# here, shipped manually, never committed.
+#
+# NOTE, because this narrows a ratified clause: 0042 clause 2 says widening the
+# allowlist is "a reviewed, committed edit". Untracked, it is no longer a
+# committed one, and the review 0042 relied on is now whatever the operator
+# does before shipping the file. Absence fails closed -- load_allowlist returns
+# an empty map, so a fresh clone reads and executes nothing rather than
+# defaulting to everything -- but the change is a real step down from clause 2
+# and wants its own entry rather than living only in this comment.
+/config/project_wizard.allow.json
+
 # Curated conversation maps (DECISIONS 0040) -- one per source. They carry
 # conversation titles, which for the MCF map means employer project and thread
 # names. Same class as project_registry.json: authored here, shipped manually,
