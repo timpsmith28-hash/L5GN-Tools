@@ -1,0 +1,48 @@
+{
+  "model_id": "llama-3",
+  "notes": "model_id as shown in LM Studio's 'API Identifier' field -- use exactly this string for --model in run_bench_sweep.py. Also confirmed present in this LM Studio instance's /v1/models list from earlier log evidence (id: 'llama-3').",
+  "model_file": "llama-3.2-3b-instruct-q8_0.gguf",
+  "confirmed_at": "2026-08-19T00:00:00+01:00",
+  "confirmed_via": "LM Studio load-model dialog screenshots, message sent 2026-08-19",
+  "estimated_memory_usage_gb": {"gpu": 3.37, "total": 4.28},
+  "lmstudio_settings": {
+    "auto_unload_if_idle_ttl_minutes": null,
+    "auto_unload_if_idle_note": "checkbox is UNCHECKED for this model -- unlike gemma-4-e4b and phi3 (both TTL=1 min), this model has no idle auto-unload configured at all, so it will stay resident indefinitely once loaded. --model-ttl should be OMITTED for this model's run_bench_sweep.py invocation to match (see run_bench_sweep_config_args below), not set to some numeric value.",
+    "context_length": 8192,
+    "model_max_context_tokens": 131072,
+    "gpu_offload_layers": 28,
+    "cpu_thread_pool_size": 4,
+    "evaluation_batch_size": 2048,
+    "physical_batch_size": 512,
+    "max_concurrent_predictions": 4,
+    "unified_kv_cache": true,
+    "context_checkpoints": 32,
+    "reasoning_budget_message": null,
+    "rope_frequency_base": "auto",
+    "rope_frequency_scale": "auto",
+    "offload_kv_cache_to_gpu_memory": false,
+    "keep_model_in_memory": true,
+    "try_mmap": true,
+    "seed": "random",
+    "speculative_decoding": "off",
+    "flash_attention": true,
+    "k_cache_quantization_type": "Q8_0",
+    "v_cache_quantization_type": "Q8_0"
+  },
+  "run_bench_sweep_config_args": {
+    "context_length": 8192,
+    "quantisation": "Q8_0",
+    "gpu_offload_layers": 28,
+    "kv_cache_type": "Q8_0",
+    "flash_attention": "true",
+    "batch_size": 512
+  },
+  "run_bench_sweep_config_args_note": "model_ttl deliberately OMITTED (not set to a number) -- this model's Auto Unload If Idle checkbox is off in LM Studio, so --model-ttl should not be passed to run_bench_sweep.py either, otherwise the sweep would be telling K2/K4 to apply a TTL LM Studio was never configured to honour. batch_size assumed == physical_batch_size (512), same convention as the other two models on file.",
+  "config_fingerprint_from_real_run": null,
+  "fields_not_covered_by_config_fingerprint": [
+    "cpu_thread_pool_size", "evaluation_batch_size (vs physical_batch_size -- only one is hashed as batch_size)",
+    "max_concurrent_predictions", "unified_kv_cache", "context_checkpoints",
+    "offload_kv_cache_to_gpu_memory", "keep_model_in_memory", "try_mmap", "seed",
+    "speculative_decoding", "auto_unload_if_idle_ttl_minutes (ttl_seconds IS hashed if --model-ttl is passed)"
+  ]
+}

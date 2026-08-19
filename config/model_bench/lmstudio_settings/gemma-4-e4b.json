@@ -1,0 +1,48 @@
+{
+  "model_id": "gemma-4-e4b",
+  "notes": "model_id as used in --model / recorded in bench_ledger.jsonl and the cache_k2_/cache_k4_/claims_/matches_ filenames for this run. LM Studio 'API Identifier' field in the load dialog read something close to 'google/gemma-4-e4b' -- the sweep was actually run against 'gemma-4-e4b'.",
+  "model_file": "Gemma 4 E4B Q4_K_M 7.1B GGUF",
+  "confirmed_at": "2026-08-18T14:54:00+01:00",
+  "confirmed_via": "LM Studio load-model dialog screenshot, message sent 2026-08-18 14:54 BST",
+  "estimated_memory_usage_gb": {"gpu": 6.22, "total": 6.67},
+  "lmstudio_settings": {
+    "auto_unload_if_idle_ttl_minutes": 1,
+    "context_length": 32768,
+    "model_max_context_tokens": 131072,
+    "gpu_offload_layers": 42,
+    "cpu_thread_pool_size": 5,
+    "evaluation_batch_size": 1024,
+    "physical_batch_size": 512,
+    "max_concurrent_predictions": 1,
+    "unified_kv_cache": false,
+    "context_checkpoints": 32,
+    "reasoning_budget_message": null,
+    "rope_frequency_base": "auto",
+    "rope_frequency_scale": "auto",
+    "offload_kv_cache_to_gpu_memory": false,
+    "keep_model_in_memory": true,
+    "try_mmap": true,
+    "seed": "random",
+    "speculative_decoding": "off",
+    "flash_attention": true,
+    "k_cache_quantization_type": "Q4_0",
+    "v_cache_quantization_type": "Q4_0"
+  },
+  "run_bench_sweep_config_args": {
+    "context_length": 32768,
+    "quantisation": "Q4_K_M",
+    "gpu_offload_layers": 42,
+    "kv_cache_type": "Q4_0",
+    "flash_attention": "true",
+    "batch_size": 512,
+    "model_ttl": 60
+  },
+  "config_fingerprint_from_real_run": "6b490e07be3fceef954b0561aa6041ce1cba56c0670cfec0588a77d5176d1413",
+  "config_fingerprint_note": "This is the real config_fingerprint from bench_ledger.jsonl for this model's completed 3-repeat run (2026-08-19). build_config_fingerprint() hashes ONLY the 7 keys in run_bench_sweep_config_args above (context_length, quantisation, gpu_offload_layers, kv_cache_type, flash_attention, batch_size, ttl_seconds) -- it was not re-derived/verified against this exact dict because the original CLI invocation's flag values were not separately logged at run time. Treat run_bench_sweep_config_args here as the best-available reconstruction from the LM Studio screenshot, not a byte-for-byte guarantee of a fingerprint match -- if you need to confirm, recompute build_config_fingerprint() locally against this dict and diff against the value above.",
+  "fields_not_covered_by_config_fingerprint": [
+    "cpu_thread_pool_size", "evaluation_batch_size (vs physical_batch_size -- only one is hashed as batch_size)",
+    "max_concurrent_predictions", "unified_kv_cache", "context_checkpoints",
+    "offload_kv_cache_to_gpu_memory", "keep_model_in_memory", "try_mmap", "seed",
+    "speculative_decoding", "auto_unload_if_idle_ttl_minutes (ttl_seconds IS hashed if --model-ttl is passed)"
+  ]
+}

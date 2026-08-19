@@ -1,0 +1,50 @@
+{
+  "model_id": "phi3",
+  "notes": "model_id as shown in LM Studio's 'API Identifier' field -- use exactly this string for --model in run_bench_sweep.py so the sweep's HTTP calls target the right resident model.",
+  "model_file": "phi-3-mini-4k-instruct-q4_k_m.gguf",
+  "confirmed_at": "2026-08-19T00:00:00+01:00",
+  "confirmed_via": "LM Studio load-model dialog screenshots, message sent 2026-08-19, plus a follow-up tweak to Unified KV Cache noted in the same message",
+  "estimated_memory_usage_gb": {"gpu": 3.19, "total": 3.19},
+  "lmstudio_settings": {
+    "auto_unload_if_idle_ttl_minutes": 1,
+    "context_length": 4096,
+    "model_max_context_tokens": 4096,
+    "gpu_offload_layers": 32,
+    "cpu_thread_pool_size": 4,
+    "evaluation_batch_size": 2048,
+    "physical_batch_size": 512,
+    "max_concurrent_predictions": 4,
+    "unified_kv_cache": false,
+    "unified_kv_cache_note": "explicitly tweaked OFF for this model per the user's correction (2026-08-19) -- first screenshot of this model showed it ON (LM Studio's default), the tweak turned it OFF. Earlier text in this file had this backwards (said ON); corrected. This field is NOT covered by build_config_fingerprint(), so this note is the only record of the change unless kv_cache_type is also bumped to reflect it.",
+    "context_checkpoints": 32,
+    "reasoning_budget_message": null,
+    "rope_frequency_base": "auto",
+    "rope_frequency_scale": "auto",
+    "offload_kv_cache_to_gpu_memory": true,
+    "keep_model_in_memory": true,
+    "try_mmap": true,
+    "seed": "random",
+    "speculative_decoding": "off",
+    "flash_attention": true,
+    "k_cache_quantization_type": "Q4_0",
+    "v_cache_quantization_type": "Q4_0"
+  },
+  "run_bench_sweep_config_args": {
+    "context_length": 4096,
+    "quantisation": "Q4_K_M",
+    "gpu_offload_layers": 32,
+    "kv_cache_type": "Q4_0",
+    "flash_attention": "true",
+    "batch_size": 512,
+    "model_ttl": 60
+  },
+  "run_bench_sweep_config_args_note": "batch_size assumed == physical_batch_size (512), matching the choice made for gemma-4-e4b's record for consistency across models -- evaluation_batch_size differs between the two models (1024 vs 2048) and is NOT captured by any of the 7 fingerprinted fields either way. Confirm this mapping before relying on cross-model fingerprint comparisons.",
+  "config_fingerprint_from_real_run": "f1f48cb62ee05fe55b8c51d39bc3c52ccb96b8239f8283cf52fc334d96452109",
+  "config_fingerprint_confirmed_via": "3-repeat sweep completed successfully 2026-08-19 (post window-budget-fix), matches the value predicted from run_bench_sweep_config_args before the run.",
+  "fields_not_covered_by_config_fingerprint": [
+    "cpu_thread_pool_size", "evaluation_batch_size (vs physical_batch_size -- only one is hashed as batch_size)",
+    "max_concurrent_predictions", "unified_kv_cache", "context_checkpoints",
+    "offload_kv_cache_to_gpu_memory", "keep_model_in_memory", "try_mmap", "seed",
+    "speculative_decoding", "auto_unload_if_idle_ttl_minutes (ttl_seconds IS hashed if --model-ttl is passed)"
+  ]
+}
