@@ -33,6 +33,26 @@ the brief's own instruction.
 **No policy engine exists in this round.** Every card's default is
 `hold -- nothing runs`; an expiry only re-raises a card with an `aged`
 marker. Nothing here ever acts on silence (DECISIONS 0048 clause 4).
+
+**Addendum, 2026-08-19 -- the silent week was cut before the trial started.**
+The original Task 4 ran a silent first week (cards derived and sighted, not
+shown) to build a patrol-and-remember baseline for a comparative latency
+falsifier. Review against the live build found the instrument could not
+support that comparison: `latency_summary` derives entirely from `ruling`
+events, rulings require the view (silent all week, on purpose), and the
+fixture allowlist yields exactly one fingerprint -- so the silent week could
+produce at most one data point, and the "card thresholds tuned mid-trial ->
+stop" condition locks that N=1 in for the run's whole length. The full
+reasoning is recorded in the brief's end-of-file addendum and will be
+covered in `COWORK_REPORT_desk_stale_card.md`.
+
+What changed here, mechanically: the trial now runs visible from the first
+render (`_trial_state`/`trial_status`/`SILENT_WEEK_DAYS` removed; `GET
+/api/desk/cards` no longer withholds its own answer). In their place, a
+`resolution` event (below) closes the gap the silent week's absence would
+otherwise have hidden: a card that stops deriving without ever being ruled
+-- rebuilt by hand, fixed by something else -- is now a recorded fact
+instead of a silent disappearance.
 """
 from __future__ import annotations
 
@@ -51,22 +71,16 @@ from l5gntools.common import DATA_DIR
 
 from . import project_wizard
 
-#: Where the Desk's own records live -- events (sightings, findings, rulings)
-#: and the trial's start marker. Neither is board state; both are records of
-#: what happened or was decided, the same distinction `project_wizard`'s run
-#: markers draw against its own board.
+#: Where the Desk's own records live -- events (sightings, resolutions,
+#: findings, rulings). Not board state; a record of what happened or was
+#: decided, the same distinction `project_wizard`'s run markers draw against
+#: its own board.
 DESK_DATA_DIR: Path = DATA_DIR / "desk"
 EVENTS_PATH: Path = DESK_DATA_DIR / "events.jsonl"
-TRIAL_STATE_PATH: Path = DESK_DATA_DIR / "trial_state.json"
 
 #: "N in the module, not config, until a second card type exists to justify
 #: generalising" (Task 1's own instruction).
 AGED_AFTER_DAYS = 3.0
-
-#: Task 4: the trial's first week is silent -- cards are derived and sighted
-#: but not shown, to measure the patrol-and-remember baseline this module
-#: exists to beat.
-SILENT_WEEK_DAYS = 7.0
 
 VALID_RULINGS = frozenset({"rebuild", "snooze", "dismiss"})
 
@@ -185,22 +199,52 @@ def append_finding(text: str, *, refs: list[str] | None = None) -> dict:
     })
 
 
-def _sightings_for(events: list[dict], fingerprint: str) -> list[dict]:
-    return [e for e in events if e.get("kind") == "sighting" and e.get("fingerprint") == fingerprint]
+def _events_by_fingerprint(events: list[dict], kind: str) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = {}
+    for e in events:
+        if e.get("kind") == kind and e.get("fingerprint"):
+            out.setdefault(e["fingerprint"], []).append(e)
+    return out
 
 
-def _sync_sightings(current_cards: list[dict]) -> None:
-    """Writes a `sighting` event only when a fingerprint is new, or newly
-    aged -- "a render that changes nothing writes nothing" (Task 2). Runs on
-    every :func:`cards` call, including during the trial's silent first week
-    (Task 4: sightings are still logged then, only the view stays quiet)."""
-    if not current_cards:
-        return
+def _open_fingerprints(events: list[dict]) -> dict[str, str]:
+    """Every fingerprint this log currently believes is still open -- sighted
+    at least once, with no `resolution` event since its most recent
+    `sighting`. Returns `{fingerprint: last_known_sighting_ts}`, the bracket's
+    lower bound a resolution event (below) needs."""
+    sightings = _events_by_fingerprint(events, "sighting")
+    resolutions = _events_by_fingerprint(events, "resolution")
+    open_fps: dict[str, str] = {}
+    for fp, hist in sightings.items():
+        last_sighting_ts = max(h.get("ts") or "" for h in hist)
+        last_resolution_ts = max((r.get("ts") or "" for r in resolutions.get(fp, [])), default="")
+        if last_resolution_ts < last_sighting_ts:
+            open_fps[fp] = last_sighting_ts
+    return open_fps
+
+
+def _sync_events(current_cards: list[dict]) -> None:
+    """Writes `sighting` and `resolution` events from one comparison between
+    what the log last knew was open and what just derived.
+
+    **Sighting:** written only when a fingerprint is new, or newly aged --
+    "a render that changes nothing writes nothing" (Task 2).
+
+    **Resolution:** written when a fingerprint the log still believes is
+    open (:func:`_open_fingerprints`) is absent from this render -- a card
+    that stopped deriving without ever being ruled (rebuilt by hand, fixed
+    by something else). `ts` is an upper bound on when the fix happened --
+    the Desk only learns a card vanished when someone loads the tab, and the
+    event says so with `previous_render_ts`, the bracket's other edge
+    (2026-08-19 addendum, Task 4).
+    """
     events = _read_events()
     now = _utcnow_iso()
+    current_fps = {c["fingerprint"] for c in current_cards}
+
     for card in current_cards:
         fp = card["fingerprint"]
-        history = _sightings_for(events, fp)
+        history = _events_by_fingerprint(events, "sighting").get(fp, [])
         aged_now = bool(card["expiry"]["aged"])
         if not history:
             _append_event({
@@ -213,6 +257,13 @@ def _sync_sightings(current_cards: list[dict]) -> None:
                 "kind": "sighting", "fingerprint": fp, "card_summary": card["question"],
                 "ts": now, "condition_first_observable": card["condition_first_observable"],
                 "aged": True,
+            })
+
+    for fp, last_sighting_ts in _open_fingerprints(events).items():
+        if fp not in current_fps:
+            _append_event({
+                "kind": "resolution", "fingerprint": fp, "ts": now,
+                "previous_render_ts": last_sighting_ts, "detected_by": "absence",
             })
 
 
@@ -245,47 +296,6 @@ def rule(fingerprint: str, ruling: str, reason: str, *,
     if ruling == "snooze":
         payload["until"] = until
     return _append_event(payload)
-
-
-# ---------------------------------------------------------------------------
-# The trial state -- Task 4. One stored timestamp: the trial's start.
-# ---------------------------------------------------------------------------
-
-def _trial_state() -> dict:
-    """Reads (and, on first call only, initialises) the trial's start.
-
-    The brief says the trial's start is "the commit date of the round's last
-    task" -- a fact this module cannot know at build time, since the commit
-    has not happened yet. What it initialises to instead is the first moment
-    anything asks for the trial's status, which in practice is very close to
-    that commit (the deploy that makes this route reachable at all). If the
-    true round-closing commit date differs from `data/desk/trial_state.json`'s
-    `trial_start`, that file is a plain, hand-editable JSON object -- correct
-    it once, by hand, before the silent week is relied on for anything."""
-    if not TRIAL_STATE_PATH.is_file():
-        DESK_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        payload = {"trial_start": _utcnow_iso()}
-        tmp = TRIAL_STATE_PATH.with_name(TRIAL_STATE_PATH.name + ".tmp")
-        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(tmp, TRIAL_STATE_PATH)
-        return payload
-    try:
-        data = json.loads(TRIAL_STATE_PATH.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {"trial_start": None}
-    except (OSError, ValueError):
-        return {"trial_start": None}
-
-
-def trial_status() -> dict:
-    state = _trial_state()
-    start_epoch = _parse_iso(state.get("trial_start"))
-    visible_epoch = (start_epoch + SILENT_WEEK_DAYS * 86400) if start_epoch is not None else None
-    now = time.time()
-    return {
-        "trial_start": state.get("trial_start"),
-        "visible_at": _iso_from_epoch(visible_epoch),
-        "visible": visible_epoch is not None and now >= visible_epoch,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +419,7 @@ def _make_card(*, manifest, stage, trigger_kind: str, trigger: dict,
 
 
 def cards(allowlist: dict[str, Path] | None = None, *, db_path: Path | None = None,
-         sync_sightings: bool = True) -> list[dict]:
+         sync_events: bool = True) -> list[dict]:
     """Every currently-raised card, derived fresh from
     `project_wizard.load_manifests()` -- never stored (Task 1).
 
@@ -473,8 +483,8 @@ def cards(allowlist: dict[str, Path] | None = None, *, db_path: Path | None = No
                 if card is not None:
                     out.append(card)
 
-    if sync_sightings:
-        _sync_sightings(out)
+    if sync_events:
+        _sync_events(out)
     return out
 
 
@@ -499,13 +509,16 @@ def latency_summary(current_cards: list[dict] | None = None) -> dict:
     a home-grown addition here.
     """
     events = _read_events()
-    sightings: dict[str, list[dict]] = {}
-    rulings: dict[str, list[dict]] = {}
-    for e in events:
-        if e.get("kind") == "sighting":
-            sightings.setdefault(e["fingerprint"], []).append(e)
-        elif e.get("kind") == "ruling":
-            rulings.setdefault(e["fingerprint"], []).append(e)
+    sightings = _events_by_fingerprint(events, "sighting")
+    rulings = _events_by_fingerprint(events, "ruling")
+    resolutions = _events_by_fingerprint(events, "resolution")
+
+    # 2026-08-19 addendum: a fingerprint that was resolved (absence-detected)
+    # without ever being ruled is a real outcome the trial needs counted --
+    # it is NOT folded into `median_latency_hours`, which stays anchored to
+    # `ruling` events only, per Task 2's own clock. Comparative latency
+    # claims against a baseline are Phase 2's, not this footer's.
+    resolved_without_ruling = sum(1 for fp in resolutions if fp not in rulings)
 
     latencies: list[float] = []
     for fp, rs in rulings.items():
@@ -539,6 +552,7 @@ def latency_summary(current_cards: list[dict] | None = None) -> dict:
     return {
         "cards_raised": len(sightings),
         "cards_ruled": len(rulings),
+        "cards_resolved_without_ruling": resolved_without_ruling,
         "median_latency_hours": (statistics.median(latencies) / 3600.0) if latencies else None,
         "oldest_open_days": oldest_open_days,
     }
@@ -571,19 +585,13 @@ def router(ctx):
 
     @api.get("/api/desk/cards")
     def desk_cards_route():
-        derived = cards(db_path=ctx.db_path)
-        trial = trial_status()
-        if not trial["visible"]:
-            # Task 4: the first week is silent. Sightings above already ran
-            # (cards() always syncs them); only the response is withheld.
-            return {"cards": [], "trial": trial,
-                    "note": "Silent baseline week -- cards are being derived and sighted "
-                            "in the background, not shown yet."}
-        return {"cards": derived, "trial": trial}
+        # 2026-08-19 addendum: visible from the first render -- no silent
+        # week. cards() still syncs sightings/resolutions as a side effect.
+        return {"cards": cards(db_path=ctx.db_path)}
 
     @api.post("/api/desk/rule")
     def desk_rule_route(payload: RuleBody):
-        known = {c["fingerprint"] for c in cards(db_path=ctx.db_path, sync_sightings=False)}
+        known = {c["fingerprint"] for c in cards(db_path=ctx.db_path, sync_events=False)}
         try:
             return rule(payload.fingerprint, payload.ruling, payload.reason,
                        evidence_refs=payload.evidence_refs, until=payload.until,
@@ -594,6 +602,6 @@ def router(ctx):
 
     @api.get("/api/desk/latency")
     def desk_latency_route():
-        return latency_summary(cards(db_path=ctx.db_path, sync_sightings=False))
+        return latency_summary(cards(db_path=ctx.db_path, sync_events=False))
 
     return api

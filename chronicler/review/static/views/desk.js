@@ -158,26 +158,22 @@ async function load(view) {
   view.innerHTML = `<div class="empty">Loading…</div>`;
   try {
     const data = await jget("/api/desk/cards");
-    const footer = data.trial
-      ? (data.trial.visible
-          ? `trial started ${esc(data.trial.trial_start || "?")}`
-          : `silent baseline week — cards visible from ${esc(data.trial.visible_at || "?")}`)
-      : "";
-    let latencyLine = "";
+    let footer = "";
     try {
       const lat = await jget("/api/desk/latency");
-      latencyLine = ` · ${lat.cards_ruled} cards ruled` +
-        (lat.median_latency_hours != null ? `, median ${lat.median_latency_hours.toFixed(1)}h` : "") +
+      footer = `${lat.cards_raised} cards raised · ${lat.cards_ruled} ruled` +
+        (lat.cards_resolved_without_ruling ? `, ${lat.cards_resolved_without_ruling} resolved without a ruling` : "") +
+        (lat.median_latency_hours != null ? ` · median ${lat.median_latency_hours.toFixed(1)}h` : "") +
         (lat.oldest_open_days != null ? `, oldest open ${lat.oldest_open_days.toFixed(1)}d` : "");
     } catch (e) { /* footer is best-effort */ }
 
     if (!data.cards.length) {
-      view.innerHTML = `<div class="empty">${esc(data.note || "No cards raised right now.")}</div>` +
-        `<div class="footer">${footer}${latencyLine}</div>`;
+      view.innerHTML = `<div class="empty">No cards raised right now.</div>` +
+        `<div class="footer">${footer}</div>`;
       return;
     }
     view.innerHTML = data.cards.map(cardHtml).join("") +
-      `<div class="footer">${footer}${latencyLine}</div>`;
+      `<div class="footer">${footer}</div>`;
     view.querySelectorAll(".card").forEach(cardEl => {
       const fp = cardEl.dataset.fp;
       const card = data.cards.find(c => c.fingerprint === fp);

@@ -282,3 +282,60 @@ Record: the card anatomy as implemented against D-A field by field; the
 (cards raised, ruled, median latency, oldest open); every hunt the trial
 logged; and the falsifier's answer, plainly, with its consequence for
 Phases 2–5.
+
+---
+
+## Addendum, 2026-08-19 — the silent week cut before the trial started
+
+Reviewed against the live build (one fixture repo, one delegated-freshness
+stage) rather than against the brief in the abstract. Findings, not a
+re-litigation of Task 4's intent:
+
+- `latency_summary` derives entirely from `ruling` events. The silent
+  week's own view has no ruling button — rulings cannot happen while it
+  runs. Through the whole silent week the footer would read
+  `cards_ruled: 0, median_latency_hours: None`, every time.
+- The fixture allowlist (`l5gn-tools-fixture` only, one delegated stage)
+  yields at most one fingerprint. A week of silence could produce at most
+  one observation, and only if a rebuild happened to land inside it.
+- The brief's own stop condition — "card thresholds tuned mid-trial → stop"
+  — locks that N=1 in for the silent week's full length, since nothing
+  about the trigger set can be widened to get more signal without
+  violating it.
+- Net: the silent week was building a baseline of zero data points to
+  compare week two's number against — the memory-comparison failure mode
+  this brief itself named as the reason a baseline week was needed in the
+  first place. The instrument could not do the job it was built for.
+
+**Decision, taken in the design thread and implemented same day:** drop the
+silent week; run visible from the first render. In its place, `desk.py`
+gained a `resolution` event — a fingerprint the log believes is still open
+that goes missing from a fresh derivation is now recorded as
+`{kind: "resolution", fingerprint, ts, previous_render_ts,
+detected_by: "absence"}`, `ts` stated as an upper bound (the Desk only
+learns a card vanished when someone loads the tab). This closes the gap the
+silent week's absence of a ruling path would otherwise have hidden — a card
+fixed by hand, or by something else, no longer disappears without a trace.
+
+**The falsifier changes accordingly.** The original comparative claim —
+"is decision latency on stale outputs visibly better than
+patrol-and-remember" — is deferred to Phase 2, where a real ledger, more
+than one card type, and the work rig's manifests make an N worth measuring
+exist. This round's falsifier, answered in `COWORK_REPORT_desk_stale_card
+.md`: **did cards reach you with the evidence you actually needed, and did
+you rule on them rather than scroll past?** Still a no/yes with a
+consequence for Phases 2–5, just not a comparative one.
+
+**Trial length, also decided in the design thread:** open-ended rather
+than a fixed two weeks — it runs until ten real cards have been ruled (the
+UAT line already asked for this), on the same N=1 reasoning above: a
+calendar bound doesn't guarantee enough signal to trust the anatomy on one
+fixture stage, and there is no reason to stop early just because a
+fortnight passed.
+
+Implementation: `chronicler/review/desk.py` (silent-week state removed,
+`resolution` event added, `latency_summary` reports
+`cards_resolved_without_ruling` alongside the existing fields) and
+`chronicler/review/static/views/desk.js` (trial messaging removed, cards
+render from the first load). Full account goes in
+`COWORK_REPORT_desk_stale_card.md` per the Reporting section above.
