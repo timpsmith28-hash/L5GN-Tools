@@ -421,12 +421,32 @@ def read_run_marker(repo_key: str, stage_key: str) -> dict | None:
         return None
 
 
-def write_run_marker(repo_key: str, stage_key: str, outcome: StageOutcome) -> None:
+def write_run_marker(repo_key: str, stage_key: str, outcome: StageOutcome,
+                     *, duration_seconds: float | None = None) -> None:
+    """Record what this module DID for one stage. ``duration_seconds`` is the
+    child process's own wall clock -- spawn to exit -- and is ``None``
+    whenever no command ran at all (a containment refusal, an unresolvable
+    interpreter). **``None`` is not zero**: a blocked precondition that never
+    started a process has no duration, and writing ``0.0`` there would read
+    as "ran instantly", which is a fabricated measurement of exactly the kind
+    0037 clause 4 refuses.
+
+    This is the toolkit's first T0 (deterministic-tier) measurement. Until it
+    existed, `desk.py` could put no cost on a card -- its `_base_options`
+    says so in as many words ("no measurement recorded for this stage yet"),
+    because the marker carried `finished_at` and nothing about how long the
+    run took. The Dispatcher's tier ladder needs the same number for its T0
+    row, and Phase 2's ledger migration already reserves a `run` event kind
+    carrying "stage, outcome, wall-clock" for it to land in. One field here,
+    now, produces that data for free from runs that were happening anyway.
+    """
     RUN_MARKERS_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "repo_key": repo_key, "stage_key": stage_key, "state": outcome.state,
         "detail": outcome.detail, "returncode": outcome.returncode,
         "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "duration_seconds": (round(duration_seconds, 3)
+                             if duration_seconds is not None else None),
     }
     p = _marker_path(repo_key, stage_key)
     tmp = p.with_name(p.name + ".tmp")
@@ -540,6 +560,11 @@ def run_stage(repo_key: str, stage_key: str, *, allowlist: dict[str, Path] | Non
         return outcome
 
     spawn = popen_factory or _default_popen
+    # The clock starts at spawn and stops after wait(), so it measures the
+    # child's own run and not this module's manifest bookkeeping. Every path
+    # that returns before this point writes its marker with no duration --
+    # nothing ran, so there is nothing to time.
+    started = time.perf_counter()
     try:
         proc = spawn(list(stage.command), cwd=str(cwd))
     except OSError as exc:
@@ -571,6 +596,7 @@ def run_stage(repo_key: str, stage_key: str, *, allowlist: dict[str, Path] | Non
         if heartbeat_fn:
             heartbeat_fn()
     returncode = proc.wait()
+    duration_seconds = time.perf_counter() - started
     stdout_text = "\n".join(lines)
     # curator_control.classify_outcome's "skipped" branch searches its ENTIRE
     # input text for the substring "skip" -- sound for K0-K5's own terse,
@@ -591,7 +617,8 @@ def run_stage(repo_key: str, stage_key: str, *, allowlist: dict[str, Path] | Non
     tail = "\n".join(lines[-10:])
     outcome = StageOutcome(stage=stage_key, state=state, detail=detail,
                            returncode=returncode, stdout_tail=tail)
-    write_run_marker(repo_key, stage_key, outcome)
+    write_run_marker(repo_key, stage_key, outcome,
+                     duration_seconds=duration_seconds)
     return outcome
 
 
