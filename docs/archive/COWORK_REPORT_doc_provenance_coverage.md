@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-19 · completed pair · with `docs/archive/COWORK_BRIEF_doc_provenance_coverage.md`
+> Superseded by nothing — `doc_census`'s live shape is generated into `docs/_architecture_shape.md` §1 · Original purpose: record what the provenance-and-coverage round changed in `doc_census.py`, task by task.
+> Accurate as a record of the build at `dec7dc5`. Three things not to read forward: its `docs/…` paths for the brief and walk-sheet now resolve under `docs/archive/`; the Task A `doc_type` list is the classifier as first written, and `ca011d8` touched the scanner afterwards; and "**Status:** built and gate-GREEN" describes 2026-07-28, not today.
+
 # Cowork report — document provenance and coverage
 
 **Brief:** `docs/COWORK_BRIEF_doc_provenance_coverage.md`. **Implements:**

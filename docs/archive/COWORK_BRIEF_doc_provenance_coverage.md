@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-19 · completed pair · with `docs/archive/COWORK_REPORT_doc_provenance_coverage.md`
+> Superseded by nothing — the behaviour it introduced is still live; the current shape is generated into `docs/_architecture_shape.md` §1 · Original purpose: give documents a provenance tier so a coverage ratio has an honest denominator (DECISIONS 0026).
+> Accurate history: the 2026-07-28 measurements (work estate 77 docs / 36 classified; personal estate 824 / 45, of which 646 were generated output in two projects) and the argument that a ratio computed over that denominator measures nothing. Read the `doc_type` list as origin, not current truth — `l5gntools/scanners/doc_census.py` has been touched once since, in `ca011d8`.
+
 # Cowork brief — document provenance and coverage: make the doc census mean something
 
 **Origin:** design thread, 2026-07-28, after the archiving sweep and the

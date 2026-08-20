@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=87253c8 -->
 
+> **ARCHIVED** 2026-08-19 · completed pair · walk-sheet for `docs/archive/COWORK_BRIEF_doc_provenance_coverage.md`
+> Superseded by nothing · Original purpose: the acceptance checks set for the provenance-and-coverage round.
+> Read as the checks that were set; `docs/archive/UAT_doc_provenance_coverage_results.md` records that each was reached. This pair's walk carried no deferred and no partial items — unusual in this estate, and the reason this pair was the first proposed for archiving in the 2026-08-19 sweep.
+
 # UAT walk-sheet — document provenance and coverage
 
 Pair: `docs/COWORK_BRIEF_doc_provenance_coverage.md` +

@@ -1,6 +1,10 @@
 <!-- uat: commit=dec7dc5 dirty=true host=gaming-rig walked=2026-07-28 -->
 <!-- gate-frozen: commit=dec7dc5 -->
 
+> **ARCHIVED** 2026-08-19 · completed pair (results) · results for `docs/archive/UAT_doc_provenance_coverage.md`
+> Superseded by nothing — this is testimony, kept intact · Original purpose: record what the 2026-07-28 walk on the gaming rig, against the personal estate, actually reached.
+> Accurate as written. Its "6 auditors, 50 testers" line is a frozen build-time count, already covered by this file's own `gate-frozen` marker; `dirty=true` is the pair's own uncommitted changes, stated in the body. No item was deferred or left unwalked.
+
 # UAT results — document provenance and coverage
 
 Walked against the pair `docs/COWORK_BRIEF_doc_provenance_coverage.md` +
