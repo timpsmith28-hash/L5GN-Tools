@@ -2255,7 +2255,7 @@ anything is built on it.
 
 ## 0050 — A source declares its own staleness as a feed; the Desk consumes declared feeds, and a source it cannot reach reads as unknown, never as fresh
 
-**Date:** 2026-08-19 · **Status:** proposed · **Builds on:** 0042 (a consumer
+**Date:** 2026-08-19 · **Status:** accepted 2026-08-20 · **Builds on:** 0042 (a consumer
 repo declares its own runnable stages; clause 7 — where a repo answers a
 question about itself, ask it), 0048 (the card anatomy; a card missing any
 field is not raised), 0047 (one process, modules in it), 0025 and 0036 (a
