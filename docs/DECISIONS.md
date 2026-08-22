@@ -2380,3 +2380,203 @@ three verbs could not express. That is legitimate — an unratified entry is
 meant to change on re-read — but it is also one extension banked before a
 single source is wired, and it should be counted as such rather than
 forgotten because it happened before the clock started.
+
+---
+
+## 0051 — A frozen work-estate snapshot may live on the personal rig as a legacy corpus; what may be derived from it is bounded by construction, not by intention
+
+**Date:** 2026-08-22 · **Status:** proposed · **Builds on:** 0023 (work-estate
+visibility is auth-gated), 0025 (visibility is scoped by surface), 0027
+(summary-only governs artefacts that travel; a local surface reads the source
+at render time), 0029 (a bundle that violates its own contract is replaced or
+removed whole, never scrubbed in place), 0036 (the cross-machine mesh stands
+down), 0044 (`data/knowledge_curator/` sits outside the deposit contract
+*because* Curator reports carry quoted source spans) · **Source:** design
+thread, 2026-08-22, at the Claude tenant migration
+
+**Context.** The migration forced every work repo to a clean, committed state
+on one day, and produced a dated snapshot of that moment: two git bundles
+(WizForgeAnalytics and its `sf-data-service` submodule, whose recorded
+pointer matches the submodule bundle's HEAD exactly), an estate report taken
+after the git work closed, and two conversation tarballs — the raw export and
+a processed pack.
+
+The walls this estate built — 0023, 0025, 0027 — exist so work data does not
+leak into a personal estate that syncs, publishes and deposits. They were
+never meant to make the operator work blind on their own side of the fence,
+and that is what they currently do: personal work intended to serve the work
+persona has no corpus to develop against, so the harness is being designed
+against imagination.
+
+Two properties of this particular artefact make it different from the live
+access those rulings refused. It is **frozen** — a snapshot of one day, which
+cannot grow, refresh or sync. And it is **bounded** — it can be deleted whole,
+in one act, leaving nothing behind. That is categorically unlike the
+cross-machine mesh 0036 stood down, which was a standing channel.
+
+One argument offered for it is explicitly **not** relied on here: that the
+corpus "goes stale by not being in the new loop". Staleness is an argument
+about *relevance* — it explains why the corpus will stop misleading the
+operator. It says nothing about confidentiality. Stale employer data is still
+employer data, and no clause below rests on that reasoning.
+
+The scrub is also not claimed to be complete. Measures were taken; leakage is
+possible. This entry is written on the assumption that something got through,
+which is why the mechanism is structural rather than a promise.
+
+**Decision.**
+
+1. **One named, dated snapshot — not a class of import.** The 2026-08-22
+   pre-migration snapshot may be held on the personal rig. It does not grow:
+   no sync, no refresh, no incremental top-up. A second import is a second
+   entry, with its own reasoning.
+2. **It lives at a declared path, outside every scanner root.** The corpus and
+   everything unpacked from it sit under one declared directory that no
+   estate scanner walks and no deposit carries. Enforced by an auditor over
+   the built deposit, the way 0044 enforced `data/knowledge_curator/` — a
+   path exclusion plus a check that the exclusion held, because 0029 was paid
+   for once already.
+3. **Derivatives inherit the containment.** Anything extracted from the
+   corpus — claims, knowledge indexes, match reports, census output — lands
+   under the same declared path and travels no further. A corpus that never
+   leaves the rig, whose `claims.json` reaches a deposit, is the same leak
+   with extra steps. 0027 applies at full strength: quoted spans are content,
+   and content does not travel.
+4. **The known carriers are named, so they can be checked rather than
+   assumed.** Commit metadata in `sf-data-service` carries an employer email
+   address, so any author rollup surfaces it. That repo also tracks nine daily
+   `logs/sf_service_*.jsonl` service logs — the highest-risk content in the
+   pack. Both are inside the declared path and neither may be read by a
+   surface that publishes.
+5. **Deletion is one act, and nothing outlives it.** The snapshot can be
+   removed whole. No index, cache or derived artefact may hold a copy that
+   survives that removal — 0029's posture, that testimony is kept intact or
+   removed rather than partially scrubbed, applied to a corpus rather than a
+   deposit.
+6. **The exclusion is declared, never silent.** A scanner that skips this path
+   says so in its output. An estate report that omits a directory inside its
+   own root, without saying it omitted one, is a confident wrong picture —
+   the failure INTENT §5 refuses everywhere else.
+
+**Consequences.**
+
+**The toolkit goes blind inside its own estate root, on purpose.** The
+scanners cannot see this folder, so `report.html` is incomplete by
+construction and every count it reports excludes it. That is the trade:
+visibility given up for containment. Clause 6 keeps it honest by making the
+gap visible, but a gap that is visible is still a gap, and any measurement
+taken across the estate from now on carries an asterisk this entry put there.
+
+**Governance tooling cannot govern this corpus.** Everything the estate built
+to notice drift, duplication and untracked risk is exactly what may not run
+here. The corpus is therefore held to a lower standard than the rest of the
+estate at the same moment it carries the most sensitive content in it. That is
+uncomfortable and it is stated rather than absorbed.
+
+**What would show this wrong.** If a derivative escapes the declared path —
+found in a deposit, a report, or a synced artefact — the mechanism failed and
+the corpus goes, not the mechanism. And if, in practice, useful work turns out
+to require lifting the containment, then the honest conclusion is that the
+wall was drawn in the wrong place and needs redrawing by its own entry — never
+that the containment is inconvenient and may be worked around case by case.
+
+---
+
+## 0052 — A skill scripts a procedure and cites its convention; the convention lives in the repo, because skills do not migrate
+
+**Date:** 2026-08-22 · **Status:** proposed · **Builds on:** 0042 (a consumer
+repo declares its own runnable stages — declaration belongs to the repo that
+owns the work), 0043 (a ruling from another repo is cited with its repo, at
+every mention), 0030 (`docs/README.md` §1's governing rule: a document earns
+its place by holding something that cannot be derived) · **Source:** design
+thread, 2026-08-22, and the work rig's `HANDOVER_ADDENDUM_2026-08-22.md` §5
+
+**Context.** Two independent findings, from opposite sides of the wall, in the
+same week.
+
+On this rig, `commit-scribe` measured the last 40 commits and found 33 of 40
+carrying the house prefix — with the seven failures clustered in a single build
+thread. The conclusion written into `CONVENTION_commits.md` was that a
+convention living in whoever happens to be typing is not a convention, and the
+fix was to put the format in a document and have the skill cite it.
+
+On the work rig, a migration handover reached the same conclusion from the
+other direction: reasoning had been put in commit bodies and a fresh thread
+reads files. Its §5 names the sharper case — **the sandbox-git hazard lives in
+one skill, which is the one thing that does not migrate** — and records that it
+cost two separate threads an hour each, the second one rediscovering what the
+first had already learned.
+
+Meanwhile 0050 predicted that two rigs sharing a contract would drift. Within
+seventy-two hours, the work-side copies of both the commit convention and the
+`commit-scribe` skill had diverged in size from the personal ones, with nothing
+recording what changed or why.
+
+Five skills now exist on this rig. Two of them have no convention document to
+cite, which means they carry their format themselves. That is the state this
+entry rules on, not a hypothetical.
+
+**Decision.**
+
+1. **A skill scripts a procedure with a judgement boundary.** A thing that
+   produces a fact with no judgement step is a script or a feed, and making it
+   a skill adds a layer that can drift without adding a decision anyone makes.
+2. **The convention lives in the repo that owns the work; the skill cites it
+   and does not restate it.** Where the two disagree, the convention wins and
+   the skill is the artefact that needs updating. This is 0042 clause 1 applied
+   to conventions rather than to runnable stages: declaration belongs to the
+   thing that owns the work, and a skill owns a procedure, never a rule.
+3. **No rule may have a skill as its only home.** A rule discovered while
+   writing or running a skill lands in a convention document first, and the
+   skill then cites it. A skill is a consumer of rules and never their
+   registry.
+4. **An environment rule belongs to the environment, not to a skill.** The
+   worked example is the sandbox-git hazard: never run plain git against a
+   mounted Windows repo from a sandbox. It binds every thread doing anything,
+   not only threads drafting commits, and it currently sits inside one skill —
+   which is precisely why it was learned twice.
+5. **A skill with no convention to cite says so in its own text and names the
+   debt.** It may carry the format in the interim; it may not do so silently.
+   `brief-scribe` is written this way and is the pattern.
+6. **A skill is edited from observed misbehaviour, and the edit cites the run
+   that prompted it.** Review-driven polish of a skill nobody has run is how a
+   procedure accumulates rules for problems it does not have.
+
+**Consequences.**
+
+**This entry creates debt on the day it is made.** `brief-scribe` and
+`round-closer` have no convention document, so under clause 5 they carry their
+format and announce themselves as the drift risk. That is honest and it is
+still debt, and it will be discharged slowly or not at all, because writing a
+convention is less interesting than writing the skill that uses it.
+
+**Adding a skill gets slower, and the friction lands at the worst moment.**
+Clause 3 means the convention comes first, which will feel like ceremony
+exactly when the procedure seems obvious — and a procedure that seems obvious
+while you are writing it is the one whose rules are least written down.
+
+**More documents, and conventions rot too.** This trades a rotting skill for a
+rotting document. The trade is taken because a document in `docs/` is visible
+to the gate, to `docs_board`, to the archivist and to a cold reader, whereas a
+stale rule inside a skill is visible to nobody until it is wrong in front of
+someone.
+
+**It does not fix cross-rig drift.** Two rigs will still diverge; 0050 already
+said so and this entry does not amend it. What changes is only that the
+divergence becomes **locatable** — two files that can be diffed — instead of
+invisible, which is two behaviours that can only be compared by watching them.
+That is a smaller win than it sounds and worth naming as smaller.
+
+**What would show this wrong.** Two counts, both cheap.
+
+**Count the rules whose only home is a skill.** Today it is at least one (the
+sandbox-git hazard, on the work rig). Under this entry it should trend to zero.
+If after three months the count is level or rising, the ruling is not being
+followed — and the honest reading then is not that the operator lacks
+discipline but that clause 3's cost is too high in practice, in which case this
+entry should be replaced by something cheaper rather than restated more firmly.
+
+**Count the rules rediscovered the hard way at the next rig or tenant switch.**
+The 2026-08-22 migration recorded two, one of them learned twice. If the next
+switch records the same number or more, this entry did not do the job it was
+written for, whatever the first count says.
