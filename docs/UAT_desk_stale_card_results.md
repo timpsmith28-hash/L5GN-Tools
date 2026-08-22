@@ -1,13 +1,13 @@
-<!-- uat: commit=fb6fa5c dirty=true host=LucasGoonPC walked=2026-08-19 -->
+<!-- uat: commit=fb6fa5c dirty=true host=LucasGoonPC walked=2026-08-20 -->
 
-# Results log — Decision Desk, stale-output triage (walked 2026-08-19, LucasGoonPC) — INTERIM, trial in progress
+# Results log — Decision Desk, stale-output triage (walked 2026-08-20, LucasGoonPC) — INTERIM, trial in progress
 
 Partner to `docs/UAT_desk_stale_card.md`.
 
 **This is not the trial's closing walk.** The brief's own Reporting section
 says results get stamped "after the trial, not after the build," on an
 open-ended trial that runs until ten real cards are ruled. As of this walk
-the events log shows **three** ruled (see D7 below), and the fixture itself
+the events log shows **four** ruled (see D7 below), and the fixture itself
 was only stood up today. Tim's explicit call, 2026-08-19: enough real
 adaptation has already happened mid-build (the silent-week cut, the
 occurrence-model rewrite, the "Rebuild now" ordering fix) to justify writing
@@ -53,16 +53,16 @@ section could cite even in principle. Every item, including the ones marked
   [DEFERRED] Not re-walked live this session. Covered by the FastAPI `TestClient` route tests written during the original Tasks 0–3 build, before this UAT round started; not re-confirmed against the real running app, since doing so would mean temporarily pulling both real allowlist entries and disrupting the live trial setup.
 
 - **D7** Rule ten real cards over the trial; was the evidence enough, or did you go hunting?
-  [DEFERRED — in progress] Recomputed directly from `data/desk/events.jsonl` via `desk.latency_summary()` itself (not by hand): **`cards_raised: 4, cards_ruled: 3, cards_resolved_without_ruling: 1`** as of this walk. The three ruled: the pre-fix button-test occurrence on `57860823ba56...` (disqualified, see D13), the post-fix recurrence on `652d40c4fd26...`, and the Trigger B occurrence on `78a5d9f55fb2...`. Seven to go. No "hunt" findings have been logged yet — evidence on the cards has been sufficient so far, but the sample is still small and entirely on one hand-built fixture, not yet on `l5gn-tools-fixture`'s real `estate_freshness` stage.
+  [DEFERRED — in progress] Recomputed directly from `data/desk/events.jsonl` via `desk.latency_summary()` itself (not by hand): **`cards_raised: 5, cards_ruled: 4, cards_resolved_without_ruling: 1`** as of this walk (2026-08-20). The four ruled: the pre-fix button-test occurrence on `57860823ba56...` (disqualified, see D13), the 2026-08-19 recurrence on `652d40c4fd26...`, the Trigger B occurrence on `78a5d9f55fb2...`, and a fresh recurrence on `652d40c4fd26...` sighted and ruled today, 2026-08-20T11:37–11:38Z — the first occurrence in this log genuinely spaced by more than a day from its predecessor rather than clustered inside one testing session. Six to go. No "hunt" findings have been logged against a card itself yet (one finding has been logged about the *instrument*, not a card — see the new project_wizard.py-untested finding, out of scope for this sheet); evidence on the cards has been sufficient so far, but the sample is still small and entirely on `uat-decisions-fixture`, not yet on `l5gn-tools-fixture`'s real `estate_freshness` stage.
 
 - **D8** The latency footer at trial's end: is the number believable?
-  [DEFERRED] Trial not at ten yet. Interim number for the record: `median_latency_hours ≈ 1.09` — not believable as a real decision-latency figure, because it's dominated by fixture rulings made within minutes of each other while actively testing, not by realistic patrol behaviour. This is exactly the "button test, not trial data" caveat Addendum (b) named for the pre-fix events, and it now applies to today's fixture-testing rulings too; the report says so explicitly rather than letting the number stand unqualified.
+  [DEFERRED] Trial not at ten yet. Interim number for the record: `median_latency_hours ≈ 11.34` as of 2026-08-20 (up from ≈1.09 on 2026-08-19) — moving in the right direction as same-session fixture-testing rulings get diluted by a real overnight gap, but still not believable as a stable decision-latency figure off four points. This is exactly the "button test, not trial data" caveat Addendum (b) named for the pre-fix events; the report says so explicitly rather than letting the number stand unqualified.
 
 - **D9** The falsifier, answered in one paragraph, yes or no.
   [DEFERRED] Cannot be answered honestly before the trial has real signal. Explicitly not answered in the accompanying report.
 
 - **D10** Fixture card resolve-and-re-raise → second sighting, second occurrence's own latency.
-  [EVIDENCE] Found directly in `events.jsonl`, not manufactured as a separate test: fingerprint `652d40c4fd26...` resolved at `2026-08-19T14:01:50Z`, then a fresh `sighting` fired at `2026-08-19T14:02:25Z` when it went stale again, and the ruling on that recurrence carries `occurrence_started_at: 2026-08-19T14:02:25Z` — the new occurrence's own opening timestamp, not the first occurrence's `13:37:47Z`.
+  [EVIDENCE] Found directly in `events.jsonl`, not manufactured as a separate test: fingerprint `652d40c4fd26...` resolved at `2026-08-19T14:01:50Z`, then a fresh `sighting` fired at `2026-08-19T14:02:25Z` when it went stale again, and the ruling on that recurrence carries `occurrence_started_at: 2026-08-19T14:02:25Z` — the new occurrence's own opening timestamp, not the first occurrence's `13:37:47Z`. Reinforced by a second, independent recurrence a day later: the same fingerprint resolved and re-sighted again on 2026-08-20T11:37:39Z, ruled at 11:38:11Z with `occurrence_started_at` matching that new sighting, not either earlier occurrence's. Three occurrences on one fingerprint now, each correctly distinct.
 
 - **D11** Rule the same open card more than once → one latency figure, `cards_ruled` +1.
   [EVIDENCE] Fingerprint `78a5d9f55fb2...` was ruled three times without the card clearing in between (`snooze` at `14:14:41Z`, `snooze` again at `14:22:55Z`, `rebuild` at `14:23:10Z`), and all three carry the identical `occurrence_started_at: 2026-08-19T14:14:18Z`. `latency_summary()`'s recomputation confirms this occurrence contributes exactly one entry to `cards_ruled` (part of the `cards_ruled: 3` total in D7), not three.
