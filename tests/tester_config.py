@@ -1,4 +1,5 @@
-"""Verify machine-config selection, default fallback, and root resolution.
+"""Verify machine-config selection, unmatched-host refusal, per-artefact
+authorship, and root resolution.
 
 Hermetic: points the loader at a throwaway machines.json so it never depends on
 the real committed config (whose machine keys users are meant to rename)."""
@@ -19,24 +20,56 @@ def run() -> list[str]:
             "default": {"role": "producer", "estate": "unknown"},
             "TEST-HOST": {"role": "producer", "estate": "personal",
                           "roots": ["/tmp/estate_a", "/tmp/estate_b"]},
+            # The live hostname is declared in the fixture on purpose: since
+            # an unmatched host now raises, a bare `config.machine()` against
+            # a throwaway config would refuse on every machine and the
+            # _hostname assertion below could never run.
+            config.hostname(): {"role": "producer", "estate": "unknown"},
         }), encoding="utf-8")
 
         orig_machines, orig_local = config._MACHINES, config._LOCAL
         config._MACHINES = mfile
         config._LOCAL = Path(td) / "local.json"      # intentionally absent
         try:
-            # Unknown host -> falls back to the 'default' entry, never crashes.
-            unknown = config.machine("no-such-host-xyz-123")
-            if unknown.get("_matched") is not False:
-                v.append("config: unknown host should report _matched == False")
-            if unknown.get("role") != "producer":
-                v.append(f"config: unknown host should inherit default role, got {unknown.get('role')!r}")
-            if unknown.get("estate") != "unknown":
-                v.append(f"config: unknown host should inherit default estate, got {unknown.get('estate')!r}")
+            # Unknown host -> RAISES. It must not inherit 'default': a rootless
+            # default answering for an unknown host is how a sandbox run
+            # produces a confident snapshot of an empty estate
+            # (TOOLKIT_notes_2026-08-23 §4).
+            try:
+                config.machine("no-such-host-xyz-123")
+                v.append("config: an unmatched host must raise UnknownHostError, "
+                         "not fall back to 'default' -- a rootless default is a "
+                         "confident answer about nothing")
+            except config.UnknownHostError as exc:
+                # The message has to carry the fix, or the raise is just a
+                # crash with better manners.
+                if "TEST-HOST" not in str(exc):
+                    v.append(f"config: UnknownHostError should name the hosts that "
+                             f"ARE configured so the fix is legible from the "
+                             f"failure alone, got: {exc}")
+                if "no-such-host-xyz-123" not in str(exc):
+                    v.append(f"config: UnknownHostError should name the host it "
+                             f"refused, got: {exc}")
 
-            # Default entry declares no roots -> estate_roots is None (legacy).
-            if config.estate_roots("no-such-host-xyz-123") is not None:
-                v.append("config: default (no roots) should yield estate_roots() == None")
+            # Everything resolved through machine() inherits the refusal --
+            # there is no back door that still answers for an unknown host.
+            for label, call in (("estate_roots", lambda: config.estate_roots("no-such-host-xyz-123")),
+                                 ("mesh_enabled", lambda: config.mesh_enabled("no-such-host-xyz-123")),
+                                 ("authored_artefacts", lambda: config.authored_artefacts("no-such-host-xyz-123"))):
+                try:
+                    call()
+                    v.append(f"config: {label}() answered for an unmatched host; "
+                             f"every accessor resolving through machine() must "
+                             f"inherit its refusal")
+                except config.UnknownHostError:
+                    pass
+
+            # configured_hosts lists real hosts only -- not 'default', not
+            # the _comment keys.
+            hosts = config.configured_hosts()
+            if "TEST-HOST" not in hosts or "default" in hosts:
+                v.append(f"config: configured_hosts() should list declared hosts "
+                         f"only, excluding 'default' and _comment keys: {hosts}")
 
             # A host that declares roots resolves to a list of Paths.
             roots = config.estate_roots("TEST-HOST")
@@ -81,12 +114,16 @@ def run() -> list[str]:
             if r.get("_matched") is not True:
                 v.append("config: a host present in local.json should report _matched True")
 
-            # local default with no host section still overlays a host miss.
-            r2 = config.machine("OTHER")
-            if r2.get("vault") != "l-default" or r2.get("estate") != "unknown":
-                v.append(f"config: unmatched host should take local[default] overlay, got {r2}")
-            if r2.get("_matched") is not False:
-                v.append("config: host absent from both files should report _matched False")
+            # A host absent from BOTH files raises, even though both files
+            # carry a 'default' section that would otherwise have answered.
+            # This is the case that used to silently succeed.
+            try:
+                config.machine("OTHER")
+                v.append("config: a host absent from both files must raise even "
+                         "when both files declare a 'default' -- default is a "
+                         "base layer under a matched host, not a stand-in")
+            except config.UnknownHostError:
+                pass
         finally:
             config._MACHINES, config._LOCAL = orig_machines, orig_local
 
@@ -150,7 +187,73 @@ def run() -> list[str]:
         finally:
             config._AUTHORS = orig_authors
 
+    v.extend(_check_artefact_authorship())
     v.extend(_check_scoped_roots())
+    return v
+
+
+def _check_artefact_authorship() -> list[str]:
+    """`authors` declares which artefacts a host authors (DECISIONS 0053
+    clause 5, as applied by `run.py pin bump`).
+
+    The property that matters is that authorship is **per artefact and not
+    per role**: the fixture below is deliberately two hosts with the *same*
+    role and different `authors` lists, because that is the real estate --
+    LucasGoonPC and 10280L are both `producer` and only one of them authors
+    the conversation map. A mechanism keyed on `role` would pass a weaker
+    fixture and fail this one.
+    """
+    v: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        mfile = Path(td) / "machines.json"
+        mfile.write_text(json.dumps({
+            "default": {"role": "producer"},
+            "AUTHOR-RIG": {"role": "producer",
+                            "authors": ["config/map.tsv", "docs/thing.md"]},
+            "CONSUMER-RIG": {"role": "producer"},
+        }), encoding="utf-8")
+        orig_machines, orig_local = config._MACHINES, config._LOCAL
+        config._MACHINES, config._LOCAL = mfile, Path(td) / "absent.json"
+        try:
+            if not config.authors_artefact("config/map.tsv", "AUTHOR-RIG"):
+                v.append("config: a declared artefact should read as authored on "
+                         "the host that declares it")
+            if config.authors_artefact("config/map.tsv", "CONSUMER-RIG"):
+                v.append("config: a host that declares no 'authors' must author "
+                         "nothing -- same role as the authoring rig is exactly "
+                         "the case this must not be fooled by")
+            if config.authors_artefact("config/never_declared.tsv", "AUTHOR-RIG"):
+                v.append("config: an artefact no host declares must not read as "
+                         "authored anywhere -- an undeclared artefact is a config "
+                         "gap, never permission")
+
+            # Separator style must not decide the answer: the caller may hold
+            # a Windows path and the config a posix one, and a pin refusal
+            # that hinged on a backslash would be the 8.3 class of bug again.
+            if not config.authors_artefact("config\\map.tsv", "AUTHOR-RIG"):
+                v.append("config: authorship must compare posix-normalised, so a "
+                         "backslash path from a Windows caller still matches")
+            if not config.authors_artefact(Path("config/map.tsv"), "AUTHOR-RIG"):
+                v.append("config: authors_artefact should accept a Path as well "
+                         "as a string")
+
+            hosts = config.authoring_hosts("config/map.tsv")
+            if hosts != ["AUTHOR-RIG"]:
+                v.append(f"config: authoring_hosts should name where an artefact "
+                         f"IS authored, so a refusal can say so: {hosts}")
+            if config.authoring_hosts("config/never_declared.tsv") != []:
+                v.append("config: an undeclared artefact should have no authoring "
+                         "hosts, reported as empty rather than as everyone")
+
+            declared = config.authored_artefacts("AUTHOR-RIG")
+            if declared != ["config/map.tsv", "docs/thing.md"]:
+                v.append(f"config: authored_artefacts should return the declared "
+                         f"list, normalised: {declared}")
+            if config.authored_artefacts("CONSUMER-RIG") != []:
+                v.append("config: a host with no 'authors' key should report an "
+                         "empty list, not None and not a crash")
+        finally:
+            config._MACHINES, config._LOCAL = orig_machines, orig_local
     return v
 
 

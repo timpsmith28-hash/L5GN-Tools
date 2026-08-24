@@ -10,6 +10,10 @@ Precedence (lowest -> highest):
     machines.json["default"]  <  machines.json[host]
     <  local.json["default"]  <  local.json[host]
 
+``default`` is a **base layer under a matched host, never a fallback for an
+unmatched one**. A host listed in neither file raises
+:class:`UnknownHostError` -- see :func:`machine` for why that is loud.
+
 This module imports stdlib only and does NOT import :mod:`l5gntools.common`,
 so ``common`` can depend on it without an import cycle.
 """
@@ -28,6 +32,21 @@ _LOCAL: Path = CONFIG_DIR / "local.json"
 _AUTHORS: Path = CONFIG_DIR / "authors.json"
 
 
+class UnknownHostError(RuntimeError):
+    """This machine is listed in neither ``machines.json`` nor ``local.json``.
+
+    Raised rather than fallen back from. A ``default`` entry with no ``roots``
+    resolves to a machine that owns nothing, and every scanner downstream then
+    reports a confident, complete-looking picture of an empty estate -- the
+    failure INTENT §5 refuses everywhere else. The case that forced this was a
+    sandbox run: the sandbox's hostname matched nothing, `default` answered,
+    and the run produced a snapshot of nothing with no indication that it had.
+
+    The message names the hosts that *are* configured, so the fix (add a
+    section, or run somewhere real) is legible from the failure alone.
+    """
+
+
 def _load(path: Path) -> dict:
     """Read a JSON object file; return {} on missing/empty/malformed (never raise)."""
     if path.exists() and path.stat().st_size > 0:
@@ -43,15 +62,41 @@ def hostname() -> str:
     return socket.gethostname()
 
 
+def configured_hosts() -> list[str]:
+    """Every host key declared across both files, sorted. Keys beginning ``_``
+    are comments and ``default`` is a base layer, so neither is a host."""
+    names: set[str] = set()
+    for data in (_load(_MACHINES), _load(_LOCAL)):
+        names.update(k for k in data
+                     if not str(k).startswith("_") and k != "default")
+    return sorted(names)
+
+
 def machine(host: str | None = None) -> dict:
     """Resolved config for ``host`` (defaults to this machine).
 
-    Falls back to the ``default`` entry when the host is not listed, so an
-    un-configured machine still gets a sane, non-crashing config.
+    **Raises** :class:`UnknownHostError` when ``host`` appears in neither
+    ``machines.json`` nor ``local.json``. It does *not* fall back to
+    ``default``: an unmatched host resolving to a rootless entry is how a run
+    somewhere it was never meant to run -- a sandbox, a fresh box, a renamed
+    machine -- produces a confident snapshot of nothing. ``default`` still
+    layers underneath a host that *is* matched, which is the job it was added
+    for.
     """
     host = host or hostname()
     machines = _load(_MACHINES)
     local = _load(_LOCAL)
+
+    if host not in machines and host not in local:
+        known = configured_hosts()
+        raise UnknownHostError(
+            f"host {host!r} is declared in neither config/machines.json nor "
+            f"config/local.json, so this machine has no estate, no roots and "
+            f"no role. Configured hosts: "
+            f"{', '.join(known) if known else '(none)'}. Add a section keyed "
+            f"on this hostname, or run this on a machine that has one -- the "
+            f"'default' entry is a base layer under a matched host, not a "
+            f"stand-in for a missing one.")
 
     entry: dict = {}
     entry.update(machines.get("default", {}))
@@ -60,7 +105,12 @@ def machine(host: str | None = None) -> dict:
     entry.update(local.get(host, {}))
 
     entry["_hostname"] = host
-    entry["_matched"] = host in machines or host in local
+    # Retained for vendored consumers that read it; now always True, because
+    # the unmatched case raises above rather than returning. A field with one
+    # possible value is the thing 0048 clause 4 warns trains the eye past it --
+    # it is kept only so a consumer pinned to an older toolkit does not
+    # KeyError, and should go the next time this module's shape is reviewed.
+    entry["_matched"] = True
     return entry
 
 
@@ -74,6 +124,55 @@ def mesh_enabled(host: str | None = None) -> bool:
     entry in ``config/machines.json`` or ``config/local.json`` (same
     precedence as every other machine setting -- see :func:`machine`)."""
     return bool(machine(host).get("mesh"))
+
+
+def _authored_paths(entry: dict) -> list[str]:
+    """The ``authors`` list of a resolved machine entry, as posix strings."""
+    declared = entry.get("authors")
+    if not isinstance(declared, list):
+        return []
+    return [str(p).replace("\\", "/").strip("/") for p in declared if p]
+
+
+def authored_artefacts(host: str | None = None) -> list[str]:
+    """Repo-relative artefact paths ``host`` declares itself the author of.
+
+    ``authors`` is a per-host, **per-artefact** declaration, not a role.
+    Authorship could not be carried by ``role`` because the estate has two
+    hosts that are both ``producer`` -- the gaming rig authors the
+    conversation map and the work laptop consumes a hand-copied version of
+    it, and no value of one shared field distinguishes those without saying
+    which artefact is meant.
+    """
+    return _authored_paths(machine(host))
+
+
+def authors_artefact(rel_path, host: str | None = None) -> bool:
+    """True iff ``host`` declares itself the author of ``rel_path`` (a
+    repo-relative path). Compared as posix strings after stripping separators,
+    so a caller may pass either a ``Path`` or a string in either slash style.
+    """
+    wanted = str(rel_path).replace("\\", "/").strip("/")
+    return wanted in authored_artefacts(host)
+
+
+def authoring_hosts(rel_path) -> list[str]:
+    """Every configured host that declares itself an author of ``rel_path``.
+
+    Used to make a refusal informative -- "not authored here" is only half a
+    message; the other half is where it *is* authored. Empty means no host
+    declares it at all, which is a config gap and is reported as one rather
+    than read as permission.
+    """
+    wanted = str(rel_path).replace("\\", "/").strip("/")
+    out: list[str] = []
+    for host in configured_hosts():
+        try:
+            if wanted in _authored_paths(machine(host)):
+                out.append(host)
+        except UnknownHostError:      # pragma: no cover -- host came from the files
+            continue
+    return out
 
 
 def author_aliases() -> dict:

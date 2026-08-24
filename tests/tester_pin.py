@@ -142,4 +142,99 @@ def run() -> list[str]:
         if "anchor=" in no_anchor_comment:
             v.append(f"pin: format_pin_comment should omit anchor= when None: {no_anchor_comment!r}")
 
+    v.extend(_check_bump_refuses_where_not_authored())
+    return v
+
+
+def _check_bump_refuses_where_not_authored() -> list[str]:
+    """`run.py pin bump` refuses where the artefact is not authored
+    (DECISIONS 0053 clause 5).
+
+    This is the counterpart to case 2 above. `verify_pin` correctly reports a
+    mismatch and correctly prints `run.py pin bump` as the remedy -- and on a
+    host holding a hand-copied artefact, following that remedy fingerprints
+    the stale copy and commits it over the authoritative pin, converting a
+    false alarm into real corruption *and turning the gate green*
+    (`TOOLKIT_notes_2026-08-23` §1.1a). The refusal is what makes the printed
+    remedy safe wherever the check can fire.
+
+    Driven through `run.main` rather than a helper, because a refusal is only
+    worth anything if it sits on the path an operator actually takes after
+    reading the finding.
+    """
+    import contextlib
+    import io
+    import json
+
+    import run as run_cli
+    from l5gntools import config
+
+    v: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        artefact = Path(td) / "map.tsv"
+        artefact.write_text("id\ttitle\n1\tone\n", encoding="utf-8")
+        pin_path = artefact.with_name(artefact.name + ".sha256")
+        # `pin bump` reports an out-of-repo artefact by its posix path, so
+        # that is the string an `authors` entry has to match here.
+        declared = artefact.resolve().as_posix()
+
+        mfile = Path(td) / "machines.json"
+        orig_machines, orig_local = config._MACHINES, config._LOCAL
+        config._MACHINES, config._LOCAL = mfile, Path(td) / "absent.json"
+        try:
+            # --- this host authors nothing -> refuse, and write nothing ------
+            mfile.write_text(json.dumps({
+                config.hostname(): {"role": "producer"},
+                "OTHER-RIG": {"role": "producer", "authors": [declared]},
+            }), encoding="utf-8")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                code = run_cli.main(["pin", "bump", str(artefact), "--apply"])
+            message = err.getvalue()
+            if code == 0:
+                v.append("pin bump: an artefact this host does not author must "
+                         "refuse with a non-zero exit, not succeed quietly")
+            if pin_path.exists():
+                v.append("pin bump: a refusal must write no pin file at all -- a "
+                         "refusal that still wrote is the corruption the refusal "
+                         "exists to prevent")
+            if "OTHER-RIG" not in message:
+                v.append(f"pin bump: a refusal should name where the artefact IS "
+                         f"authored; 'not here' alone leaves the operator stuck: "
+                         f"{message!r}")
+            if "0053" not in message:
+                v.append("pin bump: a refusal should cite the ruling it enforces, "
+                         "so it reads as a rule and not as a malfunction")
+
+            # --- an artefact NO host declares is refused, not permitted -----
+            mfile.write_text(json.dumps({
+                config.hostname(): {"role": "producer"},
+            }), encoding="utf-8")
+            err2 = io.StringIO()
+            with contextlib.redirect_stderr(err2):
+                code2 = run_cli.main(["pin", "bump", str(artefact), "--apply"])
+            if code2 == 0 or pin_path.exists():
+                v.append("pin bump: an artefact no host declares must refuse -- "
+                         "an undeclared artefact is a config gap, never a "
+                         "default-open permission to pin it anywhere")
+
+            # --- the authoring host still bumps normally --------------------
+            mfile.write_text(json.dumps({
+                config.hostname(): {"role": "producer", "authors": [declared]},
+            }), encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code3 = run_cli.main(["pin", "bump", str(artefact), "--apply"])
+            if code3 != 0 or not pin_path.is_file():
+                v.append(f"pin bump: the authoring host must still be able to "
+                         f"bump -- the refusal must not have become a blanket "
+                         f"one (exit {code3}, pin written {pin_path.is_file()})")
+            else:
+                written = pin.parse_pin_file(pin_path)
+                expected = hashlib.sha256(artefact.read_bytes()).hexdigest()
+                if written is None or written.sha256 != expected:
+                    v.append(f"pin bump: the authoring host's bump should record "
+                             f"the artefact's real digest: {written}")
+        finally:
+            config._MACHINES, config._LOCAL = orig_machines, orig_local
     return v

@@ -760,10 +760,24 @@ def _cmd_census(args: argparse.Namespace) -> int:
 
 
 def _cmd_config() -> int:
+    """`python run.py config` -- what this machine resolves to.
+
+    This is the one command that must keep working on an unconfigured host,
+    because it is the command that tells you why you are unconfigured. It
+    catches `UnknownHostError` and prints the diagnosis (this hostname, the
+    hosts that are declared) rather than letting the traceback be the
+    answer -- but it still exits non-zero, because an unconfigured machine
+    is a real state and reporting it through a green exit would be the
+    silent skip 0053 clause 4 refuses.
+    """
     from l5gntools import config
-    m = config.machine()
-    print(f"hostname : {m['_hostname']}"
-          f"{'' if m['_matched'] else '   (no matching entry -> using default)'}")
+    try:
+        m = config.machine()
+    except config.UnknownHostError as exc:
+        print(f"hostname : {config.hostname()}   (NOT CONFIGURED)")
+        print(f"\n{exc}", file=sys.stderr)
+        return 2
+    print(f"hostname : {m['_hostname']}")
     print(f"role     : {m.get('role', '(unset)')}")
     print(f"estate   : {m.get('estate', '(unset)')}")
     roots = config.estate_roots()
@@ -776,6 +790,13 @@ def _cmd_config() -> int:
     for key in ("vault", "estates_dir", "push_target"):
         if m.get(key):
             print(f"{key:<9}: {m[key]}")
+    authored = config.authored_artefacts()
+    if authored:
+        print("authors  :")
+        for a in authored:
+            print(f"  - {a}")
+    else:
+        print("authors  : (none -- `run.py pin bump` refuses every artefact here)")
     return 0
 
 
@@ -843,7 +864,23 @@ def _cmd_pin(rest: list[str]) -> int:
     Bumping is a deliberate act, invoked by a human who just ratified a
     change to the artefact -- it does not decide whether a bump is
     warranted (0045 clause 5: working ahead of a pin is a normal state, not
-    an error)."""
+    an error).
+
+    **It refuses where the artefact is not authored** (0053 clause 5: a
+    remedy printed by a check must be safe to run wherever that check can
+    fire). `auditor_conversation_map_pin` prints this command as its remedy
+    and that check fires on every host. On the authoring rig the remedy is
+    right; on a host holding a hand-copied artefact it computes a pin from a
+    stale copy and commits it over the authoritative fingerprint --
+    replacing a correct pin with a wrong one, converting a false alarm into
+    real corruption of the audit trail, and turning the gate green. That was
+    reachable by following the printed instruction exactly
+    (`TOOLKIT_notes_2026-08-23` §1.1a).
+
+    Authorship is declared **per artefact** in `config/machines.json` /
+    `config/local.json` under `authors`, not derived from `role`: this estate
+    has two `producer` hosts, and the distinction that matters is which one
+    authors *this file*."""
     p = argparse.ArgumentParser(prog="run.py pin")
     sub = p.add_subparsers(dest="subcommand", required=True)
     bump = sub.add_parser("bump", help="(re)compute and write a pin for an artefact")
@@ -869,6 +906,33 @@ def _cmd_pin(rest: list[str]) -> int:
         rel = artefact.relative_to(TOOLKIT_ROOT).as_posix()
     except ValueError:
         rel = artefact.as_posix()
+
+    # --- 0053 clause 5: refuse where this artefact is not authored ---------
+    # Checked before the hash is computed, so a refusal reads as a refusal
+    # and never as a near-miss that printed a digest first.
+    try:
+        authored_here = config.authors_artefact(rel)
+        elsewhere = config.authoring_hosts(rel)
+    except config.UnknownHostError as exc:
+        print(f"pin bump: REFUSED -- {exc}", file=sys.stderr)
+        return 2
+    if not authored_here:
+        where = (f"It is authored on: {', '.join(elsewhere)}." if elsewhere else
+                 "No configured host declares itself its author, which is a "
+                 "config gap, not permission -- add it to the authoring host's "
+                 "'authors' list before pinning it anywhere.")
+        print(f"pin bump: REFUSED -- {rel} is not authored on "
+              f"{config.hostname()}.\n"
+              f"  {where}\n"
+              f"  Pinning it here would fingerprint this machine's copy and "
+              f"commit that over the authoritative pin. If the copy is stale "
+              f"the gate then goes green against a wrong pin, which is worse "
+              f"than the red you are trying to clear (DECISIONS 0053 clause "
+              f"5).\n"
+              f"  If this host really is the author now, say so in config "
+              f"('authors': [\"{rel}\"]) rather than working around this.",
+              file=sys.stderr)
+        return 2
 
     digest = pin_mod.hash_file(artefact)
     pin_path = artefact.with_name(artefact.name + ".sha256")
