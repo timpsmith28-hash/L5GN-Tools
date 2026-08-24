@@ -91,8 +91,28 @@ certutil -hashfile config\mcf_conversation_map.tsv SHA256    # plain Windows
 `.sha256` is not swallowed by `/config/*conversation_map.tsv` — that pattern
 ends at `.tsv`, so the fingerprint stays tracked with no negation rule needed.
 
-Nothing checks this yet. A stale fingerprint is currently silent — it is an
-audit trail you maintain, not a gate that maintains you.
+**`auditors/auditor_conversation_map_pin.py` checks this, and it is a gate.** A
+mismatch fails `verify.py`, which `.githooks/pre-commit` runs, so it blocks a
+commit. This paragraph said the opposite until 2026-08-24 — *"nothing checks
+this yet… an audit trail you maintain, not a gate that maintains you"* — which
+was true when 0040 clause 4 committed the pin and false from the moment 0045's
+auditor landed. It was caught on a work rig (`TOOLKIT_notes_2026-08-23` §1.1a),
+not here, because `auditor_doc_claims` does not cover this file.
+
+**`run.py pin bump` refuses on a host that does not author the map.** Authorship
+is declared per artefact under `authors` in `machines.json` / `local.json`, and
+this rig declares it. On a host holding a hand-copied map, bumping would
+fingerprint the stale local copy and commit that over the authoritative pin —
+converting a false alarm into real corruption, and turning the gate green
+(DECISIONS 0053 clause 5).
+
+One state the auditor still gets wrong, recorded here because it is why a
+consumer host can see red on a clean checkout: the map is untracked and travels
+by hand, the pin is tracked and travels by `git pull`, so a host whose copy is
+older than the current pin is not drifting — it has simply not been re-handed.
+`CLEAN_STATES` covers *no copy* and *current copy* and fails on the state in
+between, which is where a consumer machine spends most of its life. Splitting
+that by host is 0053's work, not this document's.
 
 ---
 
