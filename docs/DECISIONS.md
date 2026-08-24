@@ -2582,7 +2582,7 @@ switch records the same number or more, this entry did not do the job it was
 written for, whatever the first count says.
 ---
 
-## 0053 — The gate emits verdicts only: a check that can go red without a defect belongs outside it, split by host role and never by a third exit state
+## 0053 — The gate emits verdicts only: a check that can go red without a defect belongs outside it, split by a committed per-host declaration and never by a third exit state
 
 **Date:** 2026-08-24 · **Status:** proposed · **Builds on:** 0031 (a non-gating
 check surface reports findings and never issues a verdict — the *witness*
@@ -2634,9 +2634,18 @@ gate had a finding-producer inside it.
    this host*. A check that can go red for a reason which is not a defect on
    the host it is running on does not belong in the gate.
 2. **Where a check is a defect on one host and an observation on another, it
-   is split by host role**, resolved through `config.machine()`'s existing
-   role — never by a flag, an environment variable, or a caller's argument.
-   The authoring host gates; the consumer host does not.
+   is split by a committed, per-host declaration**, resolved through
+   `config.machine()` — never by a flag, an environment variable, or a
+   caller's argument. **The declaration has to be the thing the check
+   actually turns on.** `role` is the right axis where the question is what a
+   host is *for*; it is the wrong axis for the pin, because this estate has
+   two `producer` hosts and the question is which of them authors a given
+   artefact. Authorship is therefore declared **per artefact** — `authors` in
+   `machines.json` / `local.json` — and an artefact no host declares is
+   refused everywhere rather than permitted everywhere. A check that invents
+   a split no declaration carries has chosen its axis instead of reading it,
+   which is the same failure as a flag with better manners. The authoring
+   host gates; a host holding a copy does not.
 3. **There is no third exit state.** Two states, and the hook keeps one
    meaning. A state that means "red, but you may proceed" is waived by
    definition, and once one red is waivable the operator is judging every red
@@ -2676,6 +2685,16 @@ free: it will evict checks that people are used to seeing in the gate, and
 each eviction will feel like a loss of coverage at the moment it happens. The
 honest reading of that feeling is that the coverage was in the wrong channel,
 not that it was worth having there.
+
+**Clause 2 buys its correctness with a declaration someone has to remember to
+write.** An artefact nobody declares is refused everywhere, which is the right
+default and is also a new way to be stuck: the operator meets a refusal whose
+fix is a config edit, at the moment they were trying to clear a red. That is
+preferred to the alternative — an undeclared artefact being pinnable anywhere
+— because the failure it replaces was silent corruption of an audit trail, and
+this one announces itself and names the file to edit. It is still friction
+that did not exist before, and it lands on the authoring rig as much as
+anywhere.
 
 **What would show this wrong.** Two counts, and the second is the one that
 could kill the entry.
