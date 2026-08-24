@@ -2580,3 +2580,113 @@ entry should be replaced by something cheaper rather than restated more firmly.
 The 2026-08-22 migration recorded two, one of them learned twice. If the next
 switch records the same number or more, this entry did not do the job it was
 written for, whatever the first count says.
+---
+
+## 0053 — The gate emits verdicts only: a check that can go red without a defect belongs outside it, split by host role and never by a third exit state
+
+**Date:** 2026-08-24 · **Status:** proposed · **Builds on:** 0031 (a non-gating
+check surface reports findings and never issues a verdict — the *witness*
+category, which never gates), 0045 (verification reports and never repairs; a
+tool that silently re-pins has destroyed the only signal the pin exists to
+give), 0042 (per-host configuration is resolved through `config.machine()`,
+not re-derived) · **Source:** the work task force's `TOOLKIT_notes_2026-08-23`
+§1.1 and §1.1a, produced from a `verify.py` run on a clean checkout at
+`25f1120`
+
+**Context.** `verify.py` went red on a clean checkout of a consumer host. One
+of the three failures was `auditor_conversation_map_pin` reporting a hash
+mismatch — and the auditor was working exactly as 0045 clause 2 requires: it
+stated both hashes and repaired nothing.
+
+The diagnosis, done on the consumer side before the complaint was sent, found
+no drift at all. The map is untracked and travels by hand; its pin is tracked
+and travels by `git pull`. The pin on that host was five days newer than the
+map it fingerprints, because the map had been edited and re-pinned on the
+authoring rig and the copy had never been re-handed. Nothing was corrupt. The
+auditor's `CLEAN_STATES` covers *no copy* and *current copy* and fails on the
+state in between — which is the state every consumer machine spends most of its
+life in.
+
+Two things follow, and only one of them is about the pin.
+
+**The gate lost its meaning, not its correctness.** A correct, informative
+"understand this before re-pinning" and a genuine "the scanner is broken"
+arrive through the same exit status, and `.githooks/pre-commit` cannot tell
+them apart. The complaint's own sentence is the hazard: the next red gets
+waved through by the same reasoning that waved this one, and the one after
+that.
+
+**The printed remedy is destructive where the finding can appear.** The
+finding says to re-pin deliberately with `run.py pin bump`. On the authoring
+rig that is right. Run on a consumer machine it computes a pin from a stale
+copy and commits it over the authoritative fingerprint — replacing a correct
+pin with a wrong one, converting a false alarm into real corruption, and
+turning the gate green. Nothing currently says not to.
+
+0031 already drew the line this entry needs. It invented the **witness**: a
+deterministic surface that emits findings, never a verdict, and never gates.
+What it did not say is the converse, and the converse is what broke here — the
+gate had a finding-producer inside it.
+
+**Decision.**
+
+1. **`verify.py` emits verdicts only.** A red means *this tree is defective on
+   this host*. A check that can go red for a reason which is not a defect on
+   the host it is running on does not belong in the gate.
+2. **Where a check is a defect on one host and an observation on another, it
+   is split by host role**, resolved through `config.machine()`'s existing
+   role — never by a flag, an environment variable, or a caller's argument.
+   The authoring host gates; the consumer host does not.
+3. **There is no third exit state.** Two states, and the hook keeps one
+   meaning. A state that means "red, but you may proceed" is waived by
+   definition, and once one red is waivable the operator is judging every red
+   rather than reading one.
+4. **A check that cannot make the distinction degrades to a named clean
+   state**, and says in its own output which state it took. A skip that
+   announces itself is a finding; a skip that is silent is indistinguishable
+   from a pass, which is the failure INTENT §5 refuses everywhere else.
+5. **A remedy printed by a check must be safe to run wherever that check can
+   fire.** Where it is not, the tool it names refuses on the hosts where it
+   would be wrong — `run.py pin bump` refuses where the artefact is not
+   authored. A remedy that is correct on one machine and destructive on
+   another is a defect in the *message*, not an error by the operator who
+   followed it.
+6. **0045 clause 2 is untouched.** Report, never repair, still stands
+   unchanged. This entry rules on *where* a report is emitted and *who* it
+   gates, not on whether it may fix what it finds.
+
+**Consequences.**
+
+**The gate gets weaker on consumer machines, deliberately and specifically.**
+After this, a consumer host's `verify.py` will not tell it that its
+hand-copied map is stale. That knowledge does not move somewhere better by
+itself — it is simply not in the gate any more, and unless a witness (0031) or
+a declared feed (0050) picks it up, it is lost. The trade is taken because a
+gate that reports non-defects stops being read at all, and a channel nobody
+reads carries nothing either. But the loss is real between the split and the
+replacement, and that gap should be measured rather than assumed brief.
+
+**Green now means different things on different machines.** A role-dependent
+gate is harder to reason about than "green is green", and it makes "did the
+gate pass" an incomplete question — the answer needs a host. That is a genuine
+complication and it is the price of clause 1.
+
+**Existing auditors may already fail clause 1.** Applying this entry is not
+free: it will evict checks that people are used to seeing in the gate, and
+each eviction will feel like a loss of coverage at the moment it happens. The
+honest reading of that feeling is that the coverage was in the wrong channel,
+not that it was worth having there.
+
+**What would show this wrong.** Two counts, and the second is the one that
+could kill the entry.
+
+**Count reds on a clean checkout, per host, over a month.** If a consumer
+host's `verify.py` still goes red for things that are not defects on that
+host, clause 1 is not being applied and the split has not actually happened.
+
+**Count defects found later that a pre-split gate would have caught.** If
+moving finding-producers out of `verify.py` means real defects start reaching
+commits on consumer machines, the line was drawn in the wrong place — and the
+right response is to move it, not to re-argue clause 3. If that count is
+non-zero within the first quarter, this entry is wrong in its detail even if
+right in its principle.
