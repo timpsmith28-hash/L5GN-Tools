@@ -2383,7 +2383,7 @@ forgotten because it happened before the clock started.
 
 ---
 
-## 0051 — A frozen work-estate snapshot may live on the personal rig as a legacy corpus; what may be derived from it is bounded by construction, not by intention
+## 0051 — A work-estate corpus may live on the personal rig, bounded by construction rather than by intention: conversations are named frozen snapshots, the repo mirror is replaced whole and never accumulated
 
 **Date:** 2026-08-22 · **Status:** proposed · **Builds on:** 0023 (work-estate
 visibility is auth-gated), 0025 (visibility is scoped by surface), 0027
@@ -2414,6 +2414,24 @@ cannot grow, refresh or sync. And it is **bounded** — it can be deleted whole,
 in one act, leaving nothing behind. That is categorically unlike the
 cross-machine mesh 0036 stood down, which was a standing channel.
 
+**Amended before ratification, 2026-08-24.** Clause 1 originally allowed one
+named snapshot and nothing else. Two needs surfaced immediately: the repo
+half wants refreshing when the work side asks the personal side for something
+that requires reading it, and the conversation half wants one further
+snapshot so the new tenant's shape can be checked against the old one rather
+than assumed. Refusing both would have made the entry a rule kept by not
+using it.
+
+The distinction the amended clause turns on is **accumulation, not
+frequency.** A git bundle of a repo *replaces* its predecessor — a newer
+bundle contains the older one's history, so holding the new one and deleting
+the old leaves exactly one artefact and loses nothing. Conversation exports
+do not work that way: each is a distinct slice of time, and a second one sits
+*beside* the first rather than superseding it. Clause 1's original fear was a
+corpus that grows without anyone deciding it should. A mirror replaced whole
+does not do that; a pile of exports does. So the two halves get different
+rules, and the frequency question turns out to have been the wrong axis.
+
 One argument offered for it is explicitly **not** relied on here: that the
 corpus "goes stale by not being in the new loop". Staleness is an argument
 about *relevance* — it explains why the corpus will stop misleading the
@@ -2426,10 +2444,40 @@ which is why the mechanism is structural rather than a promise.
 
 **Decision.**
 
-1. **One named, dated snapshot — not a class of import.** The 2026-08-22
-   pre-migration snapshot may be held on the personal rig. It does not grow:
-   no sync, no refresh, no incremental top-up. A second import is a second
-   entry, with its own reasoning.
+1. **What may be held is named here, and the two halves are governed
+   differently — by whether they accumulate, not by how often they arrive.**
+
+   **(a) Conversation exports are named, dated, frozen snapshots.** The
+   2026-08-22 pre-migration export may be held. **One further export may be
+   taken after the migration**, for the single stated purpose of checking the
+   new tenant's shape against the old — pre and post, two named artefacts,
+   compared. Neither grows: no sync, no refresh, no incremental top-up. A
+   *third* export is a third entry, with its own reasoning, because each one
+   sits beside the last rather than replacing it and a pile is what this
+   clause exists to refuse.
+
+   **(b) The repo mirror is replaced whole, on demand, and never
+   accumulated.** Bundles of the WizForgeAnalytics program repo and every
+   submodule beneath it may be re-taken on the work rig and carried across by
+   hand. Three conditions bound it, and all three are structural rather than
+   intentions:
+
+   - **A run needs a stated reason recorded with it** — specifically, that
+     the work side has asked the personal side for something that requires
+     reading the repo. No request, no bundle. This is not a schedule and must
+     never become one; a periodic mirror is a sync with extra steps, and 0036
+     already stood down the standing channel.
+   - **Landing a new mirror removes the previous one and everything cloned
+     from it, as one act.** Exactly one mirror exists at any moment. This is
+     clause 5's posture applied per-refresh rather than only at the end, and
+     it is what keeps the corpus from growing while being refreshed.
+   - **The transport is manual and one-directional.** Nothing on the personal
+     rig may fetch, pull or reach the work rig, and a clone made from a
+     bundle has its origin removed so it cannot. What arrives, arrives
+     because a person carried it.
+
+   Clauses 2 to 6 apply to everything named here, unchanged and at full
+   strength.
 2. **It lives at a declared path, outside every scanner root.** The corpus and
    everything unpacked from it sit under one declared directory that no
    estate scanner walks and no deposit carries. Enforced by an auditor over
@@ -2473,12 +2521,46 @@ here. The corpus is therefore held to a lower standard than the rest of the
 estate at the same moment it carries the most sensitive content in it. That is
 uncomfortable and it is stated rather than absorbed.
 
+**A refreshed mirror carries more of the highest-risk content than the one it
+replaced, and clause 1(b) does nothing about that.** Clause 4 names the nine
+`logs/sf_service_*.jsonl` service logs as the worst of it. A bundle taken
+three months from now carries every log written since, and "replaced whole"
+means the quantity of employer content on this rig ratchets up each time
+while the *number* of artefacts stays at one. Holding one file is not the
+same as holding less, and the clause's honest description of what it bounds
+is the artefact count, not the exposure. The exposure grows with the work.
+
+**"A stated reason" is the weakest clause in this entry, because the operator
+is the one who states it.** Every other bound here is structural — a path a
+scanner cannot walk, an origin that is removed, a predecessor deleted. This
+one is a habit, and it is the clause that will quietly become a schedule if
+it fails. It is written this way because the alternative — a mechanism
+deciding when a bundle is warranted — needs a thing that can see the request,
+and no such thing exists on this side of the wall.
+
 **What would show this wrong.** If a derivative escapes the declared path —
 found in a deposit, a report, or a synced artefact — the mechanism failed and
 the corpus goes, not the mechanism. And if, in practice, useful work turns out
 to require lifting the containment, then the honest conclusion is that the
 wall was drawn in the wrong place and needs redrawing by its own entry — never
 that the containment is inconvenient and may be worked around case by case.
+
+**Two counts for clause 1(b), and the first is the one that kills it.**
+
+**Count mirror refreshes that were not preceded by a request from the work
+side.** Clause 1(b) rests entirely on there being a reason each time. One
+refresh taken because it had been a while, or because a build thread was
+about to open and it seemed prudent, is the clause failing in the only way it
+can fail — and it will not look like a failure at the time, it will look like
+being organised. If that count is not zero at three months, 1(b) should be
+replaced by something structural or withdrawn, not restated.
+
+**Count mirrors held simultaneously.** The answer is one, always, by
+construction. Two — an old clone left beside a new one because deleting felt
+premature — means "replaced whole" was aspirational and the corpus is
+accumulating exactly as clause 1(a) refuses for exports. Cheap to check and
+worth checking, because it is the difference between this entry's reasoning
+and its wishful version.
 
 ---
 
