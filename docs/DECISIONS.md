@@ -2795,7 +2795,7 @@ right in its principle.
 
 ## 0054 — Configuration is split by who is entitled to decide a value, not by whether it varies; a machine fact is derived and confirmed rather than typed, and a packaged tool carries no estate layer
 
-**Date:** 2026-08-25 · **Status:** proposed · **Builds on:** 0012 (`scope` is a
+**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0012 (`scope` is a
 config tag on the producer's root, never inferred from folder nesting), 0036
 (the mesh stood down — the objection was the standing channel, not the
 transfer), 0042 clause 2 (the wizard allowlist is a reviewed, committed edit —
@@ -2947,7 +2947,7 @@ collapsed to three layers plus corpus.
 
 ## 0055 — The project registry is curated corpus, not configuration: its rules live in the repo rather than inside the artefact, and any judgement the generator can undo is a key rather than a sentence
 
-**Date:** 2026-08-25 · **Status:** proposed · **Builds on:** 0010
+**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0010
 (`project_link` is estate- and account-agnostic by design), 0011 (link values
 predating the registry are reset, not trusted), 0012 (the registry is three
 tiers — program, project, repo — and `scope` is a config tag on the producer's
@@ -3064,7 +3064,7 @@ recorded but not practised.
 
 ## 0056 — 0044 clause 4 is enforced by the pattern, not by an enumerated path; and a pin records when and where it was taken as well as what
 
-**Date:** 2026-08-25 · **Status:** proposed · **Builds on:** 0040 clause 2 (maps
+**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0040 clause 2 (maps
 are per source, one file each) and clause 4 (a curated map is never committed;
 a `<map>.sha256` fingerprint is committed beside it, because an untracked file
 produces no diff), 0044 clause 4 (the ratified map is resolved from the declared
@@ -3197,7 +3197,7 @@ wrong.
 
 ## 0057 — A skill is estate IP with one source of truth and branches rather than copies; it declares the kind of authority it needs, resolves it at run time, and stops rather than working from its own text
 
-**Date:** 2026-08-26 · **Status:** proposed · **Builds on:** 0042 clause 1
+**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0042 clause 1
 (declaration belongs to the repo that owns the work), 0043 (a ruling from
 another repo is cited with its repo, at every mention), 0045 (a pinned copy is
 verified read-only and reported, never repaired), 0050 (a source declares its
@@ -3244,18 +3244,28 @@ artefact produced a phantom 757-line rewrite in `Work_Bridge` on the same day.
 **And what forces a ruling now rather than a note.** The operator has settled
 the ownership question the work rig put: **the skills are his IP, `L5GN-Tools`
 is the source of truth for the published ones, and a task force may tailor its
-own.** That answer only works if tailoring produces something diffable. Today
-it produces a copy in a plugin directory that sits outside every repository,
-tracked by nothing — which is the third recorded instance of one class, after
-the conversation map and `config/local.json`, and the third found by a person
-putting two documents side by side rather than by any tool.
+own.** That answer only works if tailoring produces something diffable.
+
+**This entry's first draft assumed it did not, and was wrong.** It was written
+believing the shared skills lived in a plugin directory outside every
+repository, tracked by nothing — the third instance of a class that already
+included the conversation map and `config/local.json`. `git ls-files
+.claude/skills/` says otherwise: all five are tracked, and have been. The
+source-of-truth problem clause 1 was drafted to solve did not exist for them.
+What the class does still describe is the **account store** the skills sync
+into, and the work rig's vendored copies, neither of which any tool compares.
 
 **Decision.**
 
-1. **A skill is estate IP with one source of truth.** `L5GN-Tools` publishes
-   every skill this estate authors. The plugin or account store from which a
-   skill loads is a **deployment**, never the source, and a change made only
-   there has not happened as far as the estate is concerned.
+1. **A skill is estate IP with one source of truth, and that source is the
+   repo's own load path.** `L5GN-Tools` publishes every skill this estate
+   authors from `.claude/skills/`, which is tracked and is also where Claude
+   Code loads project skills from. **That identity is the point**: what is
+   published is what runs, so there is no gap for a publish-versus-load
+   divergence to live in. The account or plugin store a skill is synced into is
+   a **deployment**, never the source, and a change made only there has not
+   happened as far as the estate is concerned. **A second tracked skills
+   directory is a defect, not a publication surface.**
 2. **A task force branches; it never copies.** A tailored variant is a git
    branch of the published skill, offered back as a merge. A copy outside git
    is not a variant — it is an untracked divergence, and it is what this entry
@@ -3292,11 +3302,12 @@ convention on this rig until Thread E lands. So this entry creates a dependency
 it does not discharge: **three of five skills are inoperative under clause 5 on
 the day it binds**, and that is correct behaviour rather than a bug.
 
-**Clause 2 costs the convenience of editing where it runs.** The plugin store
-is where a skill is edited today, and it is not git — so every change acquires
-a round trip that a single operator, mid-round, will be tempted to skip. The
-honest expectation is that this clause is broken before it is kept, and the
-count in the falsifier is how we will know.
+**Clause 2's cost is smaller than this entry first claimed.** The five shared
+skills are already tracked at `.claude/skills/`, so editing where they run *is*
+editing in git, and the round trip this clause was expected to impose does not
+exist for them. What remains is the discipline of branching rather than editing
+on top, and of offering the branch back — a habit rather than a mechanism, and
+the falsifier's second count is how we will know whether it held.
 
 **Clauses 3 and 4 make every skill longer and slower to write**, and add a
 resolution step to a thing whose whole appeal is that it starts immediately.
