@@ -1,5 +1,13 @@
 # Cowork brief — every skill gets an authority it can resolve, and the repo gets the skills
 
+**Where you are:** `C:\Users\timps\Documents\GitHub\L5GN-Tools`, host
+`LucasGoonPC`.
+
+**Read before Task 1, in this order:** `CLAUDE.md` at the repo root — it is the
+map, and it is where the environment hazards live; then this brief in full;
+then `docs/UAT_gap_closure.md`, which is the walk-sheet of record and is not a
+summary of what follows.
+
 **Draft-status:** written 2026-08-27, to be built the same day. Nothing here
 describes remembered code — every "already exists" claim below was checked
 against the tree while drafting, and the checks are named at each task so they
@@ -158,6 +166,13 @@ brief), §4 (`[G]`/`[H]`, and *"every `[H]` is a cost, count them"*, and that an
   true here.
 - **Their §7** proposes an orientation-round pattern for seven migrating repos.
   Not our situation. Drop it.
+
+**Add, and it is ours rather than theirs.** In the parts-of-a-brief list: **a
+brief opens with the two things a cold thread cannot derive — where it is
+(repo and host), and what to read first.** Everything after that is a pointer,
+so the brief carries its own entry point and opening a round needs no separate
+instruction. This brief's own header is the worked example, and it was added
+after the brief was drafted without one — which is the evidence for the rule.
 
 **Lands:** `docs/CONVENTION_briefs.md`.
 

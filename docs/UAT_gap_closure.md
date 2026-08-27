@@ -39,6 +39,8 @@ A failed check is the walk working. Record it and do not soften it.
       `git config --get core.hooksPath`.
 - [ ] `[G]` `brief-scribe`'s line-12 self-declared drift risk is now false, and
       the report says so.
+- [ ] `[G]` The parts-of-a-brief list requires a brief to open with its repo,
+      its host, and what to read first.
 
 ## Task 3 — the skills
 
