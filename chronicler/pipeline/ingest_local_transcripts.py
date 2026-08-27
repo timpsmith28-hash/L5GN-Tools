@@ -127,6 +127,55 @@ def load_project_keymap() -> dict:
     return keymap
 
 
+def load_project_meta() -> dict:
+    """registry id -> the registry entry, for the rows this module has to create.
+
+    Same file and same iteration order as ``load_project_keymap`` above; kept as
+    a second reader rather than folding both into one return value so the
+    keymap's signature (which the tester substitutes) is unchanged."""
+    import json
+    registry_path = resolve_registry_path()
+    if not registry_path.is_file():
+        return {}
+    with open(registry_path, "r", encoding="utf-8") as f:
+        registry = json.load(f)
+    return {e["id"]: e for e in iter_folder_backed_entries(registry)}
+
+
+def upsert_project(cur, project_id: str, meta: dict) -> None:
+    """Ensure a ``projects`` row exists for the registry id before a thread
+    references it.
+
+    ``threads.project_link`` is a foreign key into ``projects``, and every
+    pipeline connection is opened with ``foreign_keys=ON``
+    (``l5gntools.dbsafe.apply_pragmas``), so writing an attribution for a
+    registry id with no row raises ``IntegrityError`` and takes the whole
+    ingest down with it.
+
+    ``relink.upsert_project`` already does exactly this, and says why: both
+    writers must "produce identical rows for the same target instead of one
+    keying on a folder name and the other on an id." This module is the second
+    writer and did not have it -- ruling 2's attribution path was therefore
+    unreachable in practice. It went unnoticed because the registry could not be
+    resolved on this rig (``resolve_registry_path`` points at a path that does
+    not exist here), so ``load_project_keymap`` returned ``{}`` and no
+    attribution was ever attempted. Setting ``CHRONICLER_REGISTRY_PATH``
+    exposed it as a hard failure on 2026-08-27.
+
+    Same statement as relink's, deliberately -- a curated name never overwrites
+    an existing one with NULL, and an existing ``repo_folder_path`` wins."""
+    entry = meta.get(project_id, {})
+    cur.execute(
+        """INSERT INTO projects (project_id, name, repo_folder_path, source_system_id)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(project_id) DO UPDATE SET
+             name=COALESCE(excluded.name, projects.name),
+             repo_folder_path=COALESCE(projects.repo_folder_path, excluded.repo_folder_path)""",
+        (project_id, entry.get("canonical_name", project_id),
+         entry.get("repo_folder_path"), None),
+    )
+
+
 def match_cwd_to_project(cwd: str, keymap: dict) -> str | None:
     """The real `cwd`'s segments and adjacent segment-pairs, compact-matched
     against the registry -- same matching rule as extract_path_mentions'
@@ -158,7 +207,7 @@ def match_cwd_to_project(cwd: str, keymap: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 def ingest_session(cur, sess: ParsedSession, source_file: Path, account: str,
-                    keymap: dict) -> dict:
+                    keymap: dict, meta: dict) -> dict:
     project_id = None
     confidence = "none"
     review_status = "pending"
@@ -167,6 +216,8 @@ def ingest_session(cur, sess: ParsedSession, source_file: Path, account: str,
         if project_id:
             confidence = "exact"
             review_status = "auto"
+            # The FK target has to exist before the thread references it.
+            upsert_project(cur, project_id, meta)
     # Cowork sessions (ruling 2): never attempted here -- project_link stays
     # None/'none'/'pending', picked up later by the evidence pipeline.
 
@@ -220,6 +271,7 @@ def run(apply: bool, host: str | None = None) -> dict:
     account = f"{SOURCE}-{estate}"
 
     keymap = load_project_keymap()
+    meta = load_project_meta()
 
     init_db()
     conn = get_connection()
@@ -246,7 +298,7 @@ def run(apply: bool, host: str | None = None) -> dict:
                     results.append({"thread_id": sess.thread_id, "store": store_name,
                                      "skipped": reason})
                     continue
-                rec = ingest_session(cur, sess, tf.path, account, keymap)
+                rec = ingest_session(cur, sess, tf.path, account, keymap, meta)
                 rec["parse_errors"] = len(sess.parse_errors)
                 results.append(rec)
                 log_rows.append((SOURCE, account, file_hash(tf.path),

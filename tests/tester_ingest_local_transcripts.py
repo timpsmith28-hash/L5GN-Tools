@@ -40,8 +40,15 @@ def _write(path: Path, text: str) -> None:
 
 def _schema(conn) -> None:
     conn.executescript(
+        # projects + the REAL foreign key on threads.project_link. Without both,
+        # this fixture is a weaker vault than production and cannot fail on an
+        # attribution written for a registry id that has no projects row -- the
+        # defect that took the 2026-08-27 ingest down. See _get_connection.
+        "CREATE TABLE projects(project_id TEXT PRIMARY KEY, name TEXT,"
+        " repo_folder_path TEXT, source_system_id TEXT);"
         "CREATE TABLE threads(thread_id TEXT PRIMARY KEY, source TEXT, account TEXT, title TEXT,"
-        " created_at TEXT, updated_at TEXT, status TEXT, project_link TEXT,"
+        " created_at TEXT, updated_at TEXT, status TEXT,"
+        " project_link TEXT REFERENCES projects(project_id),"
         " project_confidence TEXT, review_status TEXT, raw_ref TEXT, parser_version TEXT);"
         "CREATE TABLE messages(message_id TEXT PRIMARY KEY, thread_id TEXT, seq INTEGER,"
         " role TEXT, content TEXT, created_at TEXT);"
@@ -109,6 +116,9 @@ def run() -> list[str]:
 
         def _get_connection():
             conn = sqlite3.connect(str(db_path))
+            # dbsafe.apply_pragmas sets this on every production connection, so a
+            # fixture that omits it tests a database the estate never runs.
+            conn.execute("PRAGMA foreign_keys = ON;")
             conn.row_factory = sqlite3.Row
             return conn
 
@@ -156,6 +166,14 @@ def run() -> list[str]:
             conn = _get_connection()
             threads = {r["thread_id"]: r for r in conn.execute("SELECT * FROM threads").fetchall()}
             conn.close()
+
+            conn = _get_connection()
+            projects = {r["project_id"]: r["name"]
+                        for r in conn.execute("SELECT * FROM projects").fetchall()}
+            conn.close()
+            if projects.get("my-repo") != "MyRepo":
+                v.append("an exact CLI attribution must create its projects row "
+                         f"(FK target) from the registry; got {projects!r}")
 
             if len(threads) != 2:
                 v.append(f"expected 2 threads (empty session skipped), got {len(threads)}: {list(threads)}")
