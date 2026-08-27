@@ -2791,3 +2791,544 @@ commits on consumer machines, the line was drawn in the wrong place — and the
 right response is to move it, not to re-argue clause 3. If that count is
 non-zero within the first quarter, this entry is wrong in its detail even if
 right in its principle.
+---
+
+## 0054 — Configuration is split by who is entitled to decide a value, not by whether it varies; a machine fact is derived and confirmed rather than typed, and a packaged tool carries no estate layer
+
+**Date:** 2026-08-25 · **Status:** proposed · **Builds on:** 0012 (`scope` is a
+config tag on the producer's root, never inferred from folder nesting), 0036
+(the mesh stood down — the objection was the standing channel, not the
+transfer), 0042 clause 2 (the wizard allowlist is a reviewed, committed edit —
+the clause untracking silently narrowed), 0045 (a pin is verified read-only and
+reported, never repaired), 0048 clause 4 (a field with one possible value
+trains the eye past it), 0050 (a source declares its own staleness; one that
+cannot be reached reads as unknown, never as fresh), 0051 (a work-estate corpus
+is bounded by construction rather than by intention), 0052 (a convention lives
+in the repo that owns the work; a skill cites it and never houses a rule), 0053
+clause 2 (a check that splits per host reads a declaration rather than choosing
+an axis; `authors` is declared per artefact in `machines.json` / `local.json`)
+· **Source:** design thread, 2026-08-25; the work task force's
+`2026-08-25_REPLY_harness_census`, §"The root path" and its objection to the
+`authors` mechanism · **Convention:** `docs/CONVENTION_config.md`
+
+**Context.** Three findings in one week, and the third is the one that changes
+the shape.
+
+**The consumer held the correction.**
+`config/local.json` on this rig carries `D:/Work/Github/MCF` for host `10280L`.
+That path has never existed on that machine; the work rig's own copy reads
+`C:/Users/tim.smith/Github/MCF` and has for days. So this is not "one copy went
+stale, probably the consumer's" — it is a consumer machine holding a correction
+the **authoring** machine does not have, on the file whose entire job is to
+carry machine truth outward. The file is untracked on both sides, so no diff on
+either machine could ever have shown it. It was found by two people putting two
+documents side by side, which is not a mechanism.
+
+**The transport destroys machine-written state.** The survey behind
+`CONVENTION_config.md` §1 found that `config/local.json` is written at runtime
+by `governor.set_profile` and `curator_control.set_curator_model` — both
+careful read-modify-writes — while the file's own comment instructs
+`scp config/local.json <host>:…`. A governor profile learned on the knight and
+a curator model chosen on the work rig are destroyed by the next ship, silently,
+on both ends. `curator_control`'s docstring says *"this never writes anything
+that travels"*; the file travels, just not by git.
+
+**And a tool left the estate and worked.** On 2026-08-24 `Claude_Migration` —
+built substantially out of this repo — was run by a **second operator** on a
+machine this estate has never configured, and succeeded first time. It has no
+per-machine config file. It enumerates `%LOCALAPPDATA%\Packages`, shows the
+human what it found, and takes an override. Its `vendor/l5gntools/config.py` is
+a stub whose `machine()` raises if called, so it shipped no host list, no paths
+and no project names — by construction.
+
+That is the same value this repo asks a human to look up on one machine and
+type into a file describing a different machine. Two tools, one estate, opposite
+architectures, and the one that has never been able to assume is the one that
+works on a stranger's laptop.
+
+None of the above is carelessness. Each is what happens when four independent
+questions — *does it vary*, *who decides*, *may it be published*, *how does it
+arrive* — are answered by a single tracked-versus-untracked binary.
+
+**Decision.**
+
+1. **Configuration is split by authority, into five layers**: tool policy
+   (the code decides), estate policy (the estate's author decides), machine
+   facts (only the machine can know), operator facts (the person decides), and
+   estate corpus, which is not configuration at all and is ruled on separately
+   (0055, 0056). *Does the value vary per machine* is not the split; **who is
+   entitled to decide it** is. `role` and `cowork_transcripts_home` both vary
+   per machine and belong to different layers.
+2. **A machine fact is derived, reported, confirmed — not typed.** Code
+   enumerates what it can observe about the machine it is running on, reports
+   what it found *including nothing*, and proceeds on what a human confirmed. A
+   configured value is the **override** for when derivation fails, and it is
+   permitted only where derivation is impossible or has failed.
+3. **One precedence ladder, everywhere, for every value**: tool policy <
+   estate policy < operator file < machine file < environment. **An environment
+   variable is a debugging override only** — never where a value lives — and
+   any value resolved from one is reported as such.
+4. **A value is resolved once, at the edge, and passed inward as an argument.**
+   No module resolves configuration in the middle of its own work. A call site
+   that resolves for itself invents its own order, which is how four ladders
+   came to exist for one class of value with nothing able to force them to
+   agree.
+5. **No layer travels by whole-file overwrite.** A file one machine writes at
+   runtime and another overwrites wholesale cannot keep anything, and loses it
+   silently at both ends.
+6. **`authors` is estate policy and lives in the tracked file only.** This
+   resolves the ambiguity 0053 clause 2 left open by naming both files. An
+   untracked declaration of authorship makes *"no host declares this artefact"*
+   and *"the declaration has not been shipped here yet"* the same input with two
+   meanings — the first is a config gap, the second is a stale copy, and 0053
+   clause 2 requires the check to read a declaration rather than choose. A
+   declaration that can be un-shipped is not a declaration.
+7. **A tool packaged out of this repo carries no estate and no operator
+   layer**, and any estate-shaped import it retains is stubbed to **raise**, not
+   defaulted and not silently empty. A quiet default on a stranger's machine
+   produces a confident answer about an estate that is not there.
+8. **Malformed or unrecognised configuration fails loudly.** A typo in a config
+   file may not be indistinguishable from an absent one.
+
+**Consequences.**
+
+**Clause 4 is expensive and touches working code.** It reaches `vault_reader`,
+`backup`, `census`, `scrape` and `db` — and `db.py` cannot be brought to it
+without changing module-level constants that every importer already binds to.
+That is a real refactor with no user-visible feature at the end of it, and it
+is the clause most likely to be deferred indefinitely while the other seven
+land.
+
+**Clause 2 trades a known failure for an unknown one.** A typed path is wrong
+when the machine changes and right forever otherwise. A derived path is right
+across machines and breaks when a vendor changes a store layout — and it breaks
+on every machine at once rather than on one. The trade is taken because the
+current failure mode is silent and the new one is loud, not because derivation
+is safer.
+
+**Clause 8 will make a previously-working machine stop working**, at least
+once, on a key someone misspelled years ago that has been quietly ignored ever
+since. That is the point of the clause and it will still be annoying on the day.
+
+**The operator layer has one occupant and may be over-fitted to a single
+event.** One person ran one tool once. Building a whole layer on that is a bet
+that it recurs; if it does not, clause 1 has five layers doing four layers'
+work, and the honest remedy then is to collapse it rather than to defend it.
+
+**This does not fix cross-rig drift**, and 0050 already said it would not. What
+changes is that drift becomes **locatable** — two files that can be compared by
+a command — rather than discoverable only by two people reading documents to
+each other. That is a smaller win than it sounds, and worth naming as smaller.
+
+**More files, and a second place to look.** Four hosts split across two files
+each is eight where there was one. The compensation is that no file describes a
+machine its author cannot see.
+
+**What would show this wrong.** Three counts, all cheap.
+
+**Count the machine facts still typed, three months after the split.** Today
+every path in the machine layer is hand-entered. If the machine file still
+holds hand-typed store roots then, clause 2 was aspiration rather than a rule,
+and the honest reading is that derivation costs more than it saves — in which
+case replace it with a *currency stamp* on the typed value rather than
+restating clause 2 more firmly.
+
+**Count divergences found by a tool versus by a person.** Today the score is
+0-1: the only config divergence this estate has ever detected was found by two
+people comparing documents. If, after origin reporting exists, the next
+divergence is still found by a human, the reporting is not being run and
+building more of it will not help.
+
+**Count the layers that ever hold more than one occupant.** If in six months
+the operator layer still has one person and the tool-policy layer holds nothing
+that estate policy could not have held, clause 1 over-fitted and should be
+collapsed to three layers plus corpus.
+---
+
+## 0055 — The project registry is curated corpus, not configuration: its rules live in the repo rather than inside the artefact, and any judgement the generator can undo is a key rather than a sentence
+
+**Date:** 2026-08-25 · **Status:** proposed · **Builds on:** 0010
+(`project_link` is estate- and account-agnostic by design), 0011 (link values
+predating the registry are reset, not trusted), 0012 (the registry is three
+tiers — program, project, repo — and `scope` is a config tag on the producer's
+root), 0040 clause 4 (a curated artefact that cannot be diffed carries a
+committed fingerprint instead), 0045 (a pin is reported, never repaired), 0051
+(containment by construction), 0052 (a convention lives in the repo; a skill
+cites it), 0054 (configuration is split by authority, and corpus is not
+configuration) · **Source:** design thread, 2026-08-25; the survey recorded in
+`docs/CONVENTION_project_registry.md` §1 · **Convention:**
+`docs/CONVENTION_project_registry.md`
+
+**Context.** 0054 clause 1 puts corpus outside configuration and defers the
+rest. This entry is the rest, for the registry.
+
+**The convention was inside the artefact it governs.** `config/project_registry.json`
+carries roughly a page of rules in four comment keys — `_comment`, `_schema`,
+`_id_scheme`, `_low_signal_body`. They are good rules: what the three tiers
+mean, the evidence that settled them, why the id scheme won, what
+`low_signal_body` does and the measurement behind it, how the generator merges,
+how to ship the file and how to confirm the destination. All of it lives in a
+**gitignored** file. A machine that lacks the registry also lacks the rules for
+building one, and the rules cannot be diffed, reviewed or cited apart from the
+data they describe.
+
+That is 0052's finding with a file in the role of the person, and 0052's remedy
+applies unchanged.
+
+**Nothing verifies it.** 31 projects, 4 programs, 30 entries carrying curated
+aliases — and zero auditors, no committed fingerprint, and no stamp recording
+when it was authored or on which host. The neighbouring artefact of the same
+class has all three (0040 clause 4), so the mechanism exists and was never
+applied here.
+
+**Two files share one name.** The curated seed at
+`config/project_registry.json` and the generated registry `build_registry.py`
+writes to relink's `REGISTRY_PATH` have different authors, different lifecycles
+and different edit rules. They are also resolved by two independent code paths
+under two different environment variables.
+
+**Decision.**
+
+1. **The registry is curated corpus.** It is authored from local knowledge that
+   no scan can recover — the census clusters, the scrape title sheet, live
+   queries, a person's judgement about what is one effort — and configuration's
+   only role is to resolve **where it is found**.
+2. **Its rules live in a convention document in the repo, and the artefact
+   cites rather than carries them.** Where the two disagree the convention
+   wins (0052 clause 2, applied to a file).
+3. **The generator never removes or rewrites manual-provenance content, and a
+   human never edits the generated registry.** One rule, both directions.
+4. **Any human judgement the generator can undo is expressed as a key, not as a
+   note.** `seed_suppress` is the worked example: a prose note explaining that
+   an alias is a false friend does not stop the seeder re-deriving it every
+   run; the key does. A judgement recorded only in prose is a judgement that
+   will be silently reversed.
+5. **Identity is the registry `id`, at every tier, in every consumer** — never a
+   `canonical_name`, never a folder name. The id is what survives the renames
+   this estate actually performs.
+6. **Tier is decided by evidence, and the entry records the reasoning.** A repo
+   is an incarnation of an existing project unless the evidence clusters say
+   otherwise, and the entry carries a `note` saying which and why.
+7. **The registry declares its currency.** It carries a pin recording origin,
+   anchor, date and host, on the same reported-never-repaired footing as 0045,
+   so a consumer copy older than the pin reads as **not current** rather than as
+   fine (0050).
+8. **Names never cross a boundary; counts, shape and schema may.** A redaction
+   that leaves the ids intact leaves the join intact and is not a redaction.
+
+**Consequences.**
+
+**Clause 7 creates a red state on every consumer that has not been re-handed**,
+which is exactly the condition 0053 moved outside the gate. So this clause buys
+a signal and simultaneously commits us to keeping that signal out of
+`verify.py` — and a report nobody is forced to read is a report that will not
+be read. That tension is not resolved here.
+
+**Clause 4 grows the schema, and prose will keep being written anyway** because
+a sentence is faster than deciding what key it should have been. The likely
+real outcome is a mixture, with the keys covering the cases someone was burned
+by and notes covering the rest.
+
+**Clause 2 costs the convenience that the rules travelled with the file.**
+Today a machine handed the registry is handed its rules in the same act. After
+this, the rules arrive by `git pull` and the data by hand, which is precisely
+the split that produced 0053's whole problem for the conversation map. We are
+choosing that asymmetry knowingly because the alternative is rules nobody can
+read without the data.
+
+**Moving the artefact out of `config/` breaks two resolvers and every path that
+names it**, including one on the knight that must match `relink.REGISTRY_PATH`.
+This entry does not schedule that move; it establishes that the artefact's
+class is corpus, which is what makes the move correct when it happens.
+
+**What would show this wrong.**
+
+**Count judgements the generator reversed.** Every time a re-run re-derives an
+alias a human had ruled out in prose, that is one. If the count is zero over
+twenty generator runs, clause 4 is solving a problem that does not occur and
+the schema growth is not earning its keep. If it is non-zero and the
+corresponding keys were never added, the clause is not being followed and the
+remedy is a report at generation time, not a firmer rule.
+
+**Count registry divergences detected after clause 7's pin exists, against
+re-hands performed.** If the registry is re-handed five times and the pin never
+once reports a stale consumer, either nothing diverges — in which case clause 7
+is machinery for an absent problem — or the pin is not being bumped, which
+clause 4's own logic says will happen unless something enforces it.
+
+**Check whether a cold reader can rebuild an entry from the note alone.** Nine
+of 31 projects currently carry no `note`. If, a year from now, a person cannot
+say why a repo was filed as an incarnation rather than a project, clause 6 was
+recorded but not practised.
+---
+
+## 0056 — 0044 clause 4 is enforced by the pattern, not by an enumerated path; and a pin records when and where it was taken as well as what
+
+**Date:** 2026-08-25 · **Status:** proposed · **Builds on:** 0040 clause 2 (maps
+are per source, one file each) and clause 4 (a curated map is never committed;
+a `<map>.sha256` fingerprint is committed beside it, because an untracked file
+produces no diff), 0044 clause 4 (the ratified map is resolved from the declared
+estate name, never a fixed filename, and **each estate's map carries its own
+committed fingerprint**), 0045 (one pin: origin, anchor, hash — verified
+read-only, reported never repaired), 0046 (recency resolution; a superseding row
+says so), 0048 clause 4 (a check that is always red trains the eye past it),
+0053 clause 5 (a remedy must be safe wherever it can fire; `run.py pin bump`
+refuses where the artefact is not authored), 0054 (corpus is not configuration),
+0055 (the neighbouring artefact of the same class) · **Source:** design thread,
+2026-08-25; the survey recorded in `docs/CONVENTION_conversation_map.md` §1
+· **Convention:** `docs/CONVENTION_conversation_map.md`
+
+**Context.** This entry is narrow on purpose. Most of the map's discipline is
+already ruled and already built — append-only writes, a mandatory
+`[provenance:…]` tag the writer refuses to append a row without, per-row actions
+with nowhere to put a bulk-accept, recency resolution with revocation, a
+committed fingerprint and an auditor that checks it. Ruling on that again would
+be a decision about work already done.
+
+**What forced this is a conformance finding, not a new rule.** 0044 clause 4 is
+accepted and says plainly that *"each estate's map carries its own committed
+fingerprint under 0040 clause 4 and 0045."* Two maps exist.
+`personal_conversation_map.tsv` has **no `.sha256`**, and
+`auditor_conversation_map_pin` names `mcf_conversation_map.tsv` by a hardcoded
+constant. So an accepted clause has been unimplemented for one of its two
+instances, and the check that exists to enforce it cannot see the instance that
+violates it.
+
+The `.gitignore` half generalised correctly — `/config/*conversation_map.tsv` is
+the pattern 0040 clause 4 wrote *"so the next source's map inherits the rule
+rather than having to remember it"*. The ratification half did not, because it
+was written against a path. **That difference is the transferable finding, and
+it is what this entry rules on**: a rule expressed as a pattern and enforced by
+an enumeration will silently stop covering its own subject the moment a second
+instance appears, and nothing will report the gap, because the enforcing code
+has no opinion about instances it was not told to look at.
+
+**Second, the pin records a third of what clause 4 undertook to keep.**
+`config/mcf_conversation_map.tsv.sha256` holds a hash line only.
+`l5gntools/pin.py` already supports and verifies a metadata line carrying
+`origin`, `anchor`, `date` and `host`, and `verify_pin` implements
+`anchor-unresolvable` as a distinct violation state. Clause 4's undertaking was
+that the repo would record *"that a map was ratified, when, and against what
+content"*. The hash carries **what**. The **when** and the **where** are
+supported by the mechanism and absent from the artefact.
+
+**Third, and genuinely open.** 0040 clause 2 makes maps per **source**; 0044
+clause 4 resolves the filename from the declared **estate** and reconciles the
+two by calling the estate map *"one instance of the pattern 0040 clause 2
+declared"*. That reconciliation holds precisely while each estate has one
+source. Neither entry says what happens when one has two, and after that point
+the answer costs a migration of ratified rows.
+
+**Decision.**
+
+1. **A check enforcing a pattern rule is driven by the pattern.** Where a
+   ruling's subject is defined by a pattern — `/config/*conversation_map.tsv`
+   here — the auditor enumerates matches at run time and reports on each. An
+   enumerated path is permitted only where the ruling's subject is genuinely a
+   single named artefact, and a check that narrows a pattern to one instance
+   states that it has done so in its own output.
+2. **A map that exists without a pin recorded for it is a violation, not an
+   absence.** This restates nothing new — 0044 clause 4 already requires it —
+   and is written here only because clause 1's mechanism is what will make it
+   true. `artefact-absent` remains clean; *artefact present, pin absent* does
+   not.
+3. **A pin carries its metadata line**: origin, anchor where one exists, date,
+   and the host that took it. A hash-only pin is incomplete under 0040 clause 4
+   and is reported as incomplete rather than accepted as passing.
+4. **A consumer copy older than the current pin stays outside the gate**
+   (0053), and clause 3 is what makes that state legible: the pin names the
+   authoring host and the date, so the remedy — be re-handed a copy from that
+   host — is readable from the failure alone rather than requiring someone to
+   know the estate's shape.
+5. **Source is the axis; estate is how a filename is currently derived.** Where
+   an estate acquires a second source, the answer is a further file resolved by
+   *(estate, source)* — never a second column in an existing map, and never one
+   map spanning two sources. 0039 clause 1 and 0044 clause 4 continue to govern
+   how a name is resolved; they do not govern what a map contains.
+
+**Consequences.**
+
+**Clauses 1 and 2 turn a currently-green tree red.** `personal_conversation_map.tsv`
+exists and has no pin, so the day this lands `verify.py` fails on this rig until
+a pin is written. That is the ruling working, and it will still arrive at
+whatever moment is least convenient. It also means this entry cannot be landed
+and left — it lands with work attached.
+
+**Clause 3 makes the existing MCF pin incomplete**, and under 0053 clause 5 only
+the authoring host may re-bump it. So the remedy cannot be applied wherever the
+problem is noticed; it has to be carried back to the rig that authors the map.
+That is the correct constraint producing an inconvenient workflow, which is what
+0053 clause 5 costs in general.
+
+**Clause 1 is the expensive one, and its cost is not in this artefact.** Written
+generally, it implicates every other check in the estate that names a path where
+its ruling named a class — and this entry does not audit for those, so it
+creates an unknown quantity of latent non-conformance and no list of it. Naming
+the rule without producing the list is half the work, and the half that is
+missing is the half that would tell us how big the other half is.
+
+**Clause 5 may cost nothing ever.** If no estate acquires a second source, it is
+a sentence written for a case that never came. It is written now because the
+alternative is deciding it while holding 37 ratified rows that would have to
+move.
+
+**What would show this wrong.**
+
+**Count the checks in `verify.py` whose ruling names a pattern and whose code
+names a path.** Today at least one, and that one was found by writing a
+convention rather than by any check. If a deliberate sweep finds it is the only
+one, clause 1 is a general rule earning its keep on a single instance, and
+should be narrowed to this artefact rather than left standing as doctrine. If
+the sweep finds several, clause 1 was under-stated and wants an auditor of its
+own.
+
+**Count pins whose metadata line is absent, after clause 3 lands.** Today one of
+one. If it is still one of one in a month, `run.py pin bump` is not writing the
+line and the defect is in the writer, not in the ruling — restating clause 3
+will achieve nothing.
+
+**Count red `verify.py` runs on a consumer caused by the in-between state** — a
+copy older than the pin, no defect present. 0053 moved that outside the gate. If
+generalising the auditor under clause 1 causes that state to start firing inside
+the gate, then clause 1 was applied before 0053's split was finished, and the
+correct reading is that clause 1 should have waited rather than that 0053 was
+wrong.
+---
+
+## 0057 — A skill is estate IP with one source of truth and branches rather than copies; it declares the kind of authority it needs, resolves it at run time, and stops rather than working from its own text
+
+**Date:** 2026-08-26 · **Status:** proposed · **Builds on:** 0042 clause 1
+(declaration belongs to the repo that owns the work), 0043 (a ruling from
+another repo is cited with its repo, at every mention), 0045 (a pinned copy is
+verified read-only and reported, never repaired), 0050 (a source declares its
+own staleness; one that cannot be reached reads as unknown, never as fresh),
+0051 (containment by construction rather than by intention), 0052 clauses 2, 3
+and 5 (the convention lives in the repo that owns the work; no rule may have a
+skill as its only home; a skill with no convention says so and names the debt),
+0054 clause 7 (*proposed* — a packaged tool carries no estate layer and stubs
+its estate-shaped imports to raise) · **Source:** design thread, 2026-08-26,
+and the operator's statement of ownership; the work task force's
+`2026-08-26_NOTE_ecosystem_and_gates` §6 and `CATALOGUE_skills_2026-08-26.md`
+
+**Context.** 0052 predicted this and named the falsifier that would show it:
+*"count the rules whose only home is a skill."* The count came back from the
+other side of the wall, and it is not zero.
+
+**The measurement.** `CATALOGUE_skills_2026-08-26.md` recorded seven skills
+configured on the work rig: three vendored into that program's repo, **one
+byte-identical to the copy that actually loads**. The two vendored copies that
+differed were both adaptations — one adopted at program level and pointed at
+that repo's convention, one revised after its first walk — and **neither
+adapted text was ever the one in the loop while work was done.** The estate was
+running the unadapted skills while holding better ones it never loaded.
+
+**Three of five shared skills name an estate in their own prose.**
+`commit-scribe` says *"for L5GN-Tools"*, `docs-archivist` says *"in
+L5GN-Tools"* and sends its reader to `docs/README.md` §3 six times — a file
+absent from the repo it was loaded in. `consultant-docs` points at
+`docs/Consultants/`, which `wfa-0025` clause 6 has since **retired**. And
+`round-closer` states, as a general anti-pattern, *"no MCF repo has a gate"* —
+which is false here, where `.githooks/pre-commit` runs `verify.py`. The
+catalogue names the sharpest version of this: **a pointer that half-resolves is
+worse than one that fails**, because the reader follows it and lands somewhere
+plausible.
+
+**The metric in use could not have caught any of it.** Compared byte for byte,
+all five shared skills differ, and every vendored copy is *longer* than the
+configured one — which is exactly what the catalogue observed. Normalised for
+line endings, **all five are byte-identical, zero changed lines.** The whole
+difference is CRLF against LF. A drift check across a Windows working tree and
+a synced store reports every file as changed, on every run, forever; the same
+artefact produced a phantom 757-line rewrite in `Work_Bridge` on the same day.
+
+**And what forces a ruling now rather than a note.** The operator has settled
+the ownership question the work rig put: **the skills are his IP, `L5GN-Tools`
+is the source of truth for the published ones, and a task force may tailor its
+own.** That answer only works if tailoring produces something diffable. Today
+it produces a copy in a plugin directory that sits outside every repository,
+tracked by nothing — which is the third recorded instance of one class, after
+the conversation map and `config/local.json`, and the third found by a person
+putting two documents side by side rather than by any tool.
+
+**Decision.**
+
+1. **A skill is estate IP with one source of truth.** `L5GN-Tools` publishes
+   every skill this estate authors. The plugin or account store from which a
+   skill loads is a **deployment**, never the source, and a change made only
+   there has not happened as far as the estate is concerned.
+2. **A task force branches; it never copies.** A tailored variant is a git
+   branch of the published skill, offered back as a merge. A copy outside git
+   is not a variant — it is an untracked divergence, and it is what this entry
+   exists to stop. 0052's consequences said drift would remain and only become
+   *locatable*; a branch is what locatable means.
+3. **A skill declares the kind of authority it needs, never where it lives.**
+   `CONVENTION_commits.md`, not a path, and never an estate name in its prose.
+4. **Authority is resolved at run time, most-specific first**: the repo the
+   skill is running in, then the estate's source-of-truth repo, then stop.
+5. **A skill that cannot read its authority stops.** It does not fall back to
+   its own text, to memory of a previous thread, or to a reconstruction.
+   `orientation` is the worked example and states the rule already: *"If the
+   file cannot be read, stop and say so."* This clause promotes it from one
+   skill to every skill.
+6. **A skill states no estate-specific fact.** How many repos have a gate,
+   which folder holds a class, what a particular tree contains — all belong in
+   a convention. A skill that resolves to the wrong facts is worse than one
+   that resolves to nothing, because nothing fails loudly.
+7. **A convention adopted from another estate names the adoption in its own
+   header** — origin repo, origin file, date. The work task force's census
+   found that *method does not cite*, and that a convention adopted whole
+   leaves a fainter trace than a ruling cited. This is the correction, and it
+   costs one line.
+8. **A drift check over hand-carried text normalises line endings before
+   comparing.** A raw byte or hash comparison across a Windows working tree and
+   a synced store is not evidence of change.
+
+**Consequences.**
+
+**Clause 5 will stop work, and the first time will be soon.**
+`consultant-docs` refuses immediately — the class it points at is retired on
+one rig and absent on the other. `brief-scribe` and `decision-scribe` have no
+convention on this rig until Thread E lands. So this entry creates a dependency
+it does not discharge: **three of five skills are inoperative under clause 5 on
+the day it binds**, and that is correct behaviour rather than a bug.
+
+**Clause 2 costs the convenience of editing where it runs.** The plugin store
+is where a skill is edited today, and it is not git — so every change acquires
+a round trip that a single operator, mid-round, will be tempted to skip. The
+honest expectation is that this clause is broken before it is kept, and the
+count in the falsifier is how we will know.
+
+**Clauses 3 and 4 make every skill longer and slower to write**, and add a
+resolution step to a thing whose whole appeal is that it starts immediately.
+
+**Clause 8 is the one that will look like pedantry until it isn't.** It is
+invisible today because no check exists; the moment one does, it is the
+difference between a useful reader and one that is red on every file forever —
+which is 0048 clause 4's failure arriving through a back door.
+
+**This does not fix drift**, and 0052 already said it would not. Two rigs will
+still diverge. What changes is only that a divergence is a branch someone can
+diff instead of two behaviours someone can only compare by watching them. That
+is a smaller win than it sounds and is worth naming as smaller, again.
+
+**What would show this wrong.** Three counts, all cheap, all runnable today.
+
+**Count the skills whose declared authority resolves to nothing on the rig they
+run on.** Today it is four: `consultant-docs` (retired class),
+`docs-archivist` on the work rig (`docs/README.md` §3 absent there), and
+`brief-scribe` and `decision-scribe` here. Under this entry the count should
+trend to zero. If it is level in three months, resolution was a rule nobody
+implemented and the honest reading is that clauses 3 and 4 cost more than
+naming a path does — in which case replace them with a *currency stamp* on the
+named path rather than restating them more firmly.
+
+**Count branches offered back as merges, against edits made outside git.** If
+after three months no branch has been offered and skills have nonetheless
+changed on both rigs, clause 2 is aspiration and the plugin store is the real
+source of truth whatever this entry says.
+
+**Count the times a skill stopped rather than proceeding on its own text.**
+Zero is ambiguous and must be read against the first count: zero stops with
+zero unresolvable authorities means the estate is conformant; zero stops with
+four unresolvable authorities means clause 5 is not implemented and the skills
+are still working from memory.
