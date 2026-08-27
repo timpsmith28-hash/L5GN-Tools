@@ -1,5 +1,9 @@
 <!-- uat: commit=174e57e dirty=true host=LucasGoonPC walked=2026-08-17 -->
 
+> **ARCHIVED** 2026-08-24 · completed pair · results for `docs/archive/UAT_unified_app.md`
+> Superseded by nothing — this document *is* the testimony. Original purpose: record what the 2026-08-17 walk found.
+> Walked at `174e57e` on `LucasGoonPC` against a **dirty** tree, which its own uat stamp records and which is worth noticing: the walk observed a working tree carrying uncommitted changes, so it is evidence about that moment and not about `174e57e` as committed. Trust it about what was observed; trust nothing in it about the app now.
+
 # UAT results — the unified app (`COWORK_BRIEF_unified_app.md`)
 
 Sheet: `docs/UAT_unified_app.md`. Pair:

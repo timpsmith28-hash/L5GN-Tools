@@ -1,6 +1,10 @@
 <!-- uat: commit=f5a14d2 dirty=false host=multi-rig walked=2026-08-03 -->
 <!-- gate-frozen: commit=f5a14d2 -->
 
+> **ARCHIVED** 2026-08-24 · completed pair · results for `docs/archive/UAT_scanner_scope_bypass.md`
+> Superseded by nothing — this document *is* the testimony. Original purpose: record what the 2026-08-03 walk found across the gaming rig, the work rig and the knight.
+> Walked at `f5a14d2` on `multi-rig` with a clean tree. Trust it about what was observed that day; trust nothing in it about the state of the deposits, the estate or the gate now.
+
 # Results log — scanner scope bypass (walked 2026-08-03)
 
 Partner to `docs/UAT_scanner_scope_bypass.md` / `docs/COWORK_BRIEF_scanner_scope_bypass.md`

@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · completed pair · partner: `docs/archive/COWORK_BRIEF_unified_app.md`
+> Superseded by DECISIONS **0035**, **0036** and **0047** for the rulings, and by the tree for current behaviour. Original purpose: account for what landed across `8ba9751`..`f1d7df3` plus three live-walk fixes, reported at `174e57e`.
+> **Read its own provenance note first and keep it in mind.** This report was reconstructed from the tree, the commit series and the module docstrings — it is not testimony from the build thread, and it says so plainly. It is weaker evidence than a report written in the moment: where it quotes a module docstring, trust the quote; where it reconstructs reasoning, treat it as inference. The one part that is first-hand is what the 2026-08-17 walk found, because unusually this report was written after the walk rather than before it.
+
 # Cowork report — one application: the deck absorbs the report, the mesh stands down
 
 **Brief:** `docs/COWORK_BRIEF_unified_app.md`

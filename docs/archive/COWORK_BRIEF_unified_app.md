@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · completed pair · partner: `docs/archive/COWORK_REPORT_unified_app.md`
+> Superseded by DECISIONS **0035** (`run.py app` is the single entry point; the physical data-root move deferred to its own round), **0036** (the cross-machine mesh stands down, mothballed behind a config flag rather than deleted) and **0047** (0021's supervisor is superseded — there are no longer three processes to coordinate). Original purpose: one application, started from a shortcut, holding the scanners, Chronicler and the Knowledge Curator behind one shell on loopback.
+> Accurate history: the argument for collapsing three processes into one. **Its citation of 0021 is the part to stop trusting** — 0047 superseded that ruling as a direct consequence of this round, so the brief cites a dependency its own outcome removed. Task 4 became 0035 and Task 6 became 0036; read those entries for the rulings rather than this brief's phrasing of them.
+
 # Cowork brief — one application: the deck absorbs the report, the mesh stands down
 
 **Origin:** design thread, 2026-08-08 (UI/UX thread, first round).

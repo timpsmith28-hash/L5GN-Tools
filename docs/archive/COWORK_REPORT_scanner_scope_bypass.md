@@ -1,6 +1,10 @@
 <!-- gate-frozen: commit=f5a14d2 -->
 <!-- uat: commit=f5a14d2 dirty=false host=multi-rig walked=2026-08-03 -->
 
+> **ARCHIVED** 2026-08-24 · completed pair · partner: `docs/archive/COWORK_BRIEF_scanner_scope_bypass.md`
+> Superseded by the tree for anything about current behaviour. Original purpose: testimony for the scope-bypass round, built on `86fca68` and committed as `f5a14d2`.
+> Accurate history: the walk across the gaming rig, the work rig and the knight on 2026-08-03, and the remediation re-measured live in that same session. Its gate figure — 6 auditors + **54** testers — is frozen at `f5a14d2` and already carries `gate-frozen`; it is not a claim about the gate now. The `tester_serve` failure it notes on the work rig was pre-existing and unrelated to this round, and is not evidence about that tester today.
+
 # Cowork report — scanner scope bypass
 
 Pair: `docs/COWORK_BRIEF_scanner_scope_bypass.md`. Built 2026-08-03 on top of

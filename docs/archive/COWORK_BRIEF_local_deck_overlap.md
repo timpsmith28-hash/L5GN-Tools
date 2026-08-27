@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · superseded · no report — slice 3 of three; never built, and the precondition it names never closed
+> Superseded by DECISIONS **0048** (a surface earns its place by the decisions it moves, not the facts it displays) and by `docs/archive/COWORK_BRIEF_unified_app.md`. Original purpose: make "have I written this down twice?" and "is this folder a copy of that folder?" into answerable questions.
+> **The duplication figure it opens with — 165,246,539 bytes across 110 files, byte-for-byte identical on the castle — was measured on 2026-07-28 and is not a claim about now.** Same two reasons as slice 2: it depends on slice 1's authored/generated provenance, whose round never closed, and 0048 reclassified this kind of surface as the reference room. Note what did *not* lapse: `l5gntools/scanners/duplicate_finder.py` exists and the question is still answerable. What was abandoned is the deck surface over it, not the capability underneath.
+
 # Cowork brief — the local deck, slice 3: overlap, duplication, and the thing nobody saw
 
 **Origin:** design thread, 2026-07-28. Third slice of the local-only Command Deck.

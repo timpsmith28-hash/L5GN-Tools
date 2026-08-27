@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=f1d7df3 -->
 
+> **ARCHIVED** 2026-08-24 · completed pair · walk-sheet for `docs/archive/COWORK_BRIEF_unified_app.md`
+> Superseded by its own results log, `docs/archive/UAT_unified_app_results.md`. Original purpose: the acceptance checks for the one-application round.
+> Read as the questions that were asked, never as work outstanding. Walked 2026-08-17 at `174e57e`; the ticks are in the results log. **Do not run this as a task list.**
+
 # UAT walk-sheet — the unified app (COWORK_BRIEF_unified_app.md)
 
 Pair: `docs/COWORK_BRIEF_unified_app.md` → `docs/COWORK_REPORT_unified_app.md`.

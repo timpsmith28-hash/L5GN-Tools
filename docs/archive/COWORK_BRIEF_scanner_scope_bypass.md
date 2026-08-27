@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · completed pair · partner: `docs/archive/COWORK_REPORT_scanner_scope_bypass.md`
+> Superseded by the code it asked for — `Scope` is now consulted by every scanner, and `tester_scanner_scope` iterates `registry.SCANNERS` so a scanner that ignores the guard reddens the gate. Original purpose: two scanners (`file_census`, `workspace_scanner`) never asked about scope, and the deposits already sitting on the knight carried the leak.
+> Accurate history: the 2026-08-02 substring counts of what the knight's deposits contained, and the 1.A2 reasoning that a leaked path is a defect in the deposit artefact. **Do not read those counts as current** — the deposits were replaced under DECISIONS **0029** and both estates re-measured clean on 2026-08-03. Task 3's procedure is at `docs/archive/RUNBOOK_scope_bypass_remediation.md`, archived alongside because the remediation it scripts has been performed.
+
 # Cowork brief — two scanners never asked about scope, and the deposits carry it
 
 **Origin:** the 2026-08-02 knight session. Found by following an anomaly in the

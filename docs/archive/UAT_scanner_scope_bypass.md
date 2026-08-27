@@ -1,6 +1,10 @@
 <!-- gate-frozen: commit=f5a14d2 -->
 <!-- uat: commit=f5a14d2 dirty=false host=multi-rig walked=2026-08-03 -->
 
+> **ARCHIVED** 2026-08-24 · completed pair · walk-sheet for `docs/archive/COWORK_BRIEF_scanner_scope_bypass.md`
+> Superseded by its own results log, `docs/archive/UAT_scanner_scope_bypass_results.md`. Original purpose: the acceptance checks for the scope-bypass round.
+> Read as the questions that were asked, never as work outstanding. Every check was walked on 2026-08-03 at `f5a14d2` across three machines; the unticked boxes here are the blank sheet and the ticks are in the results log. **Do not run this as a task list.**
+
 # UAT walk-sheet — scanner scope bypass
 
 Pair: `docs/COWORK_BRIEF_scanner_scope_bypass.md` → `docs/COWORK_REPORT_scanner_scope_bypass.md`.

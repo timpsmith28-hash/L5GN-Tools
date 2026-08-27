@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · superseded · no report — the round was never built; it was overtaken before it opened
+> Superseded by the work-side program layer: `MISSION.md` (WizForgeAnalytics, 2026-08-23) places the scaffold among the things the **program repo** holds, alongside the commit convention and the decision-log format. Original purpose: let any project be scaffolded with this repo's `docs/` lifecycle, declaring which pinned release it carries, so the toolkit could report who is current, who is behind and who has diverged.
+> **The part worth keeping is the rejected alternative,** under "One shared copy was considered and rejected": a symlink or submodule lets a project's convention change without a commit *in that project*, and a project that legitimately diverges cannot express that it has. `machines.json` had already settled the shape — a committed source, copied outward, verified on arrival. That reasoning outlives this brief and should be re-read before anyone proposes shared conventions again. **What does not survive is its premise.** Under the harness framing the toolkit is vendored and consumed by the program that would carry the scaffold, not the owner of it, so a scaffold briefed here is on the wrong side of the wall. Do not resurrect this as written.
+
 # Cowork brief — the convention travels: pinned scaffolding for any project
 
 **Origin:** design thread, 2026-08-05, out of the docs-board generalisation

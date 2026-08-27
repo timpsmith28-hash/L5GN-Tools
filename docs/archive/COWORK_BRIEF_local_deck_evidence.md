@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · superseded · no report — slice 2 of three; never built, and the precondition it names never closed
+> Superseded by DECISIONS **0048** (the unit of throughput is a decision; a surface that wants attention raises a card, and everything else is the reference room) and by `docs/archive/COWORK_BRIEF_unified_app.md`, which absorbed the deck this was slicing. Original purpose: a summary row in the report becomes "show me that line, in context", read from disk at render time.
+> Accurate history: the three-way slicing of the local-only Command Deck, and this slice's intent to reuse slice 1's path-safety machinery rather than reimplement it. **Two things stopped it, and only one is about priorities.** Its stated dependency — slice 1, `COWORK_BRIEF_local_deck_docs_and_time.md` — was built but its round never produced a results log, so the precondition named here was never actually met. And 0048 moved the bar underneath it: a surface is now justified by the decisions it moves rather than the facts it shows, and "show me that line in context" is a reference-room feature that would have to clear that bar to be briefed today. The durable part is **0027** (a local surface reads the source at render time), which is a ruling and does not need this brief to survive.
+
 # Cowork brief — the local deck, slice 2: every finding becomes a line in a file
 
 **Origin:** design thread, 2026-07-28. Second slice of the local-only Command Deck.

@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-24 · retired · executed procedure for `docs/archive/COWORK_BRIEF_scanner_scope_bypass.md` Task 3
+> Superseded by the fact of its own execution. Original purpose: remediate the scope-bypass deposits on the knight under DECISIONS **0029** — *"a deposit found to carry more than its contract is replaced, never edited"*.
+> This ran on 2026-08-03 and both estates re-measured clean afterwards. **Do not run it again as a live procedure:** it remediates deposits that no longer exist in that state, and the scanner defect that produced them is now structurally prevented rather than remembered. If a scope leak recurs that is a new finding and wants a new round — what survives here is the shape of a remediation, not a set of steps to repeat.
+
 # Runbook — remediate the scanner-scope-bypass deposits on the knight
 
 **For:** `COWORK_BRIEF_scanner_scope_bypass.md` Task 3, once the code fix (Task 1:
