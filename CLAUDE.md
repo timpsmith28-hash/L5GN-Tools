@@ -93,11 +93,12 @@ environment is what they are about.
 
 - **Never run plain git against a mounted Windows repo from a sandbox.** For
   anything about what git holds, ask git, on Windows.
-- **The working tree is CRLF on Windows.** A sandbox comparing bytes, sizes or
-  hashes will report drift where none exists — on every file, every run.
-  Normalise line endings before concluding anything changed. Measured
-  2026-08-26: five skills that looked "adapted" were byte-identical once
-  normalised.
+- **Normalise line endings before concluding anything changed** — but the
+  hazard is at this repo's boundaries, not inside it. `.gitattributes` sets
+  `* text=auto eol=lf`, so the tree here is LF throughout. Measured 2026-08-26:
+  five skills that looked "adapted" were byte-identical to their synced copies
+  once normalised, and `Work_Bridge` — which carries no such `.gitattributes` —
+  reported a 757-line phantom rewrite of three unchanged files.
 - **A sandbox mount serves stale, byte-truncated content deterministically and
   without error.** A second read confirms a false answer rather than catching
   it. Hash on Windows.
