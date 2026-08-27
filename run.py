@@ -11,6 +11,7 @@ Usage:
     python run.py <tool> --all               # one tool across the whole estate
     python run.py census [--target PATH]     # this machine reports its own domain
     python run.py architecture_census        # this checkout's own shape -> data/
+    python run.py decisions-map              # docs/DECISIONS.md -> docs/_decisions_map.md
     python run.py render-architecture        # render data/architecture_census.json
                                               # -> docs/_architecture_shape.md (run
                                               # after any route/schema/gate change,
@@ -852,6 +853,24 @@ def _cmd_render_architecture() -> int:
     return 0
 
 
+def _cmd_decisions_map() -> int:
+    """The human-run generator for `docs/_decisions_map.md` (DECISIONS 0030).
+
+    Reads `docs/DECISIONS.md` and writes the citation-graph views beside it.
+    Deterministic by contract: run twice against an unchanged log, the output
+    is byte-identical, so nothing about the commit, the host or the clock is
+    stamped into it. Regenerate in the same commit as the change to the log
+    (CONVENTION_commits.md 6), never in a tidy-up afterwards.
+
+    Stops on a duplicate entry number rather than papering over it -- that is
+    unrecoverable in an append-only log.
+    """
+    from l5gntools.decisions_map import write_decisions_map
+    dest = write_decisions_map()
+    print(f"decisions-map: wrote {dest}")
+    return 0
+
+
 def _cmd_pin(rest: list[str]) -> int:
     """`python run.py pin bump <artefact-path> [--apply]` -- (re)compute an
     artefact's content hash and write (or dry-run) the pin file beside it.
@@ -991,7 +1010,8 @@ def main(argv: list[str]) -> int:
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'census' / "
-                        "'render-architecture' / 'config' / 'deposit' / 'consume' / "
+                        "'render-architecture' / 'decisions-map' / 'config' / "
+                        "'deposit' / 'consume' / "
                         "'ingest' / 'app' / 'window' / 'serve' / 'review' / "
                         "'backup' / 'scrape' / 'conductor' / 'pin' "
                         "('serve' and 'review' are deprecated aliases for 'app', "
@@ -1034,6 +1054,8 @@ def main(argv: list[str]) -> int:
         return _cmd_census(args)
     if args.command == "render-architecture":
         return _cmd_render_architecture()
+    if args.command == "decisions-map":
+        return _cmd_decisions_map()
     if args.command == "backup":
         return _cmd_backup(args)
     if args.command == "conductor":
