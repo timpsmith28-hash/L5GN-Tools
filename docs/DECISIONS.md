@@ -2566,7 +2566,7 @@ and its wishful version.
 
 ## 0052 — A skill scripts a procedure and cites its convention; the convention lives in the repo, because skills do not migrate
 
-**Date:** 2026-08-22 · **Status:** proposed · **Builds on:** 0042 (a consumer
+**Date:** 2026-08-22 · **Status:** accepted 2026-08-28 · **Builds on:** 0042 (a consumer
 repo declares its own runnable stages — declaration belongs to the repo that
 owns the work), 0043 (a ruling from another repo is cited with its repo, at
 every mention), 0030 (`docs/README.md` §1's governing rule: a document earns
