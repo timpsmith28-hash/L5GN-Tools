@@ -2666,7 +2666,7 @@ written for, whatever the first count says.
 
 ## 0053 — The gate emits verdicts only: a check that can go red without a defect belongs outside it, split by a committed per-host declaration and never by a third exit state
 
-**Date:** 2026-08-24 · **Status:** proposed · **Builds on:** 0031 (a non-gating
+**Date:** 2026-08-24 · **Status:** accepted 2026-08-28 · **Builds on:** 0031 (a non-gating
 check surface reports findings and never issues a verdict — the *witness*
 category, which never gates), 0045 (verification reports and never repairs; a
 tool that silently re-pins has destroyed the only signal the pin exists to
