@@ -2947,7 +2947,7 @@ collapsed to three layers plus corpus.
 
 ## 0055 — The project registry is curated corpus, not configuration: its rules live in the repo rather than inside the artefact, and any judgement the generator can undo is a key rather than a sentence
 
-**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0010
+**Date:** 2026-08-25 · **Status:** accepted 2026-08-28 · **Builds on:** 0010
 (`project_link` is estate- and account-agnostic by design), 0011 (link values
 predating the registry are reset, not trusted), 0012 (the registry is three
 tiers — program, project, repo — and `scope` is a config tag on the producer's
