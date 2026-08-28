@@ -161,12 +161,12 @@ Entries citing nothing. **An orphan is not a lesser entry** — several are load
 | accepted (recording a decision already made) | 1 |
 | accepted 2026-08-19 | 2 |
 | accepted 2026-08-20 | 1 |
+| accepted 2026-08-28 | 1 |
 | accepted as a direction, deferred | 1 |
-| proposed | 7 |
+| proposed | 6 |
 
-**7 proposed** — not authority, and not citable as such (`CONVENTION_decisions.md` 3):
+**6 proposed** — not authority, and not citable as such (`CONVENTION_decisions.md` 3):
 
-- [`0051`](DECISIONS.md#0051-a-work-estate-corpus-may-live-on-the-personal-rig-bounded-by-construction-rather-than-by-intention-conversations-are-named-frozen-snapshots-the-repo-mirror-is-replaced-whole-and-never-accumulated) — A work-estate corpus may live on the personal rig, bounded by construction rather than by intention: conversations are named frozen snapshots, the repo mirror is replaced whole and never accumulated · [what would show this wrong](DECISIONS.md#0051-a-work-estate-corpus-may-live-on-the-personal-rig-bounded-by-construction-rather-than-by-intention-conversations-are-named-frozen-snapshots-the-repo-mirror-is-replaced-whole-and-never-accumulated)
 - [`0052`](DECISIONS.md#0052-a-skill-scripts-a-procedure-and-cites-its-convention-the-convention-lives-in-the-repo-because-skills-do-not-migrate) — A skill scripts a procedure and cites its convention; the convention lives in the repo, because skills do not migrate · [what would show this wrong](DECISIONS.md#0052-a-skill-scripts-a-procedure-and-cites-its-convention-the-convention-lives-in-the-repo-because-skills-do-not-migrate)
 - [`0053`](DECISIONS.md#0053-the-gate-emits-verdicts-only-a-check-that-can-go-red-without-a-defect-belongs-outside-it-split-by-a-committed-per-host-declaration-and-never-by-a-third-exit-state) — The gate emits verdicts only: a check that can go red without a defect belongs outside it, split by a committed per-host declaration and never by a third exit state · [what would show this wrong](DECISIONS.md#0053-the-gate-emits-verdicts-only-a-check-that-can-go-red-without-a-defect-belongs-outside-it-split-by-a-committed-per-host-declaration-and-never-by-a-third-exit-state)
 - [`0054`](DECISIONS.md#0054-configuration-is-split-by-who-is-entitled-to-decide-a-value-not-by-whether-it-varies-a-machine-fact-is-derived-and-confirmed-rather-than-typed-and-a-packaged-tool-carries-no-estate-layer) — Configuration is split by who is entitled to decide a value, not by whether it varies; a machine fact is derived and confirmed rather than typed, and a packaged tool carries no estate layer · [what would show this wrong](DECISIONS.md#0054-configuration-is-split-by-who-is-entitled-to-decide-a-value-not-by-whether-it-varies-a-machine-fact-is-derived-and-confirmed-rather-than-typed-and-a-packaged-tool-carries-no-estate-layer)

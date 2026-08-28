@@ -2385,7 +2385,7 @@ forgotten because it happened before the clock started.
 
 ## 0051 — A work-estate corpus may live on the personal rig, bounded by construction rather than by intention: conversations are named frozen snapshots, the repo mirror is replaced whole and never accumulated
 
-**Date:** 2026-08-22 · **Status:** proposed · **Builds on:** 0023 (work-estate
+**Date:** 2026-08-22 · **Status:** accepted 2026-08-28 · **Builds on:** 0023 (work-estate
 visibility is auth-gated), 0025 (visibility is scoped by surface), 0027
 (summary-only governs artefacts that travel; a local surface reads the source
 at render time), 0029 (a bundle that violates its own contract is replaced or
