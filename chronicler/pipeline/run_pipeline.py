@@ -143,12 +143,43 @@ def summarize_render(out):
 
 
 def run_stage(script, argv):
+    # utf-8 on BOTH sides of the pipe, deliberately.
+    #
+    # Without `encoding=`, `text=True` decodes the child with
+    # locale.getpreferredencoding() -- cp1252 on Windows. relink prints thread
+    # titles and this estate's titles carry emoji, so this fired on a real stage
+    # on 2026-08-27.
+    #
+    # It fails in TWO modes, and the quiet one is the worse one. Measured:
+    #
+    #   U+1F601  bytes f0 9f 98 81  -> UnicodeDecodeError. 0x81 is one of
+    #                                  cp1252's five undefined slots (81 8D 8F
+    #                                  90 9D). The capture is LOST.
+    #   U+1F600  bytes f0 9f 98 80  -> no error; decodes to four mojibake
+    #                                  characters. The tail survives, wrong.
+    #   U+2018   bytes e2 80 98     -> no error; three mojibake characters.
+    #
+    # So which emoji a thread title happens to carry decides whether the chain
+    # loses the diagnostic or silently garbles it. run() prints a failing
+    # stage's diagnostic as the tail of (err or out), so mode one reports an
+    # exit code with no tail at all -- the chain's single diagnostic surface --
+    # and mode two hands back a plausible wrong answer, which INTENT section 5
+    # calls the worst thing this system can produce.
+    #
+    # errors="replace" is the deliberate half: a diagnostic that survives
+    # slightly mangled beats one that does not survive. PYTHONIOENCODING makes
+    # the child emit utf-8 rather than whatever its locale offers, so the parent
+    # is not left guessing.
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
     proc = subprocess.run(
         [sys.executable, str(PIPELINE_DIR / script), *argv],
         cwd=str(PIPELINE_DIR),
-        env=os.environ.copy(),
+        env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return proc.returncode, (proc.stdout or ""), (proc.stderr or "")
 
