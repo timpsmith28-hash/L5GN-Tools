@@ -1,6 +1,25 @@
-<!-- uat: commit=fb6fa5c dirty=true host=LucasGoonPC walked=2026-08-20 -->
+<!-- uat: commit=d4d65c4 dirty=true host=LucasGoonPC walked=2026-08-28 gate=12a/81t -->
 
-# Results log — Decision Desk, stale-output triage (walked 2026-08-20, LucasGoonPC) — INTERIM, trial in progress
+# Results log — Decision Desk, stale-output triage (re-walked 2026-08-28, LucasGoonPC) — D7/D8/D9 CLOSED
+
+> **Re-walk, 2026-08-28.** The trial reached ten. D7, D8 and D9 were deferred on
+> 2026-08-20 pending that, and are answered below; every other item's verdict is
+> untouched and still reads as of 2026-08-19/20. The stamp is re-cut to the
+> commit this walk ran against.
+>
+> **On the freeze.** `CONVENTION_docs.md` §2 holds that a `_results` log is
+> frozen. This one was stamped **INTERIM** on Tim's explicit call of 2026-08-19,
+> against the brief's own Reporting section, precisely so it could be revised
+> when the trial closed — and its closing line said it would be. Revising it is
+> therefore what the file asked for rather than a breach. **The convention has no
+> carve-out for an interim results log and should probably grow one**; recorded
+> here rather than fixed in passing.
+>
+> **What the re-walk changed, beyond the three verdicts:** D7's note that the
+> trial was *"entirely on `uat-decisions-fixture`, not yet on
+> `l5gn-tools-fixture`'s real `estate_freshness` stage"* was true when written and
+> is **out of date** — the real card fired three times. That correction is made in
+> place because leaving a superseded worry standing reads as a live one.
 
 Partner to `docs/UAT_desk_stale_card.md`.
 
@@ -53,13 +72,17 @@ section could cite even in principle. Every item, including the ones marked
   [DEFERRED] Not re-walked live this session. Covered by the FastAPI `TestClient` route tests written during the original Tasks 0–3 build, before this UAT round started; not re-confirmed against the real running app, since doing so would mean temporarily pulling both real allowlist entries and disrupting the live trial setup.
 
 - **D7** Rule ten real cards over the trial; was the evidence enough, or did you go hunting?
-  [DEFERRED — in progress] Recomputed directly from `data/desk/events.jsonl` via `desk.latency_summary()` itself (not by hand): **`cards_raised: 5, cards_ruled: 4, cards_resolved_without_ruling: 1`** as of this walk (2026-08-20). The four ruled: the pre-fix button-test occurrence on `57860823ba56...` (disqualified, see D13), the 2026-08-19 recurrence on `652d40c4fd26...`, the Trigger B occurrence on `78a5d9f55fb2...`, and a fresh recurrence on `652d40c4fd26...` sighted and ruled today, 2026-08-20T11:37–11:38Z — the first occurrence in this log genuinely spaced by more than a day from its predecessor rather than clustered inside one testing session. Six to go. No "hunt" findings have been logged against a card itself yet (one finding has been logged about the *instrument*, not a card — see the new project_wizard.py-untested finding, out of scope for this sheet); evidence on the cards has been sufficient so far, but the sample is still small and entirely on `uat-decisions-fixture`, not yet on `l5gn-tools-fixture`'s real `estate_freshness` stage.
+  [EVIDENCE — trial closed] **Ten reached: `cards_raised: 10, cards_ruled: 9, cards_resolved_without_ruling: 1`, median 21.6h.** Was the evidence enough, or did I go hunting? **Enough — no finding was ever logged against a card's evidence** across the whole trial; the log's two `finding` events are D13's disqualification and one about the instrument. The honest qualification, which D9 carries: **ten occurrences came from three fingerprints, two of them hand-edited UAT fixtures.** The real card contributed **three occurrences, one disqualified by D13, so n=2 clean.** A ten that is two is what Phase 2 inherits, and it is named rather than netted.
+
+  **The 2026-08-20 note below is superseded and left standing as the record of what was true then.** It read that the trial was *"entirely on `uat-decisions-fixture`, not yet on `l5gn-tools-fixture`'s real `estate_freshness` stage"*. The real card fired on 2026-08-18, 2026-08-20 and 2026-08-24. The worry was legitimate when written and is discharged.
+
+  **Original 2026-08-20 note.** Recomputed directly from `data/desk/events.jsonl` via `desk.latency_summary()` itself (not by hand): **`cards_raised: 5, cards_ruled: 4, cards_resolved_without_ruling: 1`** as of this walk (2026-08-20). The four ruled: the pre-fix button-test occurrence on `57860823ba56...` (disqualified, see D13), the 2026-08-19 recurrence on `652d40c4fd26...`, the Trigger B occurrence on `78a5d9f55fb2...`, and a fresh recurrence on `652d40c4fd26...` sighted and ruled today, 2026-08-20T11:37–11:38Z — the first occurrence in this log genuinely spaced by more than a day from its predecessor rather than clustered inside one testing session. Six to go. No "hunt" findings have been logged against a card itself yet (one finding has been logged about the *instrument*, not a card — see the new project_wizard.py-untested finding, out of scope for this sheet); evidence on the cards has been sufficient so far, but the sample is still small and entirely on `uat-decisions-fixture`, not yet on `l5gn-tools-fixture`'s real `estate_freshness` stage.
 
 - **D8** The latency footer at trial's end: is the number believable?
-  [DEFERRED] Trial not at ten yet. Interim number for the record: `median_latency_hours ≈ 11.34` as of 2026-08-20 (up from ≈1.09 on 2026-08-19) — moving in the right direction as same-session fixture-testing rulings get diluted by a real overnight gap, but still not believable as a stable decision-latency figure off four points. This is exactly the "button test, not trial data" caveat Addendum (b) named for the pre-fix events; the report says so explicitly rather than letting the number stand unqualified.
+  [EVIDENCE] **No — believable as arithmetic, misleading as a decision-latency figure, and the reason is worth more than the number.** The footer reads `median 21.6h` at trial's end. Reconstructed from `data/desk/events.jsonl` independently of `latency_summary()` and landing on the same 21.59h, the split is: **fixture occurrences median 10.05h (n=6, one at 169.63h)**; **real-card occurrences 24.36h and 85.34h (n=2 clean, after D13's 93.50h disqualification)**. So **the headline median is carried by the two hand-edited UAT fixtures**, and the one card doing a real job — `estate_freshness` on the dev rig — was ruled between one and three and a half days after its condition became observable, against a 24h staleness threshold. The number is not wrong; it is an average over two populations that should never have been averaged, and a footer that cannot say which is which will keep producing it. Recorded as a defect in the instrument's reporting, not in the trial.
 
 - **D9** The falsifier, answered in one paragraph, yes or no.
-  [DEFERRED] Cannot be answered honestly before the trial has real signal. Explicitly not answered in the accompanying report.
+  [EVIDENCE] **Yes — and the sample is n=2, taken knowingly.** The falsifier has two limbs and they do not resolve alike. *Did cards reach me with the evidence I actually needed?* — **yes**: across ten occurrences no finding was ever logged against a card's evidence, the two `finding` events in the log being D13's disqualification and one about the instrument. That is a real answer on a thin sample. *Is decision latency visibly better than patrol-and-remember?* — **this limb cannot be answered, and could not have been since 2026-08-19**, when the silent week that was to build the patrol baseline was cut. The Addendum was right to cut it and recorded why the instrument could not do the job; what nobody recorded is that cutting it left this half of a program-gating falsifier with no instrument, permanently. Reaching ten did not fix that and nothing will. So the yes rests on limb 1 plus judgement, not on the comparison the test asked for. **Ruled yes anyway**, deliberately: the Desk is worth keeping given more to decide on, and waiting for a comparison that cannot be built is a worse error than proceeding on a stated n=2. Phase 2 inherits this qualification rather than a clean pass, and this paragraph is what it inherits.
 
 - **D10** Fixture card resolve-and-re-raise → second sighting, second occurrence's own latency.
   [EVIDENCE] Found directly in `events.jsonl`, not manufactured as a separate test: fingerprint `652d40c4fd26...` resolved at `2026-08-19T14:01:50Z`, then a fresh `sighting` fired at `2026-08-19T14:02:25Z` when it went stale again, and the ruling on that recurrence carries `occurrence_started_at: 2026-08-19T14:02:25Z` — the new occurrence's own opening timestamp, not the first occurrence's `13:37:47Z`. Reinforced by a second, independent recurrence a day later: the same fingerprint resolved and re-sighted again on 2026-08-20T11:37:39Z, ruled at 11:38:11Z with `occurrence_started_at` matching that new sighting, not either earlier occurrence's. Three occurrences on one fingerprint now, each correctly distinct.
@@ -81,10 +104,22 @@ section could cite even in principle. Every item, including the ones marked
   a deliberate, standalone pass rather than folded into a session that was
   actively driving the trial forward. Neither blocks the trial from
   continuing.
-- **D7, D8, D9** — cannot be closed before the trial reaches ten ruled
-  cards, by design (open-ended trial, per the 2026-08-19 addendum). Current
-  state recorded above so this log is honest about where the trial stands,
-  not silent about it.
+- **D7, D8, D9** — **closed 2026-08-28.** Superseded; the 2026-08-20 text is
+  kept below as the record of what was deferred and why.
 
-This results log will be re-walked and re-stamped as the trial progresses,
-most importantly once D7 reaches ten.
+  *"cannot be closed before the trial reaches ten ruled cards, by design
+  (open-ended trial, per the 2026-08-19 addendum). Current state recorded above
+  so this log is honest about where the trial stands, not silent about it."*
+
+  **That reason was right for D7 and D8 and wrong for D9**, and the difference
+  only became visible at ten: D7 and D8 were waiting on sample size, which
+  arrived. D9's second limb was waiting on a baseline that had already been
+  cancelled six days earlier. Reaching ten was never going to answer it. **A
+  deferral that names the wrong blocker looks identical to one that names the
+  right blocker, and keeps looking identical right up until the blocker is
+  supposed to clear** — which is this trial's most transferable finding and
+  belongs to the practice, not to the Desk.
+
+This log was re-walked and re-stamped on 2026-08-28 when D7 reached ten, as its
+2026-08-20 revision said it would be. **The trial is closed.** Further Desk work
+opens its own round.

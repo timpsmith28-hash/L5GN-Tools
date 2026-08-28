@@ -200,11 +200,21 @@ can break this contract. One rule, load-bearing, mechanical.
 
 ## 4. The order
 
-**Card A — answer D9.** One sitting, no brief, no code. D7's ten is reached, so
-the falsifier is answerable and Phases 2-5 stop being blocked the moment it is
-written. Answer it with its two qualifications intact — fixture-contaminated
-sample, one card type, one rig — and stamp `UAT_desk_stale_card_results.md`
-again. **This is the cheapest thing on the list and it unblocks the most.**
+**Card A — answer D9. CLOSED 2026-08-28.** Answered **yes, at a stated n=2**, in
+`UAT_desk_stale_card_results.md`, re-walked and re-stamped at `d4d65c4`.
+
+Two things it turned up that the card did not anticipate. **D9's second limb was
+never answerable** — the patrol-and-remember baseline was cancelled on
+2026-08-19 and reaching ten was never going to supply it; the yes rests on limb 1
+plus judgement, and Phase 2 inherits that sentence rather than a clean pass.
+**And the trial's headline median is a fixture artefact**: 21.6h overall splits
+into 10.05h across six hand-edited fixture occurrences and 24.36h / 85.34h across
+the two clean real ones, against a 24h staleness threshold.
+
+**Phases 2-5 are unblocked, and what they are unblocked by is a qualified yes on
+two data points.** That is a weaker permission than the plan assumed it was
+granting, and any round that opens on it should cite this line rather than the
+word "yes".
 
 **Card B — the relink stage learns to report.** Independent of A; does not
 contend with it. **Widened 2026-08-28** from "arm the linker" after the
@@ -283,10 +293,12 @@ deferral of the work rig's §1 request** that the join not be deferred, and the
 reason is that C and D test both halves of that join with briefs and data that
 already exist, where the conformance card needs a new reader first.
 
-**The order stops at F, deliberately.** Everything past it is Phases 2-5, and
-they are gated on Card A. Ordering them today would be writing a third plan on
-top of two — and A is now one sitting away, so the order past F is worth writing
-next week rather than guessing at today.
+**The order still stops at F.** Phases 2-5 are no longer *gated* — Card A closed
+them out — but they are not thereby *ordered*. What they now hold is a qualified
+yes on two data points, and the thing that would make them orderable is more real
+card types, which is Cards C and D. **Ordering Phase 2 today would be reading the
+word "yes" and ignoring the paragraph under it**, which is the failure `INTENT.md`
+§5 names as a plausible wrong answer.
 
 ### Not in the order, and why
 
@@ -384,13 +396,13 @@ wants the same reader.
 
 ## 7. What would show this plan wrong
 
-- **[AMENDED] Card A comes back "the ten were mostly fixtures."** The original
-  falsifier here was that the trial could not reach ten; it has, so the live risk
-  moved. If stripping the fixture occurrences leaves too few real rulings to
-  answer D9 honestly, then Phase 1's exit test was **unwalkable as written** —
-  ten cards on one card type on one rig was never going to produce ten
-  independent data points — and Phases 2-5 were never really gated on evidence.
-  Worth finding in one sitting, and Card A is that sitting.
+- **[RESOLVED] "The ten were mostly fixtures."** They were: seven of ten
+  occurrences, two of three fingerprints. Phase 1's exit test **was** unwalkable
+  as written — one card type on one rig could not produce ten independent data
+  points, and its second limb lost its instrument six days before the trial
+  ended. Answered yes anyway, knowingly. The falsifier fired and the plan
+  proceeded with the failure written into its permission slip, which is the
+  honest version of proceeding.
 - **Cards C and D raise the ten unwalked reports and the operator ignores them.**
   Then a card is not an obligation after all, the `REPLY` §5 finding is wrong,
   and the Desk is furniture with better manners.
