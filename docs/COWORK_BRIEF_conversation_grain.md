@@ -97,10 +97,22 @@ the first iteration**; the `.md` export is a **convenience, not a route**;
 
 ## Ratify before code
 
-This round needs one ruling that does not exist: **the provenance vocabulary is
-closed and refused at write** (Task 3). Draft it with `decision-scribe` as
-`proposed`; **Task 3 is drafted, staged and left uncommitted until it binds.**
-Tasks 1, 2, 4, 5 and 6 do not depend on it and may be built now.
+**Two rulings are `proposed` and are not authority.**
+
+- **0058** (drafted 2026-08-28) — the mechanism that produced a link is recorded
+  from a closed vocabulary, refused at write, on a different axis from
+  confidence; a mechanism that cannot answer abstains. **Task 3 implements its
+  clauses 1, 3, 4 and 5 and is drafted, staged and left uncommitted until it
+  binds. Its clause 2 is out of scope here** — a separate axis means a vault
+  schema change, which this round does not do.
+- **0056** — a check enforcing a pattern rule is driven by the pattern; a map
+  present without a pin is a violation; a pin carries its metadata line.
+  **Task 5 is split by it:** writing `personal_conversation_map.tsv.sha256`
+  implements **0044 clause 4, which is accepted**, and may be built now; the
+  pattern-driven auditor and the metadata line are 0056 clauses 1 and 3 and are
+  **staged and left uncommitted** until it binds.
+
+Tasks 1, 2, 4 and 6 depend on neither and may be built now.
 
 Ratification is a re-read by the operator on a different day. **This round
 ratifies nothing**, including the map rows it produces — those are candidates for
@@ -311,12 +323,19 @@ Re-verify by listing `config/*.sha256`.
 Give the personal map the fingerprint 0040 clause 4 requires, and extend the
 existing auditor to cover it. **Do not write a second auditor.**
 
+**0056 already rules on this and is `proposed`**, so the task splits. Writing the
+`.sha256` implements **0044 clause 4, accepted** — build and commit it. Making
+`auditor_conversation_map_pin` pattern-driven rather than naming
+`mcf_conversation_map.tsv` by a hardcoded constant is **0056 clause 1**, and
+giving the pin its `origin`/`anchor`/`date`/`host` metadata line is **0056
+clause 3** — both staged, uncommitted, until 0056 binds.
+
 The round is about to make this map the estate's primary join. A map that grows
 from 4 rows to dozens without the check its sibling already has is the
 convention's own §1 gap widening under load.
 
-**Lands:** `config/personal_conversation_map.tsv.sha256`, an extended auditor,
-its tester.
+**Lands:** `config/personal_conversation_map.tsv.sha256` committed; an extended
+auditor and its tester staged.
 
 ## Task 6 ▸ both figures, one command, one run
 
@@ -386,6 +405,14 @@ and where it is silent it produces nothing rather than a weak guess.
   around it here.**
 - **Re-running `relink`, `xref_filenames` or `extract_path_mentions`.** They
   write. Detection and action are different programs (INTENT §5).
+- **Deciding what happens to the eleven.** 0040 clause 1 says derived linking is
+  not used for a source carrying a stable native conversation id; the Cowork
+  store carries one; §6b records 11 `relink` auto-links on
+  `claude-local-personal` at 0.92–0.96, which produced most of the 7.85% → 10.42%
+  rise. 0058 clause 6 makes them **visible**. Whether they are removed, or 0040
+  clause 1 is amended to permit derived linking as corroboration where a map is
+  sparse, is a separate ruling that wants the count in front of it. **Report
+  them; change nothing.**
 - **Fixing `resolve_registry_path()`.** It currently resolves to a path that
   does not exist, so `has_registry()` is false and the skip is visible — the
   loud failure, not the silent one. Its real fix is a round of its own.
@@ -456,6 +483,14 @@ Recorded so they are not answered by accident.
    export distinguishes them.
 5. **Whether the work account carries the local-storage setting at all.**
    Unverified, on the other rig, and it changes what the work side can capture.
+6. **Whether `Work_Bridge` as a record kind needs a ruling.** Task 2 emits it,
+   and no entry names it. 0039 and 0051 govern the wall; neither says what a
+   conversation naming a folder on *both* sides produces. The task refuses to
+   mis-file rather than inventing a category, which is the conservative act —
+   but a third kind arriving without a ruling is how a schema grows by accident.
+7. **What happens to the eleven derived links on `claude-local-personal`.**
+   0058 clause 6 reports them; nothing decides them. Until it does, the INTENT
+   §2 figure is 24/336 or 35/336 depending on a ruling nobody has made.
 
 ## Reporting
 
