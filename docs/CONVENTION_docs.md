@@ -74,7 +74,7 @@ Documents live flat in `docs/`.
 | `RUNBOOK_` / `SPEC_` | reference beyond the trinity | maintained in place |
 | `COWORK_BRIEF_` | the request handed to a thread | **frozen at writing** |
 | `COWORK_REPORT_` | what a thread found or built | **frozen at writing** |
-| `UAT_` | the walk-sheet, and its `_results` log | walk-sheet mutable while walked; results frozen |
+| `UAT_` | the walk-sheet, and its `_results` log | walk-sheet mutable while walked; results frozen, unless declared `INTERIM` (§4) |
 | `AGENDA_` | a dated snapshot of what was open | **frozen at its date** |
 | `_` (leading underscore) | **generated**; never hand-edited (**0030**) | regenerated, never edited |
 
@@ -208,6 +208,40 @@ of this tree — a stale number recovered from a retired doc in `archive/` and
 laundered into a live one. With no commit on the document, *"the walking machine
 was on an old tree"* and *"the number was invented"* were indistinguishable.
 
+### An interim results log, and the one exception to the freeze
+
+§2 says a `_results` log is **frozen**. That is right for a closed round and
+wrong for a trial, and the gap was found by walking into it: a round whose exit
+test is *"two weeks of live use, then a verdict"* produces a results log while
+the trial is still running, and freezing it means the closing verdict has nowhere
+to go.
+
+**So: a results log may declare itself `INTERIM` and be re-walked, once per
+declaration, until it declares itself closed.** The conditions are all four,
+because any three of them describe a log being quietly rewritten:
+
+1. **It says so at the top, in its own title**, at the moment it is first
+   written — never retrofitted when a revision turns out to be wanted.
+2. **It names what it is waiting for**, concretely enough that a reader can tell
+   whether it has happened. *"Until the trial reaches ten ruled cards"* qualifies;
+   *"until the trial matures"* does not.
+3. **Every re-walk re-cuts the uat stamp** to the commit it ran against, so each
+   revision is traceable to a tree the way a first walk is.
+4. **A superseded verdict is marked superseded and left standing**, never
+   deleted. The log's product is what was believed when — the same reason
+   `CONVENTION_decisions.md` §4 keeps wrong claims in place.
+
+**Everything else stays frozen**, including every item the re-walk did not touch.
+An interim log is not an editable document; it is a frozen document with a named
+hole in it, and the hole closes once.
+
+**Found 2026-08-28**, when `UAT_desk_stale_card_results.md` was re-walked to close
+D7, D8 and D9. It had been stamped `INTERIM` by an explicit operator call on
+2026-08-19 and its own closing line promised the re-walk, so revising it was what
+the file asked for — but §2 said frozen and nothing said otherwise, so the walk
+had to argue its own legitimacy in a paragraph instead of citing a rule. This
+section is that rule.
+
 ### The gate-frozen marker
 
 A live doc's *"N auditors + M testers"* claim is checked against `verify.py`'s
@@ -273,11 +307,22 @@ reasons, stated so they can be argued with:
 **What would show this wrong.** Count the files in `docs/investigation/` that are
 **not** a prompt-and-response exchange this estate ran. If inbound third-party
 material starts landing there, the class is doing a job it was not built for and
-a `context/` becomes owed. **That count is already two of thirteen today**:
+a `context/` becomes owed. **That count is two of sixteen** (2026-08-28):
 `2026-08-19_downtier_recurrence_probe.py` is a script, not an exchange, and
 `Work_Claude_UAT_chat_20260728.md` carries neither the date-first naming nor the
 `1-prompt` / `2-response` suffix the naming rule below requires. Two is a
 warning; four is the answer.
+
+> **The denominator is the point, not the pair.** This read *"two of thirteen
+> today"* when written on 2026-08-26 and was stale by 2026-08-27, when the
+> coverage re-measure landed a prompt and a response. Nobody noticed, because
+> nothing reads a convention's own arithmetic — `auditor_doc_claims` matches one
+> claim shape and this is not it. **Corrected here as an instance rather than as
+> housekeeping**: it is the same defect `CONVENTION_decisions.md` §2.1 recorded
+> against itself the same week, and both belong on the list 0056's Consequences
+> admit does not exist. **The numerator was not re-adjudicated** — three further
+> files carry date-first names without the suffix and may well be exchanges named
+> before the rule existed. Settling that is a pass of its own, not a line edit.
 
 Nothing is moved by this section, including those two files.
 
