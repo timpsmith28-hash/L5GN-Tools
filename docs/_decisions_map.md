@@ -161,13 +161,11 @@ Entries citing nothing. **An orphan is not a lesser entry** — several are load
 | accepted (recording a decision already made) | 1 |
 | accepted 2026-08-19 | 2 |
 | accepted 2026-08-20 | 1 |
-| accepted 2026-08-28 | 6 |
+| accepted 2026-08-28 | 7 |
 | accepted as a direction, deferred | 1 |
-| proposed | 1 |
 
-**1 proposed** — not authority, and not citable as such (`CONVENTION_decisions.md` 3):
+**0 proposed** — not authority, and not citable as such (`CONVENTION_decisions.md` 3):
 
-- [`0057`](DECISIONS.md#0057-a-skill-is-estate-ip-with-one-source-of-truth-and-branches-rather-than-copies-it-declares-the-kind-of-authority-it-needs-resolves-it-at-run-time-and-stops-rather-than-working-from-its-own-text) — A skill is estate IP with one source of truth and branches rather than copies; it declares the kind of authority it needs, resolves it at run time, and stops rather than working from its own text · [what would show this wrong](DECISIONS.md#0057-a-skill-is-estate-ip-with-one-source-of-truth-and-branches-rather-than-copies-it-declares-the-kind-of-authority-it-needs-resolves-it-at-run-time-and-stops-rather-than-working-from-its-own-text)
 
 **10 of 57 entries carry a *What would show this wrong* section.** Links only:
 

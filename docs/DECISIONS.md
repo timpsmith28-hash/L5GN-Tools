@@ -3197,7 +3197,7 @@ wrong.
 
 ## 0057 — A skill is estate IP with one source of truth and branches rather than copies; it declares the kind of authority it needs, resolves it at run time, and stops rather than working from its own text
 
-**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0042 clause 1
+**Date:** 2026-08-26 · **Status:** accepted 2026-08-28 · **Builds on:** 0042 clause 1
 (declaration belongs to the repo that owns the work), 0043 (a ruling from
 another repo is cited with its repo, at every mention), 0045 (a pinned copy is
 verified read-only and reported, never repaired), 0050 (a source declares its

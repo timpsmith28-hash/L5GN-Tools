@@ -202,8 +202,9 @@ answers no question a fresh reading of the tree would not answer better.
 
 Five values:
 
-- **`proposed`** — drafted, not yet ratified. Not authority (§3). One entry
-  stands at `proposed` today: 0057.
+- **`proposed`** — drafted, not yet ratified. Not authority (§3). No entries
+  stand at `proposed` as of 2026-08-28: the batch this file was written
+  against, 0051 through 0057, is fully ratified.
 - **`accepted <date>`** — ratified. Binding, body frozen.
 - **`superseded by NNNN`** — replaced, wholly or in part. Body untouched.
 - **`withdrawn`** — drafted, never accepted, and no longer sought. Only a
