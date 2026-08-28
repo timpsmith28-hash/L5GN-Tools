@@ -1326,6 +1326,20 @@ check is now a known prerequisite, not an assumption.
 
 ## 0036 — The cross-machine mesh stands down; mothballed behind a config flag, not deleted
 
+**Status:** accepted · **Date:** *(absent — see below)* · **Source:**
+`COWORK_BRIEF_unified_app.md` Task 6
+
+> **Metadata stamped 2026-08-28, not written at the time.** This entry landed
+> carrying neither a `Status` nor a `Date` line — the only one of fifty-seven,
+> found by parsing the log during the 2026-08-28 restart rather than by reading
+> it, because every other entry matched the format and this one silently did not.
+> The status is stamped in place under §4, which unfreezes the status line and
+> nothing else. **`Date` is left absent rather than inferred:** 0035 and 0037 both
+> read 2026-08-08, which makes that the obvious guess and a guess is what it would
+> be. Git holds the landing date and is the authority for it (`CONVENTION_decisions.md`
+> §2.1). So this entry stays non-conformant on a required field, deliberately, and
+> is a charter member of the list 0056's Consequences admit does not exist.
+
 **Context.** COWORK_BRIEF_unified_app.md Task 6. The mesh (producers scanning
 and pushing `estate.json` snapshots; the knight consuming them, ingesting chat
 exports, and running the interpret sweep) was the estate's original shape and

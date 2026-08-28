@@ -156,8 +156,7 @@ Entries citing nothing. **An orphan is not a lesser entry** — several are load
 
 | status | entries |
 |---|---|
-| (none) | 1 |
-| accepted | 44 |
+| accepted | 45 |
 | accepted (recording a decision already made) | 1 |
 | accepted 2026-08-19 | 2 |
 | accepted 2026-08-20 | 1 |
