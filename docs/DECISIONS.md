@@ -2795,7 +2795,7 @@ right in its principle.
 
 ## 0054 — Configuration is split by who is entitled to decide a value, not by whether it varies; a machine fact is derived and confirmed rather than typed, and a packaged tool carries no estate layer
 
-**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0012 (`scope` is a
+**Date:** 2026-08-25 · **Status:** accepted 2026-08-28 · **Builds on:** 0012 (`scope` is a
 config tag on the producer's root, never inferred from folder nesting), 0036
 (the mesh stood down — the objection was the standing channel, not the
 transfer), 0042 clause 2 (the wizard allowlist is a reviewed, committed edit —
