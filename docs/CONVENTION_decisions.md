@@ -68,6 +68,51 @@ also carries `**Amends:**`, `**Supersedes:**`, `**Relates to:**`,
 `**Convention:**` and others where they say something a `Builds on` would not;
 that latitude is real and is not tidied away.
 
+### 2.1 What `Date` means — and the fact that it currently means two things
+
+**`Date` is the day the entry was drafted.** Not the day it was committed, not
+the day it landed in the log, and never the day it was accepted — acceptance
+carries its own date in `Status` (§5).
+
+**This is stated now because the field is inconsistently populated and nothing
+said which it was.** Recorded rather than quietly corrected, and each line
+carries what it rests on:
+
+- **0054–0057 carry the day they landed in the log** (2026-08-27), having been
+  drafted across 25–26 August. *Source: the restamp's own reasoning, which
+  existed only in an uncommitted commit-message draft until this paragraph.*
+- **0017 disambiguates itself**, and its format is the precedent worth copying
+  where the two dates differ and the difference matters:
+  `**Date:** drafted 2026-07-21, ratified 2026-07-27`. *Source: the entry.*
+- **What 0001–0053 mean is not known**, and is recorded as unknown rather than
+  assumed to be the drafting date. Settling it means reading `git log` against
+  each entry's landing commit; nobody has, and the answer is not needed to fix
+  the rule going forward.
+
+**Why the inconsistency is load-bearing rather than cosmetic.** §8's
+different-day rule — *ratification is a re-read by the operator on a different
+day than the drafting* (**0033**) — is measured **from the drafting**. Where
+`Date` means "landed", the interval the rule tests starts at the wrong end and
+runs short: an entry drafted on the 25th and landed on the 27th reads as two
+days younger than it is. **The error runs in the safe direction** — it can only
+make a ratification look less ready than it is, never more — which is why this
+is a correction to make rather than an incident to investigate.
+
+**It bites where the log is right now.** Four of the seven entries currently
+`proposed` are the four whose `Date` does not mean what the other entries' does,
+and they are the next entries anyone will ratify.
+
+**What to do about the four.** Nothing, for now, and deliberately: they are
+`proposed`, and a proposed entry may be corrected in place because nobody is
+permitted to rely on it yet (§4 — the freeze attaches at acceptance, not at
+commit). Restamping them to their drafting dates is a legitimate correction and
+is **not** made here, because it would move four dates in the same act that
+defines what the field means, and the definition should be citable before it is
+enforced. **Entries drafted from here carry the drafting date.**
+
+**Git is the better authority for landing dates, for every entry**, and is why
+this convention does not add a second field to record one.
+
 **The heading states the decision, not the topic.** A reader scanning headings
 should learn what was decided without opening anything. *"A ruling from another
 repo is cited with its repo, at every mention"* is a heading; *"Citations"* is a
