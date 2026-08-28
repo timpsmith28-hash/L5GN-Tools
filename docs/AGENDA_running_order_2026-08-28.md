@@ -20,6 +20,14 @@ restart note says so and this file does not paper over it.
 > widened from one defect to three.** The sweep found a commit message for a fix
 > that was never made, and the fix it describes is the third of three
 > independent ways the relink stage reports nothing true.
+>
+> **Amended a third time, same day**, after 0051-0057 were all accepted and
+> `AGENDA_design_gaps_2026-08-28.md` re-read them against the tree. **Card A is
+> closed**, every `(proposed)` parenthetical is corrected, and **§6a is new**.
+> The order itself is **not** resequenced: §6a records that the gaps argue for
+> promoting the conformance reader, and leaves that call to a thread that opens
+> on it. **This is the last amendment this file should take.** A fourth would be
+> the plan becoming the work, which is the failure its own §7 is watching for.
 
 ---
 
@@ -247,15 +255,15 @@ and the failure tail must survive a byte the locale cannot decode.
 
 **Sequencing note, and it is the point of widening this card:** arming the
 linker *without* fixing the report means the run cannot tell you whether arming
-it worked. Scope against 0053 (**proposed**), which already rules on what belongs
+it worked. Scope against 0053 (**accepted 2026-08-28**), which already rules on what belongs
 in the gate and what belongs beside it.
 
 **Card C — `staleness_feeds`, Phase 1b.** Briefed 2026-08-19; re-verify against
 the tree at round-open per its own header. It is the operator's own timer
 complaint, already scoped (§2a). It is also the **reader → Desk** half of the
 join the work rig asked not to be deferred: a declared feed, read, routed to a
-card. *Depends on* **0050** (accepted); touches **0053** (**proposed** — stated
-as a dependency, not assumed).
+card. *Depends on* **0050** and **0053**, both **accepted** — so what was a
+stated dependency here is now simply authority.
 
 **Card D — the promotion step: a repeated ruling becomes a standing one, and
 says so in a dated file.** The **Desk → artefact** half of the same join, and
@@ -282,7 +290,7 @@ first test on something that is not a document.
 **Card F — copy currency: the hash manifest.** The class with five recorded
 instances and no owner (`REPLY` §6), and the only card here that discharges a
 named ask from the other side of the bridge (`REPLY` §0.2). *Depends on* **0057**
-(**proposed**). Sharpened by a fact from the rig: **the Deck runs on the gaming
+(**accepted 2026-08-28**). Sharpened by a fact from the rig: **the Deck runs on the gaming
 rig only**, so every card type built above has an audience of one machine until
 this is answered.
 
@@ -303,8 +311,9 @@ word "yes" and ignoring the paragraph under it**, which is the failure `INTENT.m
 ### Not in the order, and why
 
 - **`hermetic_gate`** — briefed 2026-08-24 from live diagnosis and current. It is
-  gate hygiene gated on **0053** (proposed), not a program card. Run it whenever
-  0053 is ratified; it does not belong in this sequence.
+  gate hygiene gated on **0053**, which is now **accepted** — so it is unblocked
+  and unscheduled. Where it sits relative to Card B, which also scopes against
+  0053, is an open call nobody has made (design-gaps note section 5).
 - **`conversation_grain`** — briefed with its walk-sheet. Its ruling, **0058**, is
   not in the log at all. Its first mechanical act is appending that draft as
   `proposed` from `data/decisions_draft/0058_proposed.md`.
@@ -378,11 +387,14 @@ wants the same reader.
 
 ## 6. What this plan assumes, stated so it cannot assume it quietly
 
-- **Five of the seven proposed rulings are load-bearing here** — 0050 is accepted,
-  but 0053 gates `hermetic_gate` and scopes Card B, 0057 gates Card F, and
-  0051/0052/0054/0055/0056 bound what any of these rounds may touch. **None is
-  ratified and this plan does not assume ratification.** Each is a dependency;
-  where a card cannot start without one, that is said above.
+- **[AMENDED] The seven are no longer proposed.** 0051-0057 were all accepted on
+  2026-08-28, after this plan was written. What was written here as *"none is
+  ratified and this plan does not assume ratification"* has been overtaken: 0053
+  now scopes Card B as authority rather than as a dependency, 0057 does the same
+  for Card F, and 0051/0052/0054/0055/0056 bind what any of these rounds may
+  touch. **The plan is not thereby validated** — it was built to survive their
+  rejection, and their acceptance removes a caveat without adding a permission.
+  What acceptance *did* add is §6a.
 - **0056's own Consequences admit it creates** *"an unknown quantity of latent
   non-conformance and no list of it."* Producing that list is a real card and it
   is the conformance card's natural second rule. Not ordered here.
@@ -393,6 +405,52 @@ wants the same reader.
   statement about Takeout.** Any card justified by *"does it move the thesis"*
   should say which corpus it moves, because moving the Claude sources moves the
   record the thesis is actually about and barely moves the number.
+
+## 6a. What acceptance forced — filed, not sequenced
+
+`AGENDA_design_gaps_2026-08-28.md` re-read 0051-0057 as accepted clauses and
+found six places where a rule now in force requires something this order does not
+name. **Every claim in it was checked against the tree from this thread and every
+one holds.** Filed here so the order carries them; **deliberately not
+resequenced**, because that is a restructure and this file has been amended three
+times already.
+
+| | gap | bearing on the order |
+|---|---|---|
+| 1 | **0056 is accepted and violated today.** `personal_conversation_map.tsv` has no `.sha256`; `auditor_conversation_map_pin` hardcodes `mcf_conversation_map.tsv` (lines 32-33) so it cannot see the violation; the MCF pin is hash-and-path only, without clause 3's origin/anchor/date/host | **Card B's class, arriving smaller and already broken.** Not scheduled anywhere |
+| 2 | **0054 clause 6 (`authors` lives in the tracked file only)** resolves the ambiguity Card B scopes against | **A prerequisite to Card B, not a peer.** Clause 5's whole-file overwrite is a live data-loss path, already in `CLAUDE.md`'s hazards |
+| 3 | **0055's registry migration is undone.** `project_registry.json` still carries `_comment`, `_schema`, `_id_scheme`, `_low_signal_body`; no registry auditor, no registry pin | New work, no card, no urgency against A-F |
+| 4 | **0051 clause 2's containment auditor does not exist** | Most serious in consequence, least urgent operationally. Its own card |
+| 5 | **`hermetic_gate` is unblocked** — 0053 accepted | Parentheticals corrected above; its slot relative to Card B is an open call |
+| 6 | 0052's falsifiers have no counter; 4 of 9 conventions carry 0057 clause 7's adoption header | Worth a pass, not a round |
+
+**One thing the cross-check did not catch, because acceptance did not force it —
+it exposed it.** With 0051-0057 accepted, `_decisions_map.md`'s regenerated status
+table reads `(none) | 1`, and that one is **0036**, still carrying neither a
+`Status` nor a `Date` line. It is now the only entry in a 57-entry log that is not
+`accepted`, which makes it the most conspicuous anomaly in the log and the easiest
+to keep not noticing. Its body is frozen if it is accepted, so the house remedy is
+a correcting entry that says what it corrects (0006→0005), not an in-place stamp.
+
+**The aggregate says more than the list, and it is not filed as a card because it
+is a decision rather than a task.** Gaps 1, 3, 4 and 6, plus all three of Card B's
+defects, are one shape: **an accepted rule with no reader, or a reader that
+structurally cannot see what its rule is about.** 0056 clause 1 names it exactly —
+a check whose ruling names a pattern and whose code names a path — and its own
+Consequences admit it creates *"an unknown quantity of latent non-conformance and
+no list of it."*
+
+**That is the conformance reader, which the work rig put first** (`NOTE` §2, *"and
+it is not close"*) and which §4 defers behind Cards C and D. The deferral's
+reasoning was that C and D test the join using briefs and data that already
+exist. **Ratifying seven rulings is evidence against it**: it created seven more
+unenforced rules in an afternoon, and the count of rules without readers is now
+growing faster than any card mechanism can raise questions about them. Three seed
+instances are known, which is the cheapest that sweep will ever be to start.
+
+**Left as an open call, on the operator's instruction.** Deciding it is a
+restructure and belongs to a thread that opens on it, not to a fourth amendment
+of a file frozen at its date.
 
 ## 7. What would show this plan wrong
 

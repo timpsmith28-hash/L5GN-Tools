@@ -98,9 +98,19 @@ days younger than it is. **The error runs in the safe direction** — it can onl
 make a ratification look less ready than it is, never more — which is why this
 is a correction to make rather than an incident to investigate.
 
-**It bites where the log is right now.** Four of the seven entries currently
-`proposed` are the four whose `Date` does not mean what the other entries' does,
-and they are the next entries anyone will ratify.
+**It bit exactly once, and the outcome was unaffected.** This clause was written
+on the morning of 2026-08-28, when 0051-0057 were `proposed` and the four
+divergent entries were the next in line to be ratified. All seven were accepted
+that afternoon. Their `Date` read 2026-08-27, so the different-day interval was
+observed as one day where the true one was two or three — short, in the safe
+direction, and still a different day, so §8 was satisfied on either reading.
+
+**Recorded rather than deleted, because the paragraph above rotted within hours
+of being committed and that is the point it was making.** A count written into
+prose goes stale the moment the thing it counts moves, and nothing in this repo
+checks a convention's own arithmetic. `auditor_doc_claims` matches one claim
+shape — *"N auditors + M testers"* — deliberately, so that it always runs; every
+other number in every convention here is unguarded.
 
 **What to do about the four.** Nothing, for now, and deliberately: they are
 `proposed`, and a proposed entry may be corrected in place because nobody is
