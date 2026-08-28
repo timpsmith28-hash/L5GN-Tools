@@ -86,6 +86,31 @@ dated-snapshot classes, and `CONSULTANT_` waits on the debt named in §7.
 it is named here rather than renamed, because renaming a file to satisfy a
 convention written after it is the kind of tidying this estate does not do.
 
+**Classified 2026-08-28, without a prefix and without a rename.** It was left
+unclassified because nobody had said what class it was in, which is a different
+problem from it having no prefix. The operator's framing, recorded as his:
+
+> the same family as `RUNBOOK_` — but a slightly different layer. A runbook
+> covers a **procedure**; a playbook was originally designed to cover
+> **everything the operator needs**, and that is a hard gap to maintain.
+
+That distinction is real and it carries its own failure mode, which is why it is
+written down rather than folded into `RUNBOOK_`. **A procedure doc is complete
+when its procedure is; an operator-complete doc is never complete, and it decays
+without anything looking wrong** — no step is missing, because no step was ever
+promised. It is the only class here whose staleness is invisible by construction,
+and it should be read with that in mind rather than trusted the way a runbook is.
+
+**No `PLAYBOOK_` prefix is created, and the reason is not inertia.** A prefix
+with one instance would need that instance renamed to be true, and
+`SOLO_PLAYBOOK.md` is cited by name in `docs/archive/` — by
+`COWORK_BRIEF_solo_playbook.md`, its report and its walk-sheet, all of them
+**frozen under §4**. Renaming would either break those citations or require
+editing frozen documents to preserve them. The class is worth naming; the prefix
+is not worth that. **If a second playbook is ever written, this decision is
+reopened rather than inherited** — two instances would make the prefix worth its
+cost, and this paragraph is the note to the person who writes the second one.
+
 **A new prefix is an amendment to this file**, not a call made while naming a
 file.
 
