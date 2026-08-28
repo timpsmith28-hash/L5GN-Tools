@@ -3064,7 +3064,7 @@ recorded but not practised.
 
 ## 0056 — 0044 clause 4 is enforced by the pattern, not by an enumerated path; and a pin records when and where it was taken as well as what
 
-**Date:** 2026-08-27 · **Status:** proposed · **Builds on:** 0040 clause 2 (maps
+**Date:** 2026-08-25 · **Status:** accepted 2026-08-28 · **Builds on:** 0040 clause 2 (maps
 are per source, one file each) and clause 4 (a curated map is never committed;
 a `<map>.sha256` fingerprint is committed beside it, because an untracked file
 produces no diff), 0044 clause 4 (the ratified map is resolved from the declared
