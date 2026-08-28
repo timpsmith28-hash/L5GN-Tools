@@ -15,6 +15,11 @@ restart note says so and this file does not paper over it.
 > rewritten and the original is not preserved, because an order nobody will
 > follow is not evidence of anything. **§2a is new and it is the operator's
 > observation, not this thread's.**
+>
+> **Amended again, same day**, after the `data/git_warden/` sweep: **Card B is
+> widened from one defect to three.** The sweep found a commit message for a fix
+> that was never made, and the fix it describes is the third of three
+> independent ways the relink stage reports nothing true.
 
 ---
 
@@ -201,18 +206,39 @@ written. Answer it with its two qualifications intact — fixture-contaminated
 sample, one card type, one rig — and stamp `UAT_desk_stale_card_results.md`
 again. **This is the cheapest thing on the list and it unblocks the most.**
 
-**Card B — arm the linker, and make the skip loud.** Independent of A; does not
-contend with it. `CHRONICLER_REGISTRY_PATH` unset resolves to a path with no
-repo behind it, `has_registry()` skips `relink`, and the chain finishes green
-(restart note, gaps §3). **Until this is closed, nothing built anywhere else
-moves 10.42%**, because the only stage that raises coverage does not run unless a
-human remembers a variable.
+**Card B — the relink stage learns to report.** Independent of A; does not
+contend with it. **Widened 2026-08-28** from "arm the linker" after the
+`data/git_warden/` sweep, which found a commit message describing a fix that was
+never made.
 
-Not a "set the env var" fix. The fix is that **the skip must be loud, or the
-default must be right** — `INTENT.md` §5 forbids the rule that survives on the
-operator's memory, and 0048 clause 4 forbids the check that cannot fail. Scope it
-against 0053 (**proposed**), which already rules on what belongs in the gate and
-what belongs beside it.
+**Not one defect — three, and they compound.** The stage the thesis depends on
+has no trustworthy report in *any* of its three outcomes:
+
+| outcome | what it reports | why |
+|---|---|---|
+| **skipped** | nothing; chain green | `CHRONICLER_REGISTRY_PATH` unset resolves under a `GitHub/L5GN` directory that does not exist, so `has_registry()` is False and the stage is skipped before `relink.py`'s own loud `SystemExit` can fire |
+| **ran** | `[relink] ok -- no new rows` | `summarize_from_log` reads `ingestion_log`, and **`relink.py` contains zero references to it** (verified, not inferred). The line is vacuous whatever relink did |
+| **failed** | exit code, no tail | `run_stage` captures with `capture_output=True, text=True` and **no `encoding=`**, so a non-cp1252 byte destroys the capture. relink prints thread titles; this estate's titles carry emoji |
+
+**The third one has a commit message and no commit.**
+`data/git_warden/pipeline_stage_encoding-1.msg` reads *"Fixed on both sides of
+the pipe"* in the past tense and names the remedy — `encoding='utf-8',
+errors='replace'` on the parent, `PYTHONIOENCODING=utf-8` in the child env.
+`run_pipeline.py` lines 150-151 carry neither, and the tree is clean. **The
+message is the only artefact of the fix.** It is also, on its own, an instance of
+the copy-currency class Card F is about, arriving inside the `git_warden`
+mechanism rather than across a machine boundary.
+
+**So the card is "make the stage answerable", not "set the env var."** The skip
+must be loud or the default must be right (`INTENT.md` §5 forbids the rule that
+survives on the operator's memory; 0048 clause 4 forbids the check that cannot
+fail); the success line must say something relink actually did, or say nothing;
+and the failure tail must survive a byte the locale cannot decode.
+
+**Sequencing note, and it is the point of widening this card:** arming the
+linker *without* fixing the report means the run cannot tell you whether arming
+it worked. Scope against 0053 (**proposed**), which already rules on what belongs
+in the gate and what belongs beside it.
 
 **Card C — `staleness_feeds`, Phase 1b.** Briefed 2026-08-19; re-verify against
 the tree at round-open per its own header. It is the operator's own timer
