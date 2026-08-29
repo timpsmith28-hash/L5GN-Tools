@@ -3357,3 +3357,322 @@ Zero is ambiguous and must be read against the first count: zero stops with
 zero unresolvable authorities means the estate is conformant; zero stops with
 four unresolvable authorities means clause 5 is not implemented and the skills
 are still working from memory.
+
+---
+
+## 0058 — A link records the mechanism that produced it, as a closed value refused at write and on a different axis from confidence; a mechanism that cannot answer abstains, and the abstention is counted
+
+**Date:** 2026-08-28 · **Status:** proposed · **Builds on:** 0038 (conversation,
+session and thread are three distinct things; clause 3 — the `threads` table is a
+*storage* entity, not a source entity), 0040 clause 1 (where a source carries a
+stable native conversation id, a curated map keyed on it is the join of record,
+and **fuzzy or derived linking is not used for that source**), clause 2 (maps are
+per source and carry per-row provenance — *how each row was arrived at,
+machine-matched or human-mapped, never overwritten by a re-run*) and clause 3
+(Chronicler consumes the map at `project_confidence: 'manual'`), 0046 (recency
+resolution through one shared resolver; the `[provenance:…]` tag was chosen over
+a status column deliberately, because a column would have needed a migration),
+0048 clause 4 (a check that cannot fail trains the eye past it), 0050 (a source
+declares its own staleness; a source that cannot be reached reads as **unknown**,
+never as fresh) · **Source:** design thread, 2026-08-27/28, and the measurement
+in `docs/investigation/2026-08-27_intent-coverage-remeasure_claude_2-response.md`
+§6b, §10a and §10d-iii · **Brief:** `COWORK_BRIEF_conversation_grain.md` ·
+**Convention:** `docs/CONVENTION_conversation_map.md`
+
+**Context.**
+
+Three mechanisms were measured against the same corpus on 2026-08-27/28, and
+they do not fail alike.
+
+- **The Cowork sidecar.** `userSelectedFolders`, compared against a
+  hand-curated sheet the operator assigned from what each conversation was
+  *about* rather than from the Cowork UI, so the two are independent. Of 49
+  conversations present in both: **35 agree, 0 disagree, 14 carry an empty
+  array.** The misses are empty, not wrong.
+- **Title plus first user message**, on the 39-conversation Claude export: **16
+  resolve to one project, 4 to more than one, 19 to none.** The shape is
+  instructive — short openers are silent but never wrong; long openers are
+  usually a pasted document and go ambiguous.
+- **`relink`'s alias scoring.** §10d-iii recorded threads scoring
+  `adjusted = 1.000` for `universal-content-pipeline` on **nine** compounding
+  body aliases, because the thread pasted a project list. They were withheld by
+  the ambiguity guard — *a tie, not a rule that understood why they were wrong.*
+
+**The vault records how confident each link is and not how it was reached.**
+`project_confidence` ∈ {`evidence`, `exact`, `fuzzy`, `manual`, `none`} is one
+axis doing two jobs, and the three mechanisms above are indistinguishable once
+written.
+
+**What forced this is a conformance finding that the schema made invisible.**
+0040 clause 1 is accepted and says that where a source carries a stable native
+conversation id, the curated map is the join of record and *"fuzzy or derived
+linking is not used for that source."* The Cowork store carries exactly such an
+id — the sidecar's `sessionId` field — which is what 0040's own Context
+established. Yet §6b records that the refresh of 2026-08-27 gave
+`claude-local-personal` **11 evidence links, every one of them a `relink`
+auto-link** on a title-plus-body alias pair at 0.92–0.96, taking that corpus from
+0.0% to 15.5%.
+
+So derived linking ran against a source a ruling excludes it for, produced most
+of that day's coverage rise, and **nothing reported it** — because the column
+that would have shown it records confidence rather than mechanism. Eleven of the
+35 substantive evidence links the estate currently publishes as its headline
+figure were produced by a mechanism an accepted clause does not permit for that
+source. That is not a scoring defect; the scorer behaved as specified. It is the
+record being unable to describe itself well enough for its own rules to be
+checkable.
+
+**And the tag that was supposed to carry this is free text.** 0040 clause 2
+requires per-row provenance; 0046 implemented it as a mandatory `[provenance:…]`
+tag at the head of `notes` which `curator_ratify` refuses to append a row
+without. The refusal covers the tag's *presence*. Its *payload* is unconstrained
+— today `machine-matched:pass-1` — so a second mechanism can write a third
+spelling and every consumer will accept it.
+
+**Decision.**
+
+1. **Every link records the mechanism that produced it, from a closed
+   vocabulary, and a write outside that vocabulary is refused.** Not warned, not
+   accepted and documented against. The vocabulary is declared in
+   `CONVENTION_conversation_map.md`; the shared parser reads it from there and
+   does not carry a second copy. Adding a value is an amendment to that
+   convention, not a call made while writing a row.
+
+2. **Mechanism and confidence are different axes and are recorded separately.**
+   `project_confidence` continues to mean *how sure*; the mechanism field means
+   *how derived*. Neither is inferred from the other. A curated-map row is
+   `manual` under 0040 clause 3 whatever mechanism proposed it, and the
+   mechanism field is what says whether a human, a sidecar or a text match
+   proposed it.
+
+3. **A mechanism that cannot answer abstains, and produces no row.** Not a
+   low-confidence row, not a guess carried forward for a human to knock down.
+   The Cowork sidecar's 14 empty `userSelectedFolders` are the worked example.
+   This is 0050's rule applied one level down: a source that cannot be reached
+   reads as unknown; **a mechanism that cannot decide reads as silent.**
+
+4. **Abstentions are counted and reported wherever coverage is reported.** An
+   abstention that is invisible is indistinguishable from a mechanism that was
+   never run, which is the *confident zero* this estate has now met in five
+   separate costumes. A coverage figure published without its abstention count
+   is incomplete.
+
+5. **Where a mechanism does not populate a field, the field is present and
+   explicitly null rather than omitted**, so that *"this mechanism did not
+   derive that"* is distinguishable from *"this key does not exist"* by reading
+   one row. A field that is structurally always null for every mechanism is a
+   defect in the record shape and is removed rather than carried.
+
+6. **A link whose mechanism is excluded for its source by 0040 clause 1 is
+   reported as a violation.** The check is driven by the source's declared
+   possession of a native conversation id, not by an enumerated list of sources
+   — 0056 clause 1's shape, applied here. **This entry does not decide what
+   happens to the eleven links already in the vault**; it decides that they are
+   visible. Removing them, or amending 0040 clause 1 to permit derived linking
+   as corroboration where a map is sparse, is a separate ruling and wants the
+   count in front of it.
+
+**Consequences.**
+
+**Clause 6 turns a green tree red, and it does so against the estate's own
+published figure.** Eleven of the 35 substantive evidence links violate 0040
+clause 1 for their source. The day this lands, that is reportable, and the
+INTENT §2 figure of 10.42% is thereafter a number with a footnote — because the
+honest reading is either 24/336 or 35/336 depending on a ruling nobody has made
+yet. **This entry makes the estate's headline worse and does not fix it.** That
+is the ruling working; it is also the least comfortable thing in this log.
+
+**Clause 2 costs a vault schema change**, which
+`COWORK_BRIEF_conversation_grain.md` puts explicitly out of scope. So clause 2
+cannot be implemented by that round and needs one of its own. 0046 declined a
+status column on exactly this reasoning — *"a column would have needed a
+migration, a notes tag does not"* — and this entry accepts the migration it
+declined, for a different field and with a different justification: a tag in a
+`notes` string is fine for a curated map that one writer appends to, and is not
+fine for a column every consumer of the vault must join on.
+
+**Clause 1 will refuse something legitimate at an inconvenient moment.** A
+closed vocabulary means the first genuinely new mechanism is blocked until the
+convention is amended, mid-round, by an operator who wanted to be doing
+something else. That friction is the point and it will not feel like it.
+
+**Clause 3 costs coverage, permanently and on purpose.** Fourteen of 49 measured
+conversations produce nothing rather than a guess. A design that guessed would
+show a higher number today and would be wrong an unknown fraction of the time,
+which INTENT §5 rates as the worst thing this system can produce. The trade is
+taken knowingly; it is still a trade.
+
+**Clause 4 makes every future coverage figure longer to state**, and a figure
+that needs two numbers is a figure that gets quoted as one. This is a real risk
+and the mitigation is only that the report format demands both.
+
+**What would show this wrong.**
+
+**Count the values in the closed vocabulary six months after this lands.** If it
+is still the four it started with — `sidecar`, `first-message`, `cwd`, `human` —
+then closure was never under pressure, bought nothing, and a free-text tag with
+an auditor would have done the same work for none of clause 1's friction. If it
+has grown past eight, the field is being used as a general-purpose label rather
+than a mechanism, and it wants splitting before the vocabulary becomes a
+taxonomy nobody can hold in their head.
+
+**Count the links clause 6's check reports, in its first run and three months
+later.** Today the expected answer is eleven. If it reports eleven and then never
+fires again, clause 6 was a one-off cleanup wearing a rule's clothes and should
+have been a task in a brief. If it keeps firing, the exclusion in 0040 clause 1
+is being routed around by ordinary work, and the entry to write is the one that
+amends 0040 rather than the one that keeps reporting it.
+
+**Count abstentions that a human later resolves to the answer the abstaining
+mechanism would have produced.** This is clause 3's falsifier and it is the
+sharpest one here. Take the 14 empty-`userSelectedFolders` conversations, let the
+operator ratify them by hand, and compare each against what a guessing mechanism
+would have said. **If most abstentions would have been right, clause 3 is buying
+a safety that was not needed and is paying real coverage for it** — and the
+correct ruling is to let a mechanism propose at a low confidence rather than stay
+silent. If the guesses would have been wrong or split, clause 3 is vindicated and
+the 14 are the cost of not being wrong.
+
+**Count how often two mechanisms disagree about the same conversation once both
+are recorded.** The design assumes the sidecar is a join and the text match is a
+signal. If they disagree at any material rate, one of them is not what this entry
+says it is, and clause 2's separate axis is what makes that measurable at all —
+which is the argument for clause 2 surviving even if everything else here falls.
+
+---
+
+## 0059 — 0048 clause 2 is amended: a card's completeness is measured and shown rather than used to refuse it, and "not enough to decide yet" becomes a ruling with a named thing to fetch
+
+**Date:** 2026-08-28 · **Status:** proposed · **Amends:** 0048 clause 2 (the
+fixed card anatomy and its refusal to raise) · **Builds on:** 0048 clauses 1, 3,
+4 and 5 (all four stand unamended — the operator confirmed each fits and
+justifies), 0031 (a non-gating surface reports findings, never a verdict), 0037
+clause 4 (no estimate where no measurement exists), 0045 (report, never repair),
+0050 (a source that cannot be reached reads as unknown, never as fresh) ·
+**Source:** `docs/UAT_quartermaster_frame.md` Q2, walked 2026-08-28 ·
+**Report:** `docs/UAT_quartermaster_frame_results.md`
+
+> **Drafted, not written by the operator.** The wording below is
+> `decision-scribe`'s rendering of an answer given in conversation. **The
+> operator's editing pass is the intended next step**, and the reading in
+> clause 1 in particular is an inference he has not yet confirmed — it is
+> stated as an inference so that correcting it is a read, not an
+> archaeology. **Number 0059 and not 0058:** `data/decisions_draft/0058_proposed.md`
+> is drafted and unappended and holds that number.
+
+**Context.**
+
+0048 clause 2 fixed the card's anatomy at six fields — question, trigger,
+evidence with provenance, options with costs where measured, default, expiry —
+and gave it teeth: *"A card missing any field is not raised — an unassembled card
+spends the attention it was built to save."*
+
+Q2 of the Quartermaster frame's walk-sheet asked the operator to lay a real
+decision against those six fields and say whether it would have fitted. The
+answer, in his words:
+
+> what I'm leaning towards is something that helps validate if enough of a
+> complete picture is there to make a decision or more info required - that in
+> itself can be a decision
+>
+> so I think points 1, 3, 4, 5 fit and justify but for point 2 I think we need a
+> more flexible definition.
+
+And the reason, which is the finding rather than the verdict:
+
+> it comes down to what is a decision - and the broadness of that scope is
+> making me resistant to a fixed schema
+
+**The evidence he was ruling against was measured, not recalled.** The two
+question blocks in `docs/investigation/2026-08-17_quartermaster_fable_1-prompt.md`
+— the exchange that produced 0048 itself — carry, across seven decisions:
+question 7/7; a trigger 0/7 (every context sentence is a state claim, not a
+reason it was necessary *now*); evidence 7/7 as a single clause with **0/7**
+citing a file, line or measurement; cost on any option **0/7**; default **0/7**;
+expiry **0/7**. **Three of six fields, in the session that proposed six.**
+
+That is not an argument that the fields are wrong. It is evidence that a rule
+refusing to raise a card missing any of them would have refused every card in the
+exchange that invented it.
+
+**And there is a hole the refusal was hiding.** The Desk's ruling options today
+are rebuild, snooze and dismiss. **There is no ruling that means "not enough here
+to decide — fetch X."** A card arriving incomplete has nowhere to go but a snooze
+that records nothing about why, so the estate cannot distinguish *deferred* from
+*unanswerable-as-presented* — which is the same shape as the deferral that named
+the wrong blocker in `UAT_desk_stale_card_results.md` D9, one week earlier, in the
+same subsystem.
+
+**Decision.**
+
+1. **0048 clause 2's field list stands; its refusal does not.** The six fields
+   remain the shape of a complete card. What is struck is *"a card missing any
+   field is not raised."* **This reading — that the operator's "more flexible
+   definition" narrows the refusal and not the fields — is an inference from his
+   acceptance of clauses 3 and 4, which both depend on `default` and `expiry`
+   existing. If the intent was to loosen the field list itself, this clause is
+   wrong and should be rewritten before ratification.**
+
+2. **A card declares its own completeness, and the declaration is derived, never
+   typed.** Each of the six fields is present, absent, or **not applicable to
+   this card kind** — and a card renders which. A surface reports this; it does
+   not grade the card or withhold it (0031).
+
+3. **An incomplete card is raised, marked incomplete.** Refusing to raise it
+   moves the attention cost from the operator to nobody and loses the fact that
+   something wanted deciding. Raising it with its gaps named is the reporting
+   posture 0045 takes everywhere else.
+
+4. **`insufficient` is a ruling, and it carries what is missing.** A fourth
+   ruling joins rebuild, snooze and dismiss: *not enough to decide — this is
+   needed.* It records the named thing to fetch, and it is a decision in the
+   log's own terms rather than a non-answer. **A card ruled `insufficient` with
+   no named item is refused at write**, on 0058's principle that a mechanism
+   which cannot answer abstains explicitly rather than silently.
+
+5. **Completeness is not a threshold and never gates.** No count of fields
+   authorises or blocks anything. There is no minimum, no score, and no
+   automatic escalation on incompleteness — that would rebuild the refusal
+   clause 1 strikes, with arithmetic instead of a rule.
+
+**Consequences.**
+
+**`desk.py` has hard-coded the anatomy once already**, and Q2's own wording
+warns that this is the moment to change it — before a second surface copies it.
+That cost is real: the module ships a fourth ruling kind and a completeness
+derivation it does not have today.
+
+**The Desk gets noisier, deliberately.** Cards that clause 2 would have silently
+withheld now appear, marked incomplete. If the board fills with them, that is
+information about the assembling machinery and not about the operator — but it
+will be irritating before it is useful, and 0048's own Consequences already name
+card flood as the Desk's failure mode rather than card famine.
+
+**"What is a decision" is not settled by this entry, and the broadness the
+operator named remains.** This amendment makes the schema survivable rather than
+answering the question underneath it. That question is live and this entry
+should not be read as having closed it.
+
+**Two of 0048's clauses now point in slightly different directions.** Clause 3
+says silence's consequence is stated on the card; an incomplete card's `default`
+may itself be absent. Clause 4's *"every default reads `hold — nothing runs`"*
+resolves it in practice for now, and that is a dependency on clause 4 remaining
+true when the policy engine arrives.
+
+**What would show this wrong.**
+
+- **Count `insufficient` rulings after one month. If it is zero**, the option was
+  a comfort rather than a gap being filled, and clause 4 should be struck —
+  either every card really was complete enough, or the ruling is one nobody
+  reaches for under pressure.
+- **Count cards raised marked incomplete, and how many are ever ruled at all.**
+  If incomplete cards are systematically ignored rather than ruled
+  `insufficient`, clause 3 has produced noise, the refusal 0048 wrote was right,
+  and this entry is the mistake.
+- **Read the `insufficient` rulings' named items after a month.** If the same
+  item is named three times, the assembling machinery has a fixable gap and did
+  not notice — which is 0048 clause 5's promotion test arriving from the
+  evidence side, and a stronger result than anything above.
+- **Check whether any surface has begun refusing to raise on completeness.** If
+  one has, clause 5 failed and the threshold came back through the code rather
+  than through a ruling.
