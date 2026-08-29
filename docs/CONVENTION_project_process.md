@@ -25,16 +25,26 @@ them.** Where an existing convention owns a stage, this file cites and stops.
 rig's survey put it best and it reproduces here: **the process is well-ruled at
 both ends and hollow in the middle.**
 
-| stage | ruled by |
-|---|---|
-| intent, decisions | `INTENT.md`, `CONVENTION_decisions.md` |
-| brief and walk-sheet | `CONVENTION_briefs.md` |
-| **build** | — |
-| **report** | — |
-| **walk** | — *(see §2)* |
-| **results log** | `CONVENTION_docs.md` §4 (the stamp only) |
-| **ratify** | 0033, and nothing else |
-| archive, commit, config, docs | `CONVENTION_docs.md`, `_commits.md`, `_config.md` |
+| stage | ruled by | skill |
+|---|---|---|
+| intent | `INTENT.md` | — |
+| decisions | `CONVENTION_decisions.md` | `decision-scribe` |
+| brief and walk-sheet | `CONVENTION_briefs.md` | `brief-scribe` |
+| **build** | — | — |
+| **report** | — | — |
+| **walk** | — *(see §2)* | `round-closer` *(citing nothing — §2)* |
+| **results log** | `CONVENTION_docs.md` §4 (the stamp only) | `round-closer` |
+| **ratify** | 0033, and nothing else | — |
+| archive | `CONVENTION_docs.md` §4 | `docs-archivist` |
+| commit | `CONVENTION_commits.md` | `commit-scribe` |
+| config | `CONVENTION_config.md` | — |
+| skills delivery | `CONVENTION_skills.md` *(stub)* | `armory` *(unbuilt)* |
+| restart | `CONVENTION_design_thread_restart.md` | `dtr` |
+
+**Read the skill column against the convention column.** Every stage that has a
+skill has a convention, **except the walk** — and every unruled stage has no
+skill either, **except the walk**. The walk is the one place where a skill runs
+against nothing, which is why §2 is a finding rather than a gap.
 
 **Every defect this estate found on 2026-08-28 originated in an unruled stage.**
 That is not an argument that rules would have caught them — nothing checks any
@@ -53,6 +63,56 @@ both ran on the skill's own text, with no convention behind them.
 **This section is that convention's placeholder.** Until §3–§6 are filled,
 `round-closer` is a skill whose authority is a stub, which is better than a skill
 whose authority is nothing, and worse than one that can read a rule.
+
+## 2a. The operator's positions on the five gaps [SETTLED as positions, not as rules]
+
+Recorded in his framing, 2026-08-29, so the fill starts from a stated direction
+rather than a blank section. **These are positions, not clauses.**
+
+- **Build → `CONVENTION_build.md`.** *"Seems logical and boring but probably the
+  answer."* Estate- or project-wide build conventions move out of individual
+  briefs; **a brief then states where it overrides or adds to them.**
+- **Report → the standard parts pulled out**, with the brief carrying a
+  reference to what the standardised report output expects.
+- **Both of those carry one idea worth naming on its own: a brief should carry
+  the conventions it was written under — a copy, or a pinned reference.** This
+  is **0045's pin mechanism applied to rules rather than to files**, and it
+  answers a failure this estate has hit twice in a week: `round-closer` citing
+  `UAT_<NN>_<slug>` because it was written under another repo's naming, and
+  `orientation` citing bare `0019`/`0011` that resolve to unrelated rulings here.
+  **A brief pinned to its conventions makes "which rules was this written under"
+  a read rather than an archaeology.** Strong candidate to be ruled before
+  `CONVENTION_build.md` is written, since it constrains its shape.
+- **Walk — named as the current bottleneck.** *"Straightforward functional UAT
+  is easy enough to answer… sometimes the questions get almost philosophical.
+  I guess this is on me to read the proposed UAT more carefully before it."*
+
+  **The self-blame is worth challenging before it becomes the rule.**
+  `CONVENTION_briefs.md` §2 makes the brief and the walk-sheet one act, written
+  **before** the build. So a check that reads philosophical at walk time was
+  written that way at brief time, and reading it more carefully earlier catches
+  it — but only if there is something to catch it *against*. **A `[H]` that
+  cannot be answered from evidence the round produced is a defect in the
+  sheet**, and `UAT_desk_stale_card_results.md` D9 is the proven case: it was
+  unanswerable by construction, and no amount of careful reading at brief time
+  would have shown that, because the thing that made it unanswerable happened
+  six days later. **TO FILL:** a test for whether a `[H]` is answerable, applied
+  when the sheet is written.
+- **Ratify → a convention, and the operator's own doubt about the skill.**
+  *"Could be made into a convention + skill quite easily `/ratify-decision ####`
+  — but does that make it too easy? maybe just a convention."*
+
+  **The doubt is correct and should be recorded as the reasoning, not the
+  hesitation.** 0033's protection is that ratification is a re-read on a
+  different day; **the friction is the safeguard, not a cost sitting beside it.**
+  A one-command ratify removes exactly the pause that makes the different-day
+  rule mean anything. A skill could still help — assembling what changed since
+  the entry was drafted, refusing a same-day stamp, producing the artefact
+  ratification currently leaves behind — **but a skill that ratifies is the
+  wrong shape, and a skill that prepares a ratification is the right one.**
+  Same split as `commit-scribe`, which drafts and hands back rather than
+  committing.
+- **`round-closer`'s convention — an easy win, early next week.** §2.
 
 ## 3. Transitions — what may start when [STUB]
 
