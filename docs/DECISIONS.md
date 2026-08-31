@@ -3676,3 +3676,192 @@ true when the policy engine arrives.
 - **Check whether any surface has begun refusing to raise on completeness.** If
   one has, clause 5 failed and the threshold came back through the code rather
   than through a ruling.
+
+  ---
+
+## 0060 — A rule declares the subject it binds, in a form something can enumerate; a rule that cannot is recorded as unenforceable rather than reported against a substituted subject, and a rule, its checker and its remedy are three artefacts that must agree
+
+**Date:** 2026-08-31 · **Status:** proposed · **Builds on:** 0031 (a non-gating
+surface reports findings, never a verdict), 0045 (a pin is one mechanism —
+origin, anchor, hash — verified read-only, reported never repaired; clause 2's
+report-never-repair is what keeps a conformance reader a reader), 0048 clause 4
+(a check that cannot fail trains the eye past it), 0050 (a source that cannot be
+reached reads as unknown, never as fresh — the posture this entry extends from
+sources to subjects), 0052 clauses 2 and 3 (the convention lives in the repo
+that owns the work and the skill cites it; **no rule may have a skill as its
+only home**), 0053 clause 5 (a remedy printed by a check must be safe to run
+wherever that check can fire), 0056 clause 1 (a check enforcing a pattern rule
+is driven by the pattern, and a check that narrows a pattern to one instance
+states that it has done so in its own output) · **Source:** design thread
+2026-08-31, session 1 of the week's order; the five worked instances in
+`docs/AGENDA_conformance_instances_2026-08-31.md`, each verified against the
+tree or against a run · **Brief:** `COWORK_BRIEF_conformance_reader.md` ·
+**Convention:** none yet — see clause 7
+
+> **Drafted, not written by the operator.** The wording below is
+> `decision-scribe`'s rendering of a position assembled from five instances the
+> operator's own instruction promoted to the front of the week. **His editing
+> pass is the intended next step.** Where a clause rests on an inference it says
+> so, so that correcting it is a read rather than an archaeology.
+>
+> **Filed in `data/decisions_draft/`**, matching 0058 and 0059. `data/decision_drafts/`
+> also exists and holds 0054-0057. **Two live draft directories is how a draft
+> goes missing**, and this entry does not fix that — it is named here so the next
+> reader does not have to rediscover it.
+
+**Context.**
+
+**What forced this is not a new idea. It is a count that moved.** On 2026-08-28
+`AGENDA_running_order_2026-08-28.md` §6a recorded an aggregate — *"an accepted
+rule with no reader, or a reader that structurally cannot see what its rule is
+about"* — and left promoting it as an open call, on the ground that deciding it
+was a restructure. Three days later: seven rulings accepted in one afternoon
+(0051-0057), two more proposed (0058, 0059), and two conventions added on
+2026-08-29 (`CONVENTION_project_process.md`, `CONVENTION_skills.md`), both
+declared STUB, **neither enforced and neither carrying 0057 clause 7's adoption
+header.** The estate is now at 59 rulings and 11 conventions, and the count of
+rules without readers is growing faster than any card mechanism can raise
+questions about them.
+
+**Five instances were worked on 2026-08-31 and they are not one failure.** The
+08-28 aggregate assumed a single shape. Worked out, they are five, and a ruling
+addressing only the first would leave four live:
+
+| | failure mode | instance | found by |
+|---|---|---|---|
+| 1 | two rules that cannot both hold, and no reader of the conflict | 0054 cl.6 required `authors` in a tracked file; `config/machines.json` declared itself *"TEMPLATE (committed, no real machine data)"* | reading |
+| 2 | a reader whose subject is narrower than its rule's | `auditor_conversation_map_pin` bound to one hardcoded path while a second map sat unpinned beside it | reading |
+| 3 | an invariant between components that must not know about each other | `db.resolve_registry_path` and `review/core.resolve_registry_path`, kept in step by a code comment | reading |
+| 4 | a rule whose subject set is not enumerable at all | 0057 cl.7 binds conventions *"adopted from another estate"*, and nothing determines which those are | reading |
+| 5 | a rule whose checker and whose remedy disagree | the auditor written that same morning demanded 0056 cl.3's metadata; `pin bump` short-circuited on hash equality and refused to write it | **running the gate** |
+
+**Mode 4 is the one that did measurable harm, and it is not the missing-reader
+shape at all.** A conformance figure — *"4 of 9 conventions carry an adoption
+header"* — was computed by counting headers against **every** convention, when
+clause 7 binds only conventions adopted from another estate. That is a different
+denominator, not a rounder one. The figure travelled into
+`AGENDA_design_gaps_2026-08-28.md` and `AGENDA_running_order_2026-08-28.md` and
+was repeated unchallenged for four days, while the denominator itself went stale
+(9 → 11) inside three. **A rule whose subject nobody can enumerate does not
+produce silence; it produces a confident wrong number**, which is the failure
+`INTENT.md` §5 refuses everywhere else, arriving through the estate's own
+governance rather than through its data.
+
+**Mode 5 was introduced by the session that catalogued modes 1-4**, in the act of
+fixing mode 2, and survived until the operator ran `verify.py`. Four modes were
+found by careful reading. **Only running found the reader with no remedy.** That
+asymmetry is evidence about what a conformance sweep can and cannot discover
+about itself, and it is why clause 5 below is not a documentation rule.
+
+**Decision.**
+
+1. **A rule declares the subject it binds, in a form something can enumerate.**
+   Where the subject is a pattern, the rule states the pattern and any checker is
+   driven by it (0056 clause 1, which this generalises from pattern rules to all
+   rules). Where the subject is a fixed set of artefacts, the rule names them.
+   Where the subject is *"every X"*, the rule names how X is decided and by
+   reading what. A subject recoverable only from prose is not a declared subject.
+
+2. **A rule whose subject cannot be enumerated is recorded as unenforceable, and
+   that is a permitted outcome.** It is not a defect in the rule and does not
+   make the rule void — it may still be read and followed. What is refused is
+   the third state: a rule treated as enforced, checked against a subject
+   somebody chose at the moment of counting. **`unknown` over the right subject
+   beats a number over the wrong one** (0050, extended from sources to subjects).
+
+3. **A conformance figure names the subject it was computed over, and a figure
+   computed over a substituted subject is a defect rather than an approximation.**
+   Any count of the form *"N of M"* published in this estate carries what M is
+   and how M was derived. A figure whose M is not the rule's own subject is
+   withdrawn, not adjusted.
+
+4. **A rule declares its reader, or declares that it has none, and the set of
+   rules with no reader is an artefact rather than an impression.** The list is
+   generated, never hand-maintained, and its being long is information rather
+   than an embarrassment to manage.
+
+5. **A rule, its checker and its remedy are three artefacts, and something
+   asserts the round trip.** Where a check names a remedy, something verifies
+   that running that remedy satisfies that check. A checker demanding what no
+   sanctioned writer produces is **strictly worse than an unenforced rule**: it
+   converts a green gate into a permanently red one with a documented fix that
+   does nothing. This extends 0053 clause 5, which required a remedy to be
+   *safe* wherever it can fire; a remedy can be perfectly safe and inert, and
+   inert passed that clause.
+
+6. **Where a rule's subject spans two components that must not know about each
+   other, the reader lives in the gate and not in either component.** A shared
+   invariant expressed as a code comment in one of them is not a mechanism. The
+   independence is preserved; the drift is not.
+
+7. **A conformance reader is a reader.** It reports; it never repairs (0045
+   clause 2), and it emits verdicts only where it is in the gate (0053 clause 1).
+   Following 0052 clause 2, the rules above belong in a convention this repo
+   owns — `CONVENTION_conformance.md`, which **does not exist**, and writing it
+   is the first act of the brief rather than a debt this entry discharges by
+   naming.
+
+8. **This binds rules made from today. It does not retroactively invalidate
+   anything.** Existing rulings and conventions acquire declared subjects when
+   something next touches them, or when the clause-4 sweep reaches them.
+   Backdating a subject onto an accepted entry would edit its body, which the log
+   forbids; the subject is declared in the sweep's output, not in the entry.
+
+**Consequences.**
+
+**The clause-4 list will be long, and most of the estate will appear on it.**
+Twelve auditors cover a handful of claim classes across 59 rulings and 11
+conventions. The honest first output is closer to *"almost nothing is checked"*
+than to a tidy gap list, and 0056's own Consequences already conceded *"an
+unknown quantity of latent non-conformance and no list of it."* **Producing the
+list makes the estate look worse than it did yesterday while being exactly as
+conformant.** That is the trade and it is taken knowingly.
+
+**Clause 3 costs the estate some of its rhetoric.** Several published figures —
+the adoption-header count certainly, and plausibly others — do not survive it,
+and withdrawal rather than adjustment means an agenda that cited one becomes
+wrong rather than imprecise. This is the correct cost and it will be irritating
+the first time it lands on a number somebody liked.
+
+**Clause 1 slows drafting.** Every future ruling now owes a subject statement,
+and for genuinely broad rules that statement is hard to write — which is the
+point, because the difficulty is the rule discovering it may be unenforceable.
+The risk is the mirror image: a `Subject:` field that becomes ceremony, filled
+in with something plausible and never read. Clause 2 exists so that *"cannot be
+enumerated"* is an available and non-shameful answer, because a rule with no
+honest escape hatch produces dishonest declarations.
+
+**Clause 5 will find more mode-5 defects, and each is a red gate.** Asserting
+round trips on existing checks means discovering remedies that never worked. The
+gate goes red for real reasons that were previously invisible, at whatever moment
+is least convenient — the same shape 0056 predicted for itself and got right.
+
+**Clause 8 leaves a long tail of undeclared rules for an indefinite period**,
+and during it the estate holds two classes of rule that look identical in the
+log. Nothing distinguishes them in `DECISIONS.md` itself; only the sweep's output
+does. A reader who reads only the log will not know which is which, and that is a
+real cost of refusing to edit accepted entries.
+
+**What would show this wrong.**
+
+- **Count the subjects.** After the next ten rulings, count how many declare a
+  subject a reader could enumerate without reading prose. **Eight or more
+  vindicates clause 1; four or fewer means the field is ceremony** and the
+  declaration should be replaced by something that costs more to fake.
+- **Watch the unenforceable count.** If clause 2 is being used honestly, some
+  new rules will be recorded unenforceable. **Zero unenforceable rules after ten
+  is not success — it is evidence the escape hatch is being avoided**, and every
+  rule is being given a plausible subject instead of an accurate one.
+- **Does the clause-4 list shrink?** Generate it, then generate it again in a
+  month. **If the count of rules with no reader has not fallen, naming the gap
+  does not drive closure** and this entry bought bookkeeping rather than
+  conformance — in which case the 08-28 deferral was right and Cards C and D
+  were the better week.
+- **Run the round trips.** Assert clause 5 against every check that prints a
+  remedy. **If mode 5 turns out to be unique to `pin bump`, clause 5 is a rule
+  written from one instance** and should be demoted to a note on 0053.
+- **The 0057 clause 7 test, specifically.** Try to give it an enumerable
+  subject. **If "adopted from another estate" cannot be made enumerable even
+  deliberately, then clause 2 is carrying more weight than clause 1** — most
+  rules are unenforceable rather than merely unchecked — and this entry has
+  mis-diagnosed the estate's problem as a tooling gap when it is a drafting one.
