@@ -7,10 +7,22 @@ description: Draft DECISIONS entries to the house format — next free number, t
 
 Scripts the **shape** of a ruling. Does not make it, and does not ratify it.
 
-`docs/DECISIONS.md` is the authority on its own format, and that format is set
-by practice rather than by a template. **Read the last three or four entries
-before drafting** — they are the spec. If this file and the log disagree, the
-log wins and this file needs updating.
+**The convention is `docs/CONVENTION_decisions.md`, and it is the authority**
+(**0052** clause 2) — §2 for the entry shape, §2.1 for what `Date` means and the
+two things it currently means, §3 for numbering and citation, §4 for
+append-only, §5 for status, §6 for superseding, §8 for propose-and-ratify.
+Where it and this file disagree, it wins and this file is amended.
+
+**Read the last three or four entries before drafting** as well — the log is
+where the convention is actually practised, and a divergence between them is a
+finding worth reporting rather than silently following either.
+
+> **Corrected 2026-08-31.** This block previously said the format "is set by
+> practice rather than by a template" and named `docs/DECISIONS.md` as the
+> authority on it. `CONVENTION_decisions.md` has set that format explicitly
+> since it was written; directing a reader to infer from practice what a
+> convention states is the drift 0052 clause 2 exists to stop. Found by running
+> 0052's falsifier (`docs/AGENDA_0052_falsifier_2026-08-31.md`).
 
 The log exists because the reasoning behind a threshold was nearly lost once —
 found in a schema comment rather than in a ruling, with the evaluation data

@@ -9,9 +9,19 @@ Scripts the **mechanics** of archiving a doc in this repo. Does not make the
 **judgment**. The split is deliberate: deciding a doc is finished requires knowing
 whether Tim walked the UAT, and no tool can know that.
 
-Read `docs/README.md` §3 first — it is the authority on the convention. This skill
-is the procedure; that file is the rule. If they disagree, `docs/README.md` wins
-and this file needs updating.
+Read `docs/CONVENTION_docs.md` §4 first — it is the authority on the archiving
+convention, and it names this skill as one of its citers (**0052** clause 3).
+This skill is the procedure; that file is the rule. If they disagree, the
+convention wins and this file is amended — its own words.
+
+**Not `docs/README.md`.** §4's archiving rules, §1's precedence rule, §5's
+`investigation/` rules and the retired classes were all promoted out of the
+README into the convention; the README is now a map and a set of pointers.
+
+> **Corrected 2026-08-31.** This block previously read *"Read `docs/README.md`
+> §3 first — it is the authority."* The rule had moved and the skill kept
+> pointing at the old address, so every run was reading a map for a rule. Found
+> by running 0052's falsifier (`docs/AGENDA_0052_falsifier_2026-08-31.md`).
 
 ## The hard rule
 
@@ -34,18 +44,18 @@ bulk, unless Tim explicitly says "all of them".
 
 ### 2. Classify each candidate
 
-For each, determine the route in (`docs/README.md` §3):
+For each, determine the route in (docs/CONVENTION_docs.md §4):
 
 - **completed pair** — built *and* UAT walked. **Ask Tim about the UAT.** Do not
   infer it from a green gate or from a report claiming completion; a report can
   only say "ready to walk". If the answer is no or unknown, the pair stays put.
 - **superseded** — identify the successor by path or DECISIONS entry number. If
   you can't name one, it isn't superseded, it's just old.
-- **retired by class** — status boards and handoff/priming docs (§5).
+- **retired by class** — (CONVENTION_docs.md §6).
 
 ### 3. Draft the stamp
 
-Use the format in `docs/README.md` §3. Draft it from a real read of the file —
+Use the format in docs/CONVENTION_docs.md §4. Draft it from a real read of the file —
 open the doc and the DECISIONS entries that moved past it. A stamp is only worth
 writing if it tells a cold reader **what in the body to stop trusting**, and that
 requires knowing what's in the body.
@@ -92,7 +102,7 @@ Expect **GREEN**. Two things to know:
 
 - `auditor_doc_claims` scans `docs/*.md` non-recursively, so archiving a doc with
   stale gate counts *clears* those failures rather than requiring an edit. That's
-  by design, not a loophole (`docs/README.md` §3).
+  by design, not a loophole (CONVENTION_docs.md §4).
 - If the gate goes red on a file you did **not** move, that's a real finding —
   surface it, don't archive your way around it. Archiving is not a tool for
   silencing a live doc that has gone stale; fix that doc instead.
@@ -106,4 +116,4 @@ Leave everything **staged, uncommitted**, for Tim's review. Never commit.
 - Editing a report's numbers "for consistency". They were true when written; the
   whole convention exists to protect that.
 - Writing a forward-looking "what's next" line into a stamp. Stamps look
-  backwards only (`docs/README.md` §5).
+  backwards only (CONVENTION_docs.md §4).

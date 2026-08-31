@@ -9,12 +9,25 @@ Scripts the **shape** of a round, not its substance. What goes in a brief is
 the operator's judgement; whether the brief can be built from and checked
 against is mechanical, and that is what this skill enforces.
 
-**There is no written convention for briefs yet.** The spec is the accumulated
-practice in `docs/COWORK_BRIEF_*.md` — **read two or three recent ones before
-drafting**, and prefer what they do over what this file says where the two
-disagree. When a convention document is written, it becomes the authority and
-this file cites it instead. That gap is real and this skill is the drift risk
-until it closes.
+**The convention is `docs/CONVENTION_briefs.md`, and it is the authority.** Read
+it before drafting. Where it and this file disagree, it wins and this file is
+amended (**0052** clause 2). Its §0 states the falsifiability bar, §1 the card
+and its files, §2 that the brief and the walk-sheet are one act, §3 the parts,
+§4 the acceptance checks, §5 the report, §6 the results log and its stamp. This
+file scripts the *procedure* and does not restate them.
+
+Recent briefs in `docs/` remain worth reading for house voice — but the
+convention, not accumulated practice, is what settles a disagreement.
+
+> **Corrected 2026-08-31.** This block previously read *"There is no written
+> convention for briefs yet… this skill is the drift risk until it closes."*
+> True when written; false from 2026-08-27, when the convention landed. The
+> convention's §0 carries this skill's own falsifiability argument verbatim, so
+> the skill was denying a document lifted out of it. Found by running 0052's
+> falsifier for the first time (`docs/AGENDA_0052_falsifier_2026-08-31.md`).
+> **0052 clause 5 still cites this skill as "the pattern" for a skill with no
+> convention.** That exemplar is stale and cannot be edited in an accepted
+> entry; `consultant-docs` is the live example today.
 
 ## Why the bar is falsifiability
 
