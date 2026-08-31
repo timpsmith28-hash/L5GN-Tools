@@ -10,6 +10,22 @@
 
 **Status:** authored, not enforced, **new practice**, incomplete by declaration.
 
+**Adopted from:** paired with the **work rig's** stub of **2026-08-29**, read
+the same day. **Origin repo and file path are unconfirmed from this rig** —
+same position as `CONVENTION_skills.md`, and for the same reason (0050: an
+unreachable source reads as unknown, never as fresh). Recorded incomplete under
+**0057** clause 7 rather than omitted. **Fill both fields from the work rig and
+this line is done.**
+
+**Adoption is weaker here than in `CONVENTION_skills.md`, and the difference
+matters:** that one was written *from* the work rig's draft; this one was
+written *alongside* a stub of the same date against a different estate shape —
+a single-project estate that has a gate and a week of walked evidence, which
+the work rig's did not. If clause 7's subject turns out to be "adopted whole"
+rather than "written in parallel", this header is over-declaring and should be
+cut. That call belongs to whoever rules on how clause 7 determines its own
+subject; it is not made here.
+
 **Scope:** the lifecycle of a **round** — intent to archived — and the seams
 between the conventions that already rule its parts. **It does not restate
 them.** Where an existing convention owns a stage, this file cites and stops.

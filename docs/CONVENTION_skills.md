@@ -9,6 +9,16 @@
 **Status:** authored, not enforced, **new practice**, and incomplete by
 declaration.
 
+**Adopted from:** the **work rig's** draft of **2026-08-29**, read the same day.
+**Origin repo and file path are unconfirmed from this rig** — the draft crossed
+as content, not as a citable location, and 0050 says a source that cannot be
+reached reads as *unknown*, never as fresh. Recorded incomplete under **0057**
+clause 7 rather than omitted, and rather than guessed: a fabricated origin is
+worse than a named gap. **Fill both fields from the work rig and this line is
+done.** §0 below records what diverged from that draft and why, which is the
+branch trace **0057** clause 2 asks for and the part clause 7 was worried about
+losing.
+
 **Scope:** how skills *reach* a thread, on any rig. Not what a skill contains —
 **0052** owns that.
 
