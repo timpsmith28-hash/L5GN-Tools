@@ -127,6 +127,64 @@ def run() -> list[str]:
         finally:
             config._MACHINES, config._LOCAL = orig_machines, orig_local
 
+        # ---- 0054 clause 6: authorship is tracked-file-only ----------------
+        # The one key that does NOT follow the precedence rules asserted above.
+        # local.json may not supply authorship and may not override it: an
+        # untracked declaration makes "no host declares this" and "the
+        # declaration has not shipped here yet" the same input with two
+        # meanings, and 0053 clause 5's pin-bump refusal rests on telling them
+        # apart. Asserted as behaviour rather than left to tidiness, because
+        # the violation this replaces survived by nobody reading either file.
+        mfile4 = Path(td) / "machines4.json"
+        lfile4 = Path(td) / "local4.json"
+        mfile4.write_text(json.dumps({
+            "default": {"role": "producer"},
+            "TRACKED_RIG": {"authors": ["config/a.tsv"]},
+            "BOTH_RIG": {"authors": ["config/tracked_wins.tsv"]},
+        }), encoding="utf-8")
+        lfile4.write_text(json.dumps({
+            "LOCAL_ONLY_RIG": {"authors": ["config/smuggled.tsv"]},
+            "BOTH_RIG": {"authors": ["config/local_loses.tsv"]},
+        }), encoding="utf-8")
+        config._MACHINES, config._LOCAL = mfile4, lfile4
+        try:
+            if config.authored_artefacts("TRACKED_RIG") != ["config/a.tsv"]:
+                v.append("config: authorship declared in machines.json should "
+                         f"resolve, got {config.authored_artefacts('TRACKED_RIG')!r}")
+
+            # A host that exists ONLY in the untracked overlay authors nothing.
+            # It still resolves as a machine -- this is a refusal to author,
+            # not a refusal to run.
+            if config.authored_artefacts("LOCAL_ONLY_RIG") != []:
+                v.append("config: local.json must not SUPPLY authorship (0054 "
+                         f"cl.6), got {config.authored_artefacts('LOCAL_ONLY_RIG')!r}")
+
+            if config.authored_artefacts("BOTH_RIG") != ["config/tracked_wins.tsv"]:
+                v.append("config: local.json must not OVERRIDE tracked authorship "
+                         f"(0054 cl.6), got {config.authored_artefacts('BOTH_RIG')!r}")
+
+            # The refusal message names only hosts every checkout can see.
+            if config.authoring_hosts("config/smuggled.tsv") != []:
+                v.append("config: authoring_hosts must not name a host whose only "
+                         "declaration is untracked -- the refusal would cite a "
+                         "host no other machine can confirm")
+            if config.authoring_hosts("config/a.tsv") != ["TRACKED_RIG"]:
+                v.append("config: authoring_hosts should name the tracked author, "
+                         f"got {config.authoring_hosts('config/a.tsv')!r}")
+
+            # An entirely unconfigured host still raises loudly rather than
+            # degrading to "authors nothing", which would read as a config gap.
+            try:
+                config.authored_artefacts("NO_SUCH_RIG")
+                v.append("config: authored_artefacts on an unconfigured host must "
+                         "raise UnknownHostError, not return an empty list -- an "
+                         "empty list reads as 'declares nothing', which is a "
+                         "different fact from 'is not a machine here'")
+            except config.UnknownHostError:
+                pass
+        finally:
+            config._MACHINES, config._LOCAL = orig_machines, orig_local
+
         # ---- estate_roots: empty list is falsy -> None (legacy discovery) ----
         mfile3 = Path(td) / "machines3.json"
         mfile3.write_text(json.dumps({"HAS_EMPTY": {"roots": []}}), encoding="utf-8")

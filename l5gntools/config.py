@@ -134,6 +134,31 @@ def _authored_paths(entry: dict) -> list[str]:
     return [str(p).replace("\\", "/").strip("/") for p in declared if p]
 
 
+def _tracked_entry(host: str) -> dict:
+    """``host``'s entry resolved from the **tracked** file only.
+
+    0054 clause 6: ``authors`` is estate policy and lives in the tracked file
+    only. This is the layer stack of :func:`machine` with ``local.json``
+    removed, so a declaration in the gitignored overlay cannot supply or
+    override authorship -- not merely by convention, but because nothing reads
+    it from there.
+
+    Why the clause needs code rather than tidiness: an untracked declaration
+    makes *"no host declares this artefact"* and *"the declaration has not been
+    shipped here yet"* the same input with two meanings. The first is a config
+    gap; the second is a stale checkout. ``run.py pin bump`` prints one
+    sentence for both, and 0053 clause 5's refusal -- the guard that stops a
+    hand-copied stale artefact being fingerprinted over the authoritative pin
+    -- is the thing resting on the distinction. A declaration that can be
+    un-shipped is not a declaration.
+    """
+    machines = _load(_MACHINES)
+    entry: dict = {}
+    entry.update(machines.get("default", {}))
+    entry.update(machines.get(host, {}))
+    return entry
+
+
 def authored_artefacts(host: str | None = None) -> list[str]:
     """Repo-relative artefact paths ``host`` declares itself the author of.
 
@@ -143,8 +168,17 @@ def authored_artefacts(host: str | None = None) -> list[str]:
     conversation map and the work laptop consumes a hand-copied version of
     it, and no value of one shared field distinguishes those without saying
     which artefact is meant.
+
+    **Read from ``machines.json`` alone** (0054 clause 6, :func:`_tracked_entry`).
+    A host configured only in ``local.json`` authors nothing, which is the
+    correct answer rather than a gap: authorship it cannot ship is authorship
+    no other machine can see. :func:`machine` is still called first, so an
+    entirely unconfigured host keeps raising :class:`UnknownHostError` instead
+    of degrading to a quiet empty list.
     """
-    return _authored_paths(machine(host))
+    host = host or hostname()
+    machine(host)          # preserve the loud refusal for an unconfigured host
+    return _authored_paths(_tracked_entry(host))
 
 
 def authors_artefact(rel_path, host: str | None = None) -> bool:
@@ -157,22 +191,26 @@ def authors_artefact(rel_path, host: str | None = None) -> bool:
 
 
 def authoring_hosts(rel_path) -> list[str]:
-    """Every configured host that declares itself an author of ``rel_path``.
+    """Every host that declares itself an author of ``rel_path``.
 
     Used to make a refusal informative -- "not authored here" is only half a
     message; the other half is where it *is* authored. Empty means no host
     declares it at all, which is a config gap and is reported as one rather
     than read as permission.
+
+    Iterates the **tracked** file's hosts only (0054 clause 6), for the same
+    reason :func:`authored_artefacts` reads there: a host this machine can only
+    see because its own gitignored overlay names it is not an answer another
+    machine could have given. The refusal names hosts every checkout can see.
     """
     wanted = str(rel_path).replace("\\", "/").strip("/")
-    out: list[str] = []
-    for host in configured_hosts():
-        try:
-            if wanted in _authored_paths(machine(host)):
-                out.append(host)
-        except UnknownHostError:      # pragma: no cover -- host came from the files
-            continue
-    return out
+    machines = _load(_MACHINES)
+    base = machines.get("default", {})
+    return sorted(
+        host for host, entry in machines.items()
+        if not str(host).startswith("_") and host != "default"
+        and isinstance(entry, dict)
+        and wanted in _authored_paths({**base, **entry}))
 
 
 def author_aliases() -> dict:
