@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_repo_tier_producers.md` + `COWORK_REPORT_repo_tier_producers.md`, walked 2026-07-27
+> Superseded by **0012**'s repo-tier implementation now being live · Original purpose: fix the evidence pass reaching only 10 of 58 targets, which left `crystal-spire` and Citadel/Armory producing zero filename evidence.
+> Accurate history: the 10-of-58 measurement, which is the clearest statement of why repo-tier producers were needed. **Stop trusting:** *"Safe checkpoint — do not disturb it"* — that 725-thread clean vault state is long gone and the instruction is spent. Read as origin, not as current truth.
+
 # Cowork brief — repo-tier producers: the evidence pass must descend into repos
 
 **Origin:** the golden apply, halted at a clean checkpoint (2026-07-26). The

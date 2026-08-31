@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=22df436 -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_repo_tier_producers.md` + `COWORK_REPORT_repo_tier_producers.md`, walked 2026-07-27
+> Superseded by **0012**'s repo-tier implementation now being live · Original purpose: fix the evidence pass reaching only 10 of 58 targets, which left `crystal-spire` and Citadel/Armory producing zero filename evidence.
+> A ready-to-walk sheet, not a record. **Read the results log instead.**
+
 # UAT walk-sheet — repo-tier producers
 
 **Brief:** `docs/COWORK_BRIEF_repo_tier_producers.md`

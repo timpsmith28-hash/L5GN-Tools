@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=26079ed -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_command_deck_proto.md` + `COWORK_REPORT_command_deck_proto.md`, walked 2026-07-27
+> Superseded by the shipped deck itself (`chronicler/review/`) and **0024** · Original purpose: make the 364-suggestion / 139-ambiguous review queue rulable by grouping it per project.
+> Accurate history: the six-task table and what landed in each. **Stop trusting:** the frozen gate figure "6 auditors + 46 testers" — the live gate is **12 auditors + 81 testers**; and "nothing from this round is committed yet", which was true on 2026-07-27 only.
+
 # Cowork report — Command Deck prototype: the queue, grouped by project
 
 Pair: `docs/COWORK_BRIEF_command_deck_proto.md`. Session 2026-07-27, on top of

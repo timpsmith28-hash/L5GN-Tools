@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_toolkit_self_scan.md` + `COWORK_REPORT_toolkit_self_scan.md`, walked 2026-08-01
+> Superseded by `L5GN-Tools` now being scanned as a normal project (`is_project: true` in the machine config) · Original purpose: close **0020**'s own noted gap — the toolkit could not see its own write-and-execute-heavy code.
+> Accurate history: the argument that `l5gn-tools` had zero repos and no deposit, so `filename_xref` — the strongest automatic link signal — was structurally unavailable for the most-discussed project in the vault. **Stop trusting:** the registry state it describes; the config has moved since.
+
 # Cowork brief — the toolkit sees itself
 
 **Origin:** design thread, 2026-07-28. Long overdue: flagged in **DECISIONS 0020's

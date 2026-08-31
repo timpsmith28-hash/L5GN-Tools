@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_command_deck_proto.md` + `COWORK_REPORT_command_deck_proto.md`, walked 2026-07-27
+> Superseded by the shipped deck itself (`chronicler/review/`) and **0024** · Original purpose: make the 364-suggestion / 139-ambiguous review queue rulable by grouping it per project.
+> Accurate history: the queue sizes and Tim's verbatim framing (*"if it just filtered to one project"*), which is why the deck groups the way it does. **Stop trusting:** the task list as a plan — it is done. The items it defers as "explicitly later" (personas, knight commands, the run ledger) were **never carried into a successor brief**; that is an open thread, not a closed one. Do not run this as a task list.
+
 # Cowork brief — Command Deck prototype: the queue, grouped by project
 
 **Origin:** design thread, 2026-07-27, after the solo playbook round.

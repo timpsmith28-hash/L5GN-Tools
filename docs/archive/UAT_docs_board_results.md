@@ -8,6 +8,10 @@
      this file. docs/README.md §3 makes gate= optional for exactly that reason,
      and UAT_solo_playbook_results.md records the day that lesson was learned. -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_docs_board.md` + `COWORK_REPORT_docs_board.md`, walked 2026-08-01
+> Superseded by the board being live, and by `CONVENTION_docs.md` §2-§4, which took the lifecycle rules this pair read out of `docs/README.md` · Original purpose: render `docs/` as a board whose columns derive mechanically from filenames.
+> **Asserts the round was tested**, walked 2026-08-01. **Stop trusting** any gate count quoted inside it — the live gate is **12 auditors + 81 testers**.
+
 # Results log — the docs board, read-only (walked 2026-08-01, gaming rig)
 
 Partner to `docs/UAT_docs_board.md` / `docs/COWORK_BRIEF_docs_board.md`.

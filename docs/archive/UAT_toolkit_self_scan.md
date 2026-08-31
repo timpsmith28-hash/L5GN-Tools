@@ -2,6 +2,10 @@
 <!-- "Gate at build time", at the commit named below. Walked and closed; the
      count moved to 54 when `tester_docs_board` was registered. -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_toolkit_self_scan.md` + `COWORK_REPORT_toolkit_self_scan.md`, walked 2026-08-01
+> Superseded by `L5GN-Tools` now being scanned as a normal project (`is_project: true` in the machine config) · Original purpose: close **0020**'s own noted gap — the toolkit could not see its own write-and-execute-heavy code.
+> A ready-to-walk sheet, not a record. **Read the results log instead.**
+
 # UAT walk-sheet — the toolkit sees itself
 
 **Brief:** `docs/COWORK_BRIEF_toolkit_self_scan.md`

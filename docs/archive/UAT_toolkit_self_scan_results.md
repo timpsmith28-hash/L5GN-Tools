@@ -12,6 +12,10 @@
      artefact, not the one the brief and report were written against.
      gate= omitted per the disposition in docs/UAT_solo_playbook_results.md. -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_toolkit_self_scan.md` + `COWORK_REPORT_toolkit_self_scan.md`, walked 2026-08-01
+> Superseded by `L5GN-Tools` now being scanned as a normal project (`is_project: true` in the machine config) · Original purpose: close **0020**'s own noted gap — the toolkit could not see its own write-and-execute-heavy code.
+> **Asserts the round was tested**, walked 2026-08-01. **Stop trusting** any gate count quoted inside it — the live gate is **12 auditors + 81 testers**.
+
 # Results log — the toolkit sees itself (`LucasGoonPC`, walked 2026-07-29 / 2026-08-01)
 
 Partner to `docs/UAT_toolkit_self_scan.md`. Report:

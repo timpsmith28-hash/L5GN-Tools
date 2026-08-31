@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_repo_tier_producers.md` + `COWORK_REPORT_repo_tier_producers.md`, walked 2026-07-27
+> Superseded by **0012**'s repo-tier implementation now being live · Original purpose: fix the evidence pass reaching only 10 of 58 targets, which left `crystal-spire` and Citadel/Armory producing zero filename evidence.
+> Accurate history: what the two new producers do. **Stop trusting:** "6 auditors, 42 testers" — the live gate is **12 auditors + 81 testers**. Its "one red auditor" section describes `auditor_doc_claims` failing on stale counts in eight other docs; that resolved by those docs being archived, which is the mechanism `CONVENTION_docs.md` §4 describes, **not** a defect anyone fixed.
+
 # Cowork report — repo-tier producers: the evidence pass now descends into repos
 
 **Pair:** `docs/COWORK_BRIEF_repo_tier_producers.md`. Session 2026-07-27, gaming rig.

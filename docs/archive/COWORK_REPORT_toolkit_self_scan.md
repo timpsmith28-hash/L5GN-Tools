@@ -3,6 +3,10 @@
      later moved the live count to 54; this document records the gate as it
      stood when it was written (docs/README.md §3). -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_toolkit_self_scan.md` + `COWORK_REPORT_toolkit_self_scan.md`, walked 2026-08-01
+> Superseded by `L5GN-Tools` now being scanned as a normal project (`is_project: true` in the machine config) · Original purpose: close **0020**'s own noted gap — the toolkit could not see its own write-and-execute-heavy code.
+> Accurate history: the scan results and the sandbox-vs-rig note. **Stop trusting:** its gate figures — it carries **two** ("53 testers" in the body, "54" in a self-correcting comment at the top) and **neither is current**: the live gate is **12 auditors + 81 testers**. A document recording two different counts for one build is the reason frozen counts are now marked rather than trusted.
+
 # Cowork report — the toolkit sees itself
 
 **Pair:** `docs/COWORK_BRIEF_toolkit_self_scan.md`. Session 2026-07-28.

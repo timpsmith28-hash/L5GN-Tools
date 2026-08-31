@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=a202ba0 -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_docs_board.md` + `COWORK_REPORT_docs_board.md`, walked 2026-08-01
+> Superseded by the board being live, and by `CONVENTION_docs.md` §2-§4, which took the lifecycle rules this pair read out of `docs/README.md` · Original purpose: render `docs/` as a board whose columns derive mechanically from filenames.
+> A ready-to-walk sheet, not a record. **Read the results log instead.**
+
 # UAT walk-sheet — the docs board, read-only
 
 **Brief:** `docs/COWORK_BRIEF_docs_board.md`

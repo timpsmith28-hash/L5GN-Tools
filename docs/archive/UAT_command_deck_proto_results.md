@@ -5,6 +5,10 @@
      a tester is registered. commit, host and walked carry the provenance that
      matters; the count is recoverable from the commit. -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_command_deck_proto.md` + `COWORK_REPORT_command_deck_proto.md`, walked 2026-07-27
+> Superseded by the shipped deck itself (`chronicler/review/`) and **0024** · Original purpose: make the 364-suggestion / 139-ambiguous review queue rulable by grouping it per project.
+> **This is the file that asserts the round was tested**, and its walk date (2026-07-27) is the fact worth keeping. **Stop trusting** any gate count quoted inside it — the live gate is **12 auditors + 81 testers**.
+
 # Results log — Command Deck prototype (walked 2026-07-27, gaming rig)
 
 Partner to `docs/UAT_command_deck_proto.md` /

@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_docs_board.md` + `COWORK_REPORT_docs_board.md`, walked 2026-08-01
+> Superseded by the board being live, and by `CONVENTION_docs.md` §2-§4, which took the lifecycle rules this pair read out of `docs/README.md` · Original purpose: render `docs/` as a board whose columns derive mechanically from filenames.
+> Accurate history: the column derivation and the 2026-07-28 card census. **Stop trusting:** its citations of `docs/README.md` §2/§3 — **those rules moved into `CONVENTION_docs.md` §2-§4**, and the README is now a map. Its card census is a snapshot of 2026-07-28 and is long superseded.
+
 # Cowork brief — the docs board: the lifecycle you already run, made visible
 
 **Origin:** design thread, 2026-07-28. Slice 1 of two; the UAT sidebar

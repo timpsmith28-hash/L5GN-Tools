@@ -1,6 +1,10 @@
 <!-- uat: commit=5711962 dirty=false host=l5gn-castle-worker walked=2026-07-27 -->
 <!-- gate-frozen: commit=22df436 -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_repo_tier_producers.md` + `COWORK_REPORT_repo_tier_producers.md`, walked 2026-07-27
+> Superseded by **0012**'s repo-tier implementation now being live · Original purpose: fix the evidence pass reaching only 10 of 58 targets, which left `crystal-spire` and Citadel/Armory producing zero filename evidence.
+> **Asserts the round was tested**, walked 2026-07-27. **Stop trusting** any gate count quoted inside it — the live gate is **12 auditors + 81 testers**.
+
 # Results log — repo-tier producers (walked 2026-07-27)
 
 Partner to `docs/UAT_repo_tier_producers.md` / `docs/COWORK_BRIEF_repo_tier_producers.md`

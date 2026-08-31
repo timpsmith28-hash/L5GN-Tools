@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=a202ba0 -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_docs_board.md` + `COWORK_REPORT_docs_board.md`, walked 2026-08-01
+> Superseded by the board being live, and by `CONVENTION_docs.md` §2-§4, which took the lifecycle rules this pair read out of `docs/README.md` · Original purpose: render `docs/` as a board whose columns derive mechanically from filenames.
+> Accurate history: how the board derives each column. **Stop trusting:** "6 auditors + 54 testers" — the live gate is **12 auditors + 81 testers**; and note **Tasks 3 (ratification) and 4 (staging) were deferred by instruction and never revisited**, so "the board ships read-only" is still true and is an open thread rather than a finished decision.
+
 # Cowork report — the docs board, read-only
 
 **Brief:** `docs/COWORK_BRIEF_docs_board.md`. **Implements:** DECISIONS 0027

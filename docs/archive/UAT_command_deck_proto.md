@@ -1,5 +1,9 @@
 <!-- gate-frozen: commit=26079ed -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_command_deck_proto.md` + `COWORK_REPORT_command_deck_proto.md`, walked 2026-07-27
+> Superseded by the shipped deck itself (`chronicler/review/`) and **0024** · Original purpose: make the 364-suggestion / 139-ambiguous review queue rulable by grouping it per project.
+> A ready-to-walk sheet, not a record. **Read the results log instead** for what was actually walked; this file only says what was to be checked.
+
 # UAT walk-sheet — Command Deck prototype (project-grouped queue, batch rulings)
 
 Pair: `docs/COWORK_BRIEF_command_deck_proto.md` → `docs/COWORK_REPORT_command_deck_proto.md`.
