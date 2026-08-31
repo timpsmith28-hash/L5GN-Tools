@@ -13,7 +13,10 @@ Stage order (design 4 / 9.2):
 
 relink (S6) is folded in just before render so fresh threads are linked to
 projects in the same pass that ingests them (ARCHITECTURE §7 standing fix); it is
-gated on the project registry existing and skips cleanly + loudly if absent.
+gated on the project registry existing. **If that gate fires the run is DEGRADED
+and exits 2** — see CONFIG_GATED. This docstring claimed "skips cleanly + loudly"
+from the day the stage was added until 2026-08-31, during which the skip printed
+the same line as an absent Takeout export and the chain finished green.
 
 normalize_gemini_work is deliberately NOT in the chain: the work account is a
 closed, historical corpus (design 9.2), ingested once and never revisited.
@@ -25,8 +28,13 @@ Behaviour:
   * A stage that actually FAILS (non-zero exit for any other reason) STOPS the
     whole chain immediately — we never run reconcile/group/render on top of a
     half-finished normalize (loud-failure principle, design 1).
-  * Per stage: one line of new/changed/skipped, taken from the same
-    ingestion_log numbers each script already records.
+  * Per stage: one line. Most stages record their work in ingestion_log and are
+    summarised from it. `relink` and `render` do not write that table and carry
+    their own summariser (STAGES' sixth field), because "reads ingestion_log"
+    and "has no summariser" were the same value until 2026-08-31 and a stage
+    that logged nothing was reported as having done nothing.
+  * A stage that ran but produced no line its summariser recognises reports
+    OUTCOME UNREPORTED and degrades the run. Unknown is not empty.
 
 Sync-back ordering (data-integrity rule):
     Every stage in the full chain WRITES the DB, so by the time render runs the
@@ -81,31 +89,80 @@ def has_md_transcripts():
 
 
 def has_registry():
-    """relink's input is the project registry (built by build_registry.py). Absent
-    -> the stage skips cleanly and loudly rather than crashing on a missing file
-    (relink itself SystemExits if the registry is gone). Same gate-when-absent
-    contract as the input-driven stages above."""
+    """relink's input is the project registry (built by build_registry.py).
+
+    **Absent is NOT the same fact as the gates above.** `has_takeout` and
+    friends answer "is there new source data" -- absence there is the ordinary
+    case the runner was built for. This one answers "is this machine configured
+    to link at all", and absence is a configuration defect wearing an absent
+    source's clothes. Until 2026-08-31 both printed the same line and this
+    function's own docstring claimed the skip was "clean and loud"; it was
+    neither, and `relink.py`'s loud SystemExit was never reached because the
+    gate fired first. See CONFIG_GATED below for how the two are now told apart.
+    """
     return _relink.REGISTRY_PATH.is_file()
+
+
+#: Stage keys whose input_check answers a CONFIGURATION question rather than a
+#: "is there new data" question. Skipping one is a degraded run, not a normal
+#: one: the chain completed without doing the thing it was run to do, and
+#: anything measured from it is measuring something else. A stage listed here
+#: that skips makes the whole run exit non-zero.
+#:
+#: 0048 clause 4 is the reason this is not merely a louder print. A warning
+#: nobody has to act on is a check that cannot fail, and two rounds nearly
+#: published a coverage figure taken from a chain whose linking stage never ran.
+CONFIG_GATED = {"relink"}
+
+
+def skip_note(key: str) -> str:
+    """The loud block for a config-gated stage that could not run.
+
+    Names the path that was looked at, says the absence is configuration rather
+    than missing data, and states the consequence in the terms someone reading
+    the log actually cares about -- that no figure from this run describes
+    linking. INTENT §5 refuses a rule that survives on the operator's memory;
+    this is the line that stops it having to.
+    """
+    if key != "relink":
+        return ""
+    return (
+        f"\n    !! relink DID NOT RUN. This is a configuration fault, not an "
+        f"absent source.\n"
+        f"       Looked for the project registry at:\n"
+        f"         {_relink.REGISTRY_PATH}\n"
+        f"       Nothing on this run linked a thread to a project. Any coverage\n"
+        f"       figure taken from this run measures the corpus, NOT the linking\n"
+        f"       -- do not publish one (DECISIONS 0048 clause 4).\n"
+        f"       Fix: build the registry (`build_registry.py`), or point\n"
+        f"       CHRONICLER_REGISTRY_PATH at the file the pipeline should read.\n"
+        f"       `--skip-relink` silences this deliberately and exits 0.\n")
 
 
 # Each stage: key (for --skip-<key>), label, script filename, argv, and an
 # input_check (None => DB-only stage, always runs).
+#
+# The sixth field is the stage's SUMMARISER: a callable taking the child's
+# stdout, or None meaning "this stage records its work in ingestion_log, read it
+# from there". Added 2026-08-31, because `None` had been doing two jobs -- most
+# stages genuinely log, and relink genuinely does not, and the runner could not
+# tell the difference so it reported relink's outcome as "no new rows" forever.
 STAGES = [
-    ("claude",        "normalize_claude",          "normalize_claude.py",          [], has_claude),
-    ("takeout",       "normalize_gemini_personal", "normalize_gemini_personal.py", [], has_takeout),
-    ("md-transcript", "normalize_md_transcript",   "normalize_md_transcript.py",   [], has_md_transcripts),
-    ("reconcile",     "reconcile_gemini",          "reconcile_gemini.py",          [], has_scraped),
-    ("group",         "group_fallback",            "group_fallback.py",            [], None),
-    ("suggest-close", "suggest_close",             "suggest_close.py",             [], None),
-    ("substantive",   "set_substantive",           "set_substantive.py",           [], None),
+    ("claude",        "normalize_claude",          "normalize_claude.py",          [], has_claude,        None),
+    ("takeout",       "normalize_gemini_personal", "normalize_gemini_personal.py", [], has_takeout,       None),
+    ("md-transcript", "normalize_md_transcript",   "normalize_md_transcript.py",   [], has_md_transcripts, None),
+    ("reconcile",     "reconcile_gemini",          "reconcile_gemini.py",          [], has_scraped,       None),
+    ("group",         "group_fallback",            "group_fallback.py",            [], None,              None),
+    ("suggest-close", "suggest_close",             "suggest_close.py",             [], None,              None),
+    ("substantive",   "set_substantive",           "set_substantive.py",           [], None,              None),
     # relink (S6): links freshly-ingested threads to projects. Runs AFTER the
     # normalizers/reconcile have landed threads and set_substantive has flagged
     # them, and BEFORE render so the rendered .md reflects the new links. Runs
     # with --apply (dry-run is relink's own default). Idempotent and safe every
     # pass: winners become 'evidence' (locked, skipped next run) and human-ruled
     # threads are never re-touched. Gated on the registry file existing.
-    ("relink",        "relink",                    "relink.py",                    ["--apply"], has_registry),
-    ("render",        "render_md",                 "render_md.py",                 [], None),
+    ("relink",        "relink",                    "relink.py",                    ["--apply"], has_registry, lambda out: summarize_relink(out)),
+    ("render",        "render_md",                 "render_md.py",                 [], None,              lambda out: summarize_render(out)),
 ]
 
 
@@ -129,6 +186,41 @@ def summarize_from_log(cur, since_batch_id):
     skipped = sum(r["rows_skipped"] or 0 for r in rows)
     batches = f" across {len(rows)} batches" if len(rows) > 1 else ""
     return f"+{new} new / {changed} changed / {skipped} skipped{batches}"
+
+
+def summarize_relink(out):
+    """relink's own account of what it did, parsed from its report.
+
+    relink writes **no `ingestion_log` rows at all** -- verified, not assumed:
+    the module contains zero references to that table. It was nonetheless
+    registered as a log-summarised stage, so `summarize_from_log` found nothing
+    and the runner printed `[relink] ok -- no new rows` after every run,
+    whatever relink had done. Not merely vacuous: wrong in the reassuring
+    direction, and the stage is the one the estate's coverage thesis rests on.
+
+    `ingestion_log` is the wrong home for it rather than a missing feature.
+    Its columns are rows_new / rows_changed / rows_skipped -- an ingestion's
+    units. relink's units are auto_link, suggest, ambiguous and downgrade, and
+    flattening four link decisions into "changed" would report a number that is
+    true and answers nobody's question.
+
+    So relink joins render as a stage that reports through its own output.
+    Returns None when the expected line is absent, and the caller says so out
+    loud rather than substituting a reassuring default -- a summariser that
+    silently degrades to "nothing happened" is the defect this replaces.
+    """
+    applied = re.search(r"Applied\.\s*(\d+)\s*thread\(s\) changed / queued", out)
+    if applied:
+        n = int(applied.group(1))
+        return (f"{n} thread(s) linked / queued" if n
+                else "0 threads changed (every thread already locked or ruled)")
+    if "[DRY RUN]" in out:
+        # The stage is wired with --apply, so this means the flag was lost.
+        # Degrading, not merely narrating: nothing was linked, which is the
+        # same outcome as the stage not running, and it must not exit 0.
+        return ("DRY RUN -- nothing was written. The stage is configured with "
+                "--apply, so this is a wiring fault, not a no-op.", False)
+    return None
 
 
 def summarize_render(out):
@@ -194,14 +286,23 @@ def run(active_keys, render_syncback=False):
     print("=" * 68)
 
     ran = skipped = 0
-    for key, label, script, argv, input_check in STAGES:
+    degraded = []          # config-gated stages that could not run (0048 cl.4)
+    for key, label, script, argv, input_check, summarizer in STAGES:
         prefix = f"[{label}]"
         if key not in active_keys:
             print(f"{prefix} skipped (--skip-{key} / not in this run)")
             skipped += 1
             continue
         if input_check is not None and not input_check():
-            print(f"{prefix} skipped (no input available)")
+            if key in CONFIG_GATED:
+                # Not "no input available". The distinction is the whole card:
+                # an absent source is the ordinary case, an unconfigured stage
+                # is a run that completed without doing its job.
+                print(f"{prefix} SKIPPED -- NOT CONFIGURED")
+                print(skip_note(key))
+                degraded.append(label)
+            else:
+                print(f"{prefix} skipped (no input available)")
             skipped += 1
             continue
 
@@ -225,16 +326,54 @@ def run(active_keys, render_syncback=False):
             )
 
         # Fresh connection view of the log rows the child just committed.
-        summary = (
-            summarize_render(out) if key == "render"
-            else summarize_from_log(cur, before)
-        )
-        print(f"{prefix} ok — {summary or 'no new rows'}")
+        stage_ok = True
+        if summarizer is not None:
+            summary = summarizer(out)
+            # A summariser may return `(text, ok)` to say "I understood the
+            # output, and it says this stage did not do its job". A plain string
+            # means ok. Without this, a relink that silently lost its --apply
+            # flag reported a clear diagnosis on a run that still exited 0 --
+            # a correct sentence nobody downstream could act on.
+            if isinstance(summary, tuple):
+                summary, stage_ok = summary
+                if not stage_ok:
+                    degraded.append(f"{label} ({summary.split(' --')[0].strip()})")
+            if summary is None:
+                # A stage that reports through its own output and did not say
+                # anything recognisable has an UNKNOWN outcome, not an empty
+                # one. Substituting "no new rows" here is exactly the bug this
+                # field was added to remove, and it would hide a changed child.
+                #
+                # Not printed as "ok" either. The exit code was zero and that is
+                # all that is known; asserting "ok" alongside "outcome unknown"
+                # in one line is the sentence a skimmer reads as success.
+                print(f"{prefix} RAN, OUTCOME UNREPORTED -- {label} exited 0 but "
+                      f"produced no line this runner recognises. What it did is "
+                      f"unknown. This is not 'nothing happened' (DECISIONS 0048 "
+                      f"clause 4).")
+                degraded.append(f"{label} (unreported)")
+                ran += 1
+                continue
+        else:
+            summary = summarize_from_log(cur, before) or "no new rows"
+        # "ok" is an assertion, so it is only printed where one can be made.
+        # A stage that ran and did not do its job gets a different word, for
+        # the same reason OUTCOME UNREPORTED does: the line a skimmer reads
+        # must not say the opposite of the line beneath it.
+        print(f"{prefix} {'ok —' if stage_ok else 'RAN, DID NOT APPLY —'} {summary}")
         ran += 1
 
     conn.close()
     print("-" * 68)
     print(f"Done. {ran} stage(s) ran, {skipped} skipped.")
+    if degraded:
+        # Exit non-zero. A chain that completed without linking is a degraded
+        # run and must not read as success to anything downstream -- a script,
+        # a scheduled task, or a person skimming for the last line.
+        print()
+        print(f"DEGRADED RUN: {', '.join(degraded)}. "
+              f"The chain completed; it did not do everything it was run to do.")
+        raise SystemExit(2)
 
 
 def resolve_active_keys(args):
