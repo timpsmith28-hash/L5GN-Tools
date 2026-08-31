@@ -235,6 +235,51 @@ def _check_bump_refuses_where_not_authored() -> list[str]:
                 if written is None or written.sha256 != expected:
                     v.append(f"pin bump: the authoring host's bump should record "
                              f"the artefact's real digest: {written}")
+
+            # --- the writer must satisfy the checker ------------------------
+            # The round trip nothing asserted until 2026-08-31, which is how
+            # `auditor_conversation_map_pin` came to demand 0056 clause 3's
+            # metadata while `pin bump` -- the only sanctioned writer of it --
+            # short-circuited on hash equality and declined to produce it. The
+            # printed remedy ran, reported success and changed nothing, and a
+            # hash-only pin was unfixable through the sanctioned path.
+            #
+            # Asserted as a property of the pair rather than of either side:
+            # whatever `pin bump` writes, `missing_metadata` must find complete.
+            fresh = pin.parse_pin_file(pin_path)
+            for expect_anchor in (True, False):
+                left = pin.missing_metadata(fresh, anchor_expected=expect_anchor)
+                # anchor may legitimately be absent outside a checkout; the
+                # unconditional fields never may be.
+                unconditional = [f for f in left if f != "anchor"]
+                if unconditional:
+                    v.append(f"pin bump: a freshly written pin must satisfy the "
+                             f"check that demands it -- missing {unconditional} "
+                             f"(DECISIONS 0056 clause 3). A rule whose only "
+                             f"sanctioned remedy cannot satisfy it is worse than "
+                             f"an unenforced rule: the gate stays red and the "
+                             f"documented fix does nothing.")
+                    break
+
+            # --- a hash-correct, metadata-incomplete pin is completable -----
+            # The exact state config/mcf_conversation_map.tsv.sha256 was in.
+            pin_path.write_text(f"{expected}  {artefact.name}\n", encoding="utf-8")
+            out2 = io.StringIO()
+            with contextlib.redirect_stdout(out2):
+                code4 = run_cli.main(["pin", "bump", str(artefact), "--apply"])
+            completed = pin.parse_pin_file(pin_path)
+            if code4 != 0:
+                v.append(f"pin bump: completing a hash-only pin should succeed, "
+                         f"exit {code4}")
+            elif pin.missing_metadata(completed, anchor_expected=False):
+                v.append(f"pin bump: a hash-only pin must be completable -- it "
+                         f"was left missing "
+                         f"{pin.missing_metadata(completed, anchor_expected=False)}")
+            elif "nothing to do" in out2.getvalue():
+                v.append("pin bump: an incomplete pin must not report 'nothing "
+                         "to do' -- that is the sentence that made this "
+                         "unfixable, and it was true about the hash and wrong "
+                         "about the pin")
         finally:
             config._MACHINES, config._LOCAL = orig_machines, orig_local
     return v

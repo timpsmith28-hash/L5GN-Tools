@@ -963,11 +963,29 @@ def _cmd_pin(rest: list[str]) -> int:
         origin="local", anchor=anchor or None,
         date=date.today().isoformat(), host=config.hostname())
 
+    # "Nothing to do" means the pin already records everything it should --
+    # not merely that the hash agrees. A hash-only pin is incomplete under
+    # 0056 clause 3, and short-circuiting on the digest alone made it
+    # permanently unfixable: the auditor demanded the metadata, this command
+    # was the only sanctioned writer of it, and it declined to write on the
+    # grounds that the hash was fine. The remedy ran, reported success, and
+    # changed nothing. 0053 clause 5 asks that a remedy be safe wherever it
+    # can fire; a remedy that cannot fire at all fails a weaker test than that.
     existing = pin_mod.parse_pin_file(pin_path)
-    if existing is not None and existing.sha256 == digest:
+    incomplete = pin_mod.missing_metadata(existing, anchor_expected=resolver is not None)
+    if existing is not None and existing.sha256 == digest and not incomplete:
         print(f"pin bump: {rel} already matches its pin at {pin_path} "
               f"(sha256 {digest[:8]}...) -- nothing to do.")
         return 0
+
+    if existing is not None and existing.sha256 == digest and incomplete:
+        # Say which of the two reasons this is. Re-pinning a drifted artefact
+        # and completing a correct one are different acts with different
+        # risks, and a writer that reported them identically would make the
+        # log unreadable at exactly the moment someone was checking it.
+        print(f"pin bump: {rel} matches its pin; completing the metadata line "
+              f"(missing {', '.join(incomplete)} -- DECISIONS 0056 clause 3). "
+              f"The content fingerprint is unchanged.")
 
     print(f"pin bump: {'writing' if args.apply else 'would write'} {pin_path}:")
     print(f"  {line}")

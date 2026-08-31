@@ -110,6 +110,45 @@ def parse_pin_file(path: Path) -> PinRecord | None:
     return record
 
 
+#: 0056 clause 3's unconditional field set. `anchor` is deliberately absent:
+#: clause 3 requires it "where one exists", which is a caller's fact, not this
+#: record's -- see :func:`missing_metadata`.
+REQUIRED_FIELDS = ("origin", "date", "host")
+
+
+def missing_metadata(record: "PinRecord | None", anchor_expected: bool) -> list[str]:
+    """Which of 0056 clause 3's fields ``record`` fails to carry, sorted.
+
+    **One definition, two readers, deliberately.** The checker
+    (`auditor_conversation_map_pin`) asks whether a pin is complete; the writer
+    (`run.py pin bump`) asks whether there is anything left to write. Those must
+    be the same question or the estate acquires a rule its own remedy cannot
+    satisfy -- which is exactly what happened on 2026-08-31: the auditor demanded
+    clause 3's fields, `pin bump` short-circuited on hash equality alone, and the
+    printed remedy ran to completion while changing nothing. A hash-only pin was
+    therefore permanently unfixable through the sanctioned path.
+
+    So the field list lives here, in the read-only mechanism both sides already
+    import, and neither restates it. This is not the rule's *enforcement* (0052
+    keeps that in the checker that cites 0056); it is the rule's *definition*,
+    and two copies of a definition is the failure mode this whole session was
+    cataloguing.
+
+    ``anchor_expected`` is the caller's answer to clause 3's "where one exists":
+    true where git is available and an anchor could have been recorded, false
+    where its absence is unknowable rather than wrong.
+
+    ``None`` -- a missing or malformed pin -- reports nothing here. That is
+    `verify_pin`'s finding to make, and reporting it twice would double-count.
+    """
+    if record is None:
+        return []
+    missing = [f for f in REQUIRED_FIELDS if not getattr(record, f, None)]
+    if anchor_expected and not record.anchor:
+        missing.append("anchor")
+    return sorted(missing)
+
+
 def hash_file(path: Path) -> str:
     """The sha256 hex digest of ``path``'s bytes. Public so `run.py pin bump`
     (the only sanctioned writer, per 0045 clause 4) can compute a fresh pin
