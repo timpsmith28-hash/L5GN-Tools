@@ -1,5 +1,9 @@
 <!-- uat: commit=5a1bad9 dirty=true host=LucasGoonPC walked=2026-08-18 -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_pin_mechanism.md` + `COWORK_REPORT_pin_mechanism.md`, walked 2026-08-18
+> Superseded by **0056** (a pin is enforced by the pattern, not an enumerated path) and by the 2026-08-31 rewrite of the auditor this round built · Original purpose: build the one pin mechanism — origin, anchor, hash, verified read-only, reported never repaired — and the auditor that checks it.
+> **Asserts the round was tested**, walked 2026-08-18. **Stop trusting** any gate count quoted inside it — the live gate is **12 auditors + 81 testers**. The walk passed against an auditor that was later found unable to see half its subject; the walk was not wrong, its subject was narrower than anyone read it to be.
+
 # Results log — pin mechanism (walked 2026-08-18, LucasGoonPC)
 
 Partner to `docs/UAT_pin_mechanism.md`.

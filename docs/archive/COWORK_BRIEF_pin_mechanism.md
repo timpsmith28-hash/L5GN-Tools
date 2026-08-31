@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_pin_mechanism.md` + `COWORK_REPORT_pin_mechanism.md`, walked 2026-08-18
+> Superseded by **0056** (a pin is enforced by the pattern, not an enumerated path) and by the 2026-08-31 rewrite of the auditor this round built · Original purpose: build the one pin mechanism — origin, anchor, hash, verified read-only, reported never repaired — and the auditor that checks it.
+> Accurate history: the pin file format, and the argument for one mechanism rather than three. **Stop trusting:** its description of the auditor as covering the conversation map — it covered **one** map by a hardcoded path, and a second map sat unpinned beside it until 2026-08-31.
+
 # Cowork brief — the pin mechanism: one implementation, wired to the subject that has nothing checking it
 
 **Origin:** DECISIONS 0045, ratified 2026-08-17.

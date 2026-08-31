@@ -349,6 +349,45 @@ warning; four is the answer.
 > files carry date-first names without the suffix and may well be exchanges named
 > before the rule existed. Settling that is a pass of its own, not a line edit.
 
+> **The numerator, adjudicated 2026-08-31 — the pass reserved above.** The three
+> files were read rather than inferred from their names, and **none is an
+> exchange**: `2026-07-10_projects-review.md` is a generated survey (*"Method: git
+> metadata … AST scans"*) and was refreshed on 07-13, so it is not even frozen;
+> `2026-07-27_cowork-transcript-store.md` and
+> `2026-07-27_gate-green-on-linux-red-on-windows.md` both declare themselves
+> *"born frozen … Evidence, not a maintained document"*. With
+> `2026-08-19_downtier_recurrence_probe.py`, and with
+> `Work_Claude_UAT_chat_20260728.md` removed from tracking the same day, the count
+> is **four of sixteen**.
+>
+> **So the stated threshold — *"four is the answer"* — is met, and it should not
+> be acted on as written, because this test counts the wrong thing for what it is
+> worried about.** Its concern is *"if inbound third-party material starts landing
+> here"*; all four are **this estate's own work**, and none is third-party. The
+> test says *"not a prompt-and-response exchange"* and the worry says *"not ours"*,
+> and the estate's own non-exchange notes sit in the gap between them. **The letter
+> fires; the spirit does not.**
+>
+> **Two counts, therefore, and the second is the one that owes a `context/`:**
+> **(a) not an exchange — four of sixteen**, which says only that this folder holds
+> two classes and the naming rule below binds one of them; **(b) not authored by
+> this estate — zero of sixteen**, which is the count that was always meant and
+> the one whose rising is the answer. Recorded rather than resolved by rewriting
+> the clause above: the original test stands as written and this is what reading it
+> carefully produced.
+
+**Both classes live here, and only one carries the suffix.** An **exchange** is
+a prompt and a response and takes the date-first name with `1-prompt` /
+`2-response`. A **standalone note** — a frozen finding, a generated survey —
+takes the date-first name and **no suffix**, which is why the three files above
+are correctly named and need no rename. A reader tells them apart by opening
+them, which is the honest cost of a folder that holds two things.
+
+> Two of those notes cite **`docs/README.md` §4** for rules that now live in this
+> file. The citations are stale and are **deliberately not corrected**: an
+> investigation is born frozen and editing it destroys the thing it is kept for.
+> Recorded here instead, which is where a reader will be.
+
 Nothing is moved by this section, including those two files.
 
 ### What the class holds

@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_uat_sidebar.md` + `COWORK_REPORT_uat_sidebar.md`, walked 2026-08-03
+> Superseded by the sidebar being live, and by `CONVENTION_docs.md` §4's uat-stamp rules · Original purpose: slice 2 of two — give the *built, not walked* column a real action, so walking a sheet emits a stamped results log that advances the card itself.
+> Accurate history: why the action had to record a verdict rather than compute a pass. **Stop trusting:** its opening instruction *"do not start this until the board has been walked"* — the board round ran, was walked 2026-08-01, and was archived the same day as this file. That precondition is spent.
+
 # Cowork brief — the UAT sidebar: walking a sheet becomes an action
 
 **Origin:** design thread, 2026-07-28. Slice 2 of two.

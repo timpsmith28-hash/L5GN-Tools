@@ -1,5 +1,9 @@
 <!-- uat: commit=c691c1e dirty=false host=LucasGoonPC walked=YYYY-MM-DD -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_pin_mechanism.md` + `COWORK_REPORT_pin_mechanism.md`, walked 2026-08-18
+> Superseded by **0056** (a pin is enforced by the pattern, not an enumerated path) and by the 2026-08-31 rewrite of the auditor this round built · Original purpose: build the one pin mechanism — origin, anchor, hash, verified read-only, reported never repaired — and the auditor that checks it.
+> A ready-to-walk sheet, not a record. **Read the results log instead.**
+
 # UAT — the pin mechanism (DECISIONS 0045)
 
 Walk against `docs/COWORK_BRIEF_pin_mechanism.md`'s acceptance checks. Mark

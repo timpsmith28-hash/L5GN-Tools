@@ -64,11 +64,20 @@ stops rather than working from its own text.
 | project registry | `CONVENTION_project_registry.md` | — |
 | conversation map | `CONVENTION_conversation_map.md` | — |
 | design thread restart | `CONVENTION_design_thread_restart.md` | `dtr` |
-| decisions | `CONVENTION_decisions.md` | `decision-scribe` |
-| briefs and walk-sheets | `CONVENTION_briefs.md` | `brief-scribe` |
-| doc lifecycle and archiving | `CONVENTION_docs.md` | `docs-archivist` |
+| decisions | `CONVENTION_decisions.md` | `decision-scribe` **†** |
+| briefs and walk-sheets | `CONVENTION_briefs.md` | `brief-scribe` **†** |
+| doc lifecycle and archiving | `CONVENTION_docs.md` | `docs-archivist` **†** |
 | outside material | *(none — and the class it names is retired; see Debts)* | `consultant-docs` |
-| closing a round | *(none here — see Debts)* | `round-closer` |
+| closing a round | `CONVENTION_briefs.md`, `CONVENTION_docs.md` | `round-closer` |
+
+**† The convention exists; the skill does not cite it** (measured 2026-08-31,
+`docs/AGENDA_0052_falsifier_2026-08-31.md`). `brief-scribe` states no briefs
+convention exists; `decision-scribe` names the log instead; `docs-archivist`
+names `docs/README.md` §3, from which the rule has moved. Patches are drafted
+and await hand-copy, because `.claude/` is closed to this sandbox's file tools.
+**This table asserted all three pairings as facts** — under this file's own
+opening rule that made the map the defect, and the marker is here rather than
+the rows being quietly corrected.
 | orientating a repo | *(prompt file, not a convention)* | `orientation` |
 
 ## Commands you will actually need
@@ -122,8 +131,9 @@ nothing is missing.
   `docs/Consultants/`, which does not exist here and which the work rig has
   **retired** as a class. The skill is left stopping rather than pointed at a
   substitute; naming what replaces it is a round of its own.
-- **`round-closer` has no convention here**, and asserts an estate fact
-  (*"no MCF repo has a gate"*) that is false in this repo.
+- **`round-closer` asserts an estate fact** (*"no MCF repo has a gate"*) that is
+  false in this repo. *(Its "no convention here" half is discharged — it cites
+  `CONVENTION_briefs.md` and `CONVENTION_docs.md`; measured 2026-08-31.)*
 - **`orientation` binds to absolute paths on another machine.** Authored on the
   work rig; wants its own round under the branch model (**0057** cl.2).
 - **Ratification produces no artefact.** A status line changes and nothing

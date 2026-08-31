@@ -1,4 +1,8 @@
 <!-- gate-frozen: commit=69d1112 -->
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_uat_sidebar.md` + `COWORK_REPORT_uat_sidebar.md`, walked 2026-08-03
+> Superseded by the sidebar being live, and by `CONVENTION_docs.md` §4's uat-stamp rules · Original purpose: slice 2 of two — give the *built, not walked* column a real action, so walking a sheet emits a stamped results log that advances the card itself.
+> A ready-to-walk sheet, not a record. **Read the results log instead.**
+
 # UAT walk-sheet — the UAT sidebar
 
 **Brief:** `docs/COWORK_BRIEF_uat_sidebar.md`

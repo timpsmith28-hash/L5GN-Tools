@@ -1,4 +1,8 @@
 <!-- gate-frozen: commit=c691c1e -->
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_pin_mechanism.md` + `COWORK_REPORT_pin_mechanism.md`, walked 2026-08-18
+> Superseded by **0056** (a pin is enforced by the pattern, not an enumerated path) and by the 2026-08-31 rewrite of the auditor this round built · Original purpose: build the one pin mechanism — origin, anchor, hash, verified read-only, reported never repaired — and the auditor that checks it.
+> Accurate history: the pin format and the read-only posture, both still exactly as built. **Stop trusting:** "11 auditors + 77 testers" — the live gate is **12 auditors + 81 testers**. And the auditor this round delivered, `auditor_conversation_map_pin`, **was rewritten on 2026-08-31**: it bound `ARTEFACT`/`PIN_FILE` to `mcf_conversation_map.tsv` at module level and structurally could not see the instance violating the rule it enforced — the defect **0056** clause 1 rules on. `l5gntools/pin.py` gained `REQUIRED_FIELDS` and `missing_metadata()` the same day, because `run.py pin bump` short-circuited on hash equality and would not write the metadata line this round's own format had defined.
+
 # Cowork report — the pin mechanism (DECISIONS 0045)
 
 **Pair:** `docs/COWORK_BRIEF_pin_mechanism.md`. Session 2026-08-17.

@@ -1,4 +1,8 @@
 <!-- gate-frozen: commit=69d1112 -->
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_uat_sidebar.md` + `COWORK_REPORT_uat_sidebar.md`, walked 2026-08-03
+> Superseded by the sidebar being live, and by `CONVENTION_docs.md` §4's uat-stamp rules · Original purpose: slice 2 of two — give the *built, not walked* column a real action, so walking a sheet emits a stamped results log that advances the card itself.
+> Accurate history: the `walked` / `deferred` / `blocked` / `not_applicable` vocabulary and the never-computes-a-pass split, which is the same split `auditor_uat_stamp` makes for the gate. **Stop trusting:** "6 auditors + 55 testers" — the live gate is **12 auditors + 81 testers**. It inherits the board's deferred Tasks 3 and 4, which were **never revisited**; that is an open thread, not closure.
+
 # Cowork report — the UAT sidebar
 
 **Brief:** `docs/COWORK_BRIEF_uat_sidebar.md`. **Depends on:**

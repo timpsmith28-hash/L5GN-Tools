@@ -1,5 +1,9 @@
 <!-- uat: commit=b9fae8d dirty=true host=LucasGoonPC walked=2026-08-03 -->
 
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_uat_sidebar.md` + `COWORK_REPORT_uat_sidebar.md`, walked 2026-08-03
+> Superseded by the sidebar being live, and by `CONVENTION_docs.md` §4's uat-stamp rules · Original purpose: slice 2 of two — give the *built, not walked* column a real action, so walking a sheet emits a stamped results log that advances the card itself.
+> **Asserts the round was tested**, walked 2026-08-03. **Stop trusting** any gate count quoted inside it — the live gate is **12 auditors + 81 testers**.
+
 # Results log — uat sidebar (walked 2026-08-03, LucasGoonPC)
 
 Partner to `docs/UAT_uat_sidebar.md`.
