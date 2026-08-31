@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-08-31 · completed pair · pair `COWORK_BRIEF_correctness_sweep.md` + `COWORK_REPORT_correctness_sweep.md`, walked 2026-08-18
+> Superseded by the fixes themselves being live, and by `CONVENTION_docs.md` §4 for the archiving rules its walk-sheet exercised · Original purpose: a sweep of correctness defects found across the deck panes and the gate, fixed one at a time with a commit each.
+> Accurate history: the defect list as found, which is the clearest record of what was actually wrong. **Stop trusting:** it as a work list — every fix it asks for landed, commit series `2f17af6..142c11f`. Read as origin, not as outstanding.
+
 # Cowork brief — correctness sweep (five small fixes off the UAT walk)
 
 **Origin:** the UAT walk of 2026-08-15..17, recorded in
