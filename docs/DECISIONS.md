@@ -3681,7 +3681,7 @@ true when the policy engine arrives.
 
 ## 0060 — A rule declares the subject it binds, in a form something can enumerate; a rule that cannot is recorded as unenforceable rather than reported against a substituted subject, and a rule, its checker and its remedy are three artefacts that must agree
 
-**Date:** 2026-08-31 · **Status:** proposed · **Builds on:** 0031 (a non-gating
+**Date:** 2026-08-31 · **Status:** accepted 2026-09-01 · **Builds on:** 0031 (a non-gating
 surface reports findings, never a verdict), 0045 (a pin is one mechanism —
 origin, anchor, hash — verified read-only, reported never repaired; clause 2's
 report-never-repair is what keeps a conformance reader a reader), 0048 clause 4
