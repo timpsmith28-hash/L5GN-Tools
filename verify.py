@@ -110,6 +110,7 @@ TESTERS: list[str] = [
     "tests.tester_run_banner",
     "tests.tester_pin",
     "tests.tester_conversation_map_pin",
+    "tests.tester_remedy_round_trip",
 ]
 
 

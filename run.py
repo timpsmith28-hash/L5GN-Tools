@@ -12,6 +12,10 @@ Usage:
     python run.py census [--target PATH]     # this machine reports its own domain
     python run.py architecture_census        # this checkout's own shape -> data/
     python run.py decisions-map              # docs/DECISIONS.md -> docs/_decisions_map.md
+    python run.py conformance-map            # DECISIONS.md + CONVENTION_*.md
+                                              # -> docs/_conformance_map.md (what the
+                                              # estate declares about its own rules;
+                                              # reports, never gates)
     python run.py render-architecture        # render data/architecture_census.json
                                               # -> docs/_architecture_shape.md (run
                                               # after any route/schema/gate change,
@@ -871,6 +875,26 @@ def _cmd_decisions_map() -> int:
     return 0
 
 
+def _cmd_conformance_map() -> int:
+    """The human-run generator for `docs/_conformance_map.md` (DECISIONS 0030,
+    0060 clause 4).
+
+    Reads `docs/DECISIONS.md` and `docs/CONVENTION_*.md` and reports what each
+    declares about its own subject and reader. **A non-gating surface** (0031,
+    0060 clause 7): it reports and never repairs, and the only thing that can
+    go red over this material is `auditors/auditor_rule_subjects.py`.
+
+    Deterministic by contract, as `decisions-map` is: run twice against an
+    unchanged tree and the output is byte-identical, so nothing about the
+    commit, the host or the clock is stamped into it. Regenerate in the same
+    commit as the change that moved it (CONVENTION_commits.md 6).
+    """
+    from l5gntools.conformance_map import write_conformance_map
+    dest = write_conformance_map()
+    print(f"conformance-map: wrote {dest}")
+    return 0
+
+
 def _cmd_pin(rest: list[str]) -> int:
     """`python run.py pin bump <artefact-path> [--apply]` -- (re)compute an
     artefact's content hash and write (or dry-run) the pin file beside it.
@@ -1028,7 +1052,8 @@ def main(argv: list[str]) -> int:
                                 description="L5GN-Tools estate scanners (read-only).")
     p.add_argument("command",
                    help="a tool name, or 'list' / 'build' / 'census' / "
-                        "'render-architecture' / 'decisions-map' / 'config' / "
+                        "'render-architecture' / 'decisions-map' / "
+                        "'conformance-map' / 'config' / "
                         "'deposit' / 'consume' / "
                         "'ingest' / 'app' / 'window' / 'serve' / 'review' / "
                         "'backup' / 'scrape' / 'conductor' / 'pin' "
@@ -1074,6 +1099,8 @@ def main(argv: list[str]) -> int:
         return _cmd_render_architecture()
     if args.command == "decisions-map":
         return _cmd_decisions_map()
+    if args.command == "conformance-map":
+        return _cmd_conformance_map()
     if args.command == "backup":
         return _cmd_backup(args)
     if args.command == "conductor":

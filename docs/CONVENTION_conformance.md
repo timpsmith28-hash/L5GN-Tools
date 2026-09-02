@@ -18,6 +18,11 @@ entries and `docs/CONVENTION_*.md`. Declared in the form §1 demands of everythi
 else, because a conformance convention that does not declare its own subject is
 the first thing its own auditor should catch.
 
+**Reader:** `auditors/auditor_rule_subjects.py` — **§1 only.** Declared in the
+form §2 demands, and deliberately narrow: that auditor reads whether a subject
+is declared and nothing else. §10 lists what no reader covers, so this field
+claims coverage of one section rather than of the file.
+
 **Scope:** this repo. Another repo in the estate may adopt it, and would then
 carry the adoption header this one does not.
 
