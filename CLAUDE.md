@@ -64,21 +64,25 @@ stops rather than working from its own text.
 | project registry | `CONVENTION_project_registry.md` | — |
 | conversation map | `CONVENTION_conversation_map.md` | — |
 | design thread restart | `CONVENTION_design_thread_restart.md` | `dtr` |
-| decisions | `CONVENTION_decisions.md` | `decision-scribe` **†** |
-| briefs and walk-sheets | `CONVENTION_briefs.md` | `brief-scribe` **†** |
-| doc lifecycle and archiving | `CONVENTION_docs.md` | `docs-archivist` **†** |
+| decisions | `CONVENTION_decisions.md` | `decision-scribe` |
+| briefs and walk-sheets | `CONVENTION_briefs.md` | `brief-scribe` |
+| doc lifecycle and archiving | `CONVENTION_docs.md` | `docs-archivist` |
 | outside material | *(none — and the class it names is retired; see Debts)* | `consultant-docs` |
 | closing a round | `CONVENTION_briefs.md`, `CONVENTION_docs.md` | `round-closer` |
-
-**† The convention exists; the skill does not cite it** (measured 2026-08-31,
-`docs/AGENDA_0052_falsifier_2026-08-31.md`). `brief-scribe` states no briefs
-convention exists; `decision-scribe` names the log instead; `docs-archivist`
-names `docs/README.md` §3, from which the rule has moved. Patches are drafted
-and await hand-copy, because `.claude/` is closed to this sandbox's file tools.
-**This table asserted all three pairings as facts** — under this file's own
-opening rule that made the map the defect, and the marker is here rather than
-the rows being quietly corrected.
 | orientating a repo | *(prompt file, not a convention)* | `orientation` |
+
+**The three † markers are discharged, at `99784e8`.** They recorded, from
+2026-08-31, that `brief-scribe` denied a briefs convention existed, that
+`decision-scribe` named the log instead of its convention, and that
+`docs-archivist` named `docs/README.md` §3 from which the rule had moved.
+All three now cite the convention in the row beside them — read on 2026-09-02,
+not inferred from the commit subject. **The rows above are again assertions of
+fact, which is what the marker existed to deny.**
+
+**Two claims that marker carried are also retired.** The patches did not await
+hand-copy — they landed. And `.claude/` is **not** closed to a Cowork sandbox:
+both the shell and the file tools read `.claude/skills/` on this machine. Any
+round that plans around that limit is planning around one that is gone.
 
 ## Commands you will actually need
 
