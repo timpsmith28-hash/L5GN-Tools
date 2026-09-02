@@ -6,9 +6,25 @@ Pair: `docs/COWORK_BRIEF_conformance_reader.md` → `docs/COWORK_REPORT_conforma
 (`brief-scribe`): a walk-sheet written afterwards fills up with `[H]` checks
 covering whatever turned out awkward to verify. Three `[H]`s here, all chosen.
 
-Built on: *(fill at build time)*. Gate at build time: `python verify.py`
-**GREEN**, *(N)* auditors + *(M)* testers — **the frozen build-time count, and
-A9 is about whether the brief's figure of 12 + 82 survived contact.**
+Built on: `bab32cf`. Gate at build time: `python verify.py`
+**GREEN**, **12** auditors + **81** testers — **the frozen build-time count, and
+A9 is about whether the brief's figure of 12 + 81 survived contact.**
+
+> **Corrected 2026-09-02, before the build, and recorded rather than fixed
+> silently.** This line read *"the brief's figure of 12 + 82"*. That was never
+> the brief's figure: the brief itself carried 82 briefly on 2026-08-31, caught
+> it the same day by counting, and corrected to **12 + 81** while recording the
+> error as an instance. The walk-sheet kept the withdrawn number, so A9 was
+> pointed at a figure the brief does not publish.
+>
+> The build-time count above was derived three ways on 2026-09-02, none of them
+> recollection: reading `verify.py`'s `AUDITORS` and `TESTERS` lists; importing
+> the module and taking `len()` of each, which is the derivation
+> `auditor_doc_claims` treats as authoritative; and counting the run's own
+> `[ OK ]` / `[FAIL]` lines, which came to **93** — one per registered gate,
+> since `_run_group` has no silent path. **A9 stands unchanged.** A number
+> corrected twice is not thereby trustworthy either, and the round still
+> re-derives the census and still reports whether this figure survived.
 
 Mark each check **ready to walk**, never "passed" — the walk is Tim's. Nothing
 is committed; these check staged changes.
