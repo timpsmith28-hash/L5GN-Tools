@@ -165,13 +165,11 @@ Entries citing nothing. **An orphan is not a lesser entry** — several are load
 | accepted 2026-08-20 | 1 |
 | accepted 2026-08-28 | 7 |
 | accepted 2026-09-01 | 1 |
+| accepted 2026-09-02 | 2 |
 | accepted as a direction, deferred | 1 |
-| proposed | 2 |
 
-**2 proposed** — not authority, and not citable as such (`CONVENTION_decisions.md` 3):
+**0 proposed** — not authority, and not citable as such (`CONVENTION_decisions.md` 3):
 
-- [`0058`](DECISIONS.md#0058-a-link-records-the-mechanism-that-produced-it-as-a-closed-value-refused-at-write-and-on-a-different-axis-from-confidence-a-mechanism-that-cannot-answer-abstains-and-the-abstention-is-counted) — A link records the mechanism that produced it, as a closed value refused at write and on a different axis from confidence; a mechanism that cannot answer abstains, and the abstention is counted · [what would show this wrong](DECISIONS.md#0058-a-link-records-the-mechanism-that-produced-it-as-a-closed-value-refused-at-write-and-on-a-different-axis-from-confidence-a-mechanism-that-cannot-answer-abstains-and-the-abstention-is-counted)
-- [`0059`](DECISIONS.md#0059-0048-clause-2-is-amended-a-cards-completeness-is-measured-and-shown-rather-than-used-to-refuse-it-and-not-enough-to-decide-yet-becomes-a-ruling-with-a-named-thing-to-fetch) — 0048 clause 2 is amended: a card's completeness is measured and shown rather than used to refuse it, and "not enough to decide yet" becomes a ruling with a named thing to fetch · [what would show this wrong](DECISIONS.md#0059-0048-clause-2-is-amended-a-cards-completeness-is-measured-and-shown-rather-than-used-to-refuse-it-and-not-enough-to-decide-yet-becomes-a-ruling-with-a-named-thing-to-fetch)
 
 **13 of 60 entries carry a *What would show this wrong* section.** Links only:
 

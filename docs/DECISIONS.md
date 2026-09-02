@@ -3362,7 +3362,7 @@ are still working from memory.
 
 ## 0058 — A link records the mechanism that produced it, as a closed value refused at write and on a different axis from confidence; a mechanism that cannot answer abstains, and the abstention is counted
 
-**Date:** 2026-08-28 · **Status:** proposed · **Builds on:** 0038 (conversation,
+**Date:** 2026-08-28 · **Status:** accepted 2026-09-02 · **Builds on:** 0038 (conversation,
 session and thread are three distinct things; clause 3 — the `threads` table is a
 *storage* entity, not a source entity), 0040 clause 1 (where a source carries a
 stable native conversation id, a curated map keyed on it is the join of record,
@@ -3543,7 +3543,7 @@ which is the argument for clause 2 surviving even if everything else here falls.
 
 ## 0059 — 0048 clause 2 is amended: a card's completeness is measured and shown rather than used to refuse it, and "not enough to decide yet" becomes a ruling with a named thing to fetch
 
-**Date:** 2026-08-28 · **Status:** proposed · **Amends:** 0048 clause 2 (the
+**Date:** 2026-08-28 · **Status:** accepted 2026-09-02 · **Amends:** 0048 clause 2 (the
 fixed card anatomy and its refusal to raise) · **Builds on:** 0048 clauses 1, 3,
 4 and 5 (all four stand unamended — the operator confirmed each fits and
 justifies), 0031 (a non-gating surface reports findings, never a verdict), 0037
