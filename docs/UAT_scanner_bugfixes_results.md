@@ -1,4 +1,4 @@
-<!-- uat: commit=a17fda8 dirty=true host=LucasGoonPC walked=2026-08-28 gate=12a/81t -->
+<!-- uat: commit=a17fda8 dirty=true host=LucasGoonPC walked=2026-08-28 -->
 
 # Results log — scanner bug fixes (walked 2026-08-28, LucasGoonPC) — INTERIM, work-rig checks open
 
@@ -151,3 +151,29 @@ thread, with what would confirm it · `[DEFERRED]` deferred with a reason.
 **The card is walked and not closed.** Four checks carry evidence, one is
 unconfirmed, four are deferred with named clearing conditions, and one awaits
 the operator.
+
+---
+
+## Correction, 2026-09-02 — `gate=` removed from the stamp
+
+**No verdict above is changed.** The stamp's `gate=12a/81t` field was removed;
+`commit=` and `walked=` stand, and they are what `auditor_uat_stamp` requires.
+The separate `gate-frozen at 6d09eb3` note near the top is a **different**
+mechanism — `auditor_doc_claims`' — and is untouched.
+
+**Why.** Registering a thirteenth auditor on 2026-09-02 turned this log red.
+`auditor_uat_stamp` compares `gate=` — a fact about the moment of the walk —
+against `verify.py`'s count at HEAD. That comparison has two stable outcomes
+over time: the gate goes red whenever gate composition changes, or historical
+stamps get re-cut to match. **The second is laundering a number into a document
+to satisfy a check, which is the incident that auditor's own docstring says it
+was built to catch.**
+
+`gate=` is optional in that auditor, and it duplicates something `commit=`
+already fixes — check out that commit and count the lists. Removing a
+denormalised copy is not losing provenance; keeping one beside its source is how
+the two drift.
+
+**The auditor is not fixed by this edit and should be**, by resolving `gate=`
+against the census at the stamped commit. That is a code change, outside the
+round that found it, and wants its own card.

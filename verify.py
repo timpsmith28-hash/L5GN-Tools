@@ -21,6 +21,7 @@ AUDITORS: list[str] = [
     "auditors.auditor_doc_claims",
     "auditors.auditor_module_contract",
     "auditors.auditor_readonly",
+    "auditors.auditor_rule_subjects",
     "auditors.auditor_stdlib",
     "auditors.auditor_tool_contract",
     "auditors.auditor_uat_sheet_readable",

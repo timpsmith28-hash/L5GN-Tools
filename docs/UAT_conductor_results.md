@@ -1,4 +1,4 @@
-<!-- uat: commit=a17fda8 dirty=true host=LucasGoonPC walked=2026-08-28 gate=12a/81t -->
+<!-- uat: commit=a17fda8 dirty=true host=LucasGoonPC walked=2026-08-28 -->
 
 # Results log — the conductor, Task 1 (walked 2026-08-28, LucasGoonPC) — INTERIM, one check open
 
@@ -106,3 +106,28 @@ This log records a verdict and its evidence per item — never a computed pass.
   is out of this round's scope and absent from the sheet by design, not skipped.
 
 **The card is walked and not closed.** It re-walks when the TTL run happens.
+
+---
+
+## Correction, 2026-09-02 — `gate=` removed from the stamp
+
+**No verdict above is changed.** The stamp's `gate=12a/81t` field was removed;
+`commit=` and `walked=` stand, and they are what `auditor_uat_stamp` requires.
+
+**Why.** Registering a thirteenth auditor on 2026-09-02 turned this log red.
+`auditor_uat_stamp` compares `gate=` — a fact about the moment of the walk —
+against `verify.py`'s count at HEAD. That comparison has two stable outcomes
+over time: the gate goes red whenever gate composition changes, or historical
+stamps get re-cut to match. **The second is laundering a number into a document
+to satisfy a check, which is the incident that auditor's own docstring says it
+was built to catch.**
+
+`gate=` is optional in that auditor, and it duplicates something `commit=`
+already fixes — check out that commit and count the lists. Removing a
+denormalised copy is not losing provenance; keeping one beside its source is how
+the two drift.
+
+**The auditor is not fixed by this edit and should be.** Resolving `gate=`
+against the census *at the stamped commit* would make the field meaningful
+again. That is a code change, it is outside the round that found this, and it
+wants its own card. Recorded here rather than done in passing.

@@ -1,6 +1,17 @@
 # UAT walk-sheet — the conformance reader
 
+<!-- gate-frozen: commit=bab32cf -->
+
 Pair: `docs/COWORK_BRIEF_conformance_reader.md` → `docs/COWORK_REPORT_conformance_reader.md`.
+
+> **Why this sheet is gate-frozen, added 2026-09-02 during the build.** The
+> count below is a **build-time** count — the state the build starts from, which
+> is what A9 tests against. Task 3 registers a thirteenth auditor, so from that
+> commit onward the live census disagrees with this sheet **by design**, and
+> `auditor_doc_claims` would read a frozen stamp as a live claim and go red.
+> The marker is the mechanism that auditor already provides for exactly this,
+> and it names `bab32cf` — the commit in `Built on:` below, so the exemption
+> and the baseline are the same fact stated once.
 
 **Written 2026-08-31, at brief time, before the build.** That is deliberate
 (`brief-scribe`): a walk-sheet written afterwards fills up with `[H]` checks

@@ -1,4 +1,4 @@
-<!-- uat: commit=d4d65c4 dirty=true host=LucasGoonPC walked=2026-08-28 gate=12a/81t -->
+<!-- uat: commit=d4d65c4 dirty=true host=LucasGoonPC walked=2026-08-28 -->
 
 # Results log — Decision Desk, stale-output triage (re-walked 2026-08-28, LucasGoonPC) — D7/D8/D9 CLOSED
 
@@ -123,3 +123,31 @@ section could cite even in principle. Every item, including the ones marked
 This log was re-walked and re-stamped on 2026-08-28 when D7 reached ten, as its
 2026-08-20 revision said it would be. **The trial is closed.** Further Desk work
 opens its own round.
+
+---
+
+## Correction, 2026-09-02 — `gate=` removed from the stamp
+
+**No verdict above is changed**, and the trial stays closed. The stamp's
+`gate=12a/81t` field was removed; `commit=` and `walked=` stand, and they are
+what `auditor_uat_stamp` requires.
+
+**Why.** Registering a thirteenth auditor on 2026-09-02 turned this log red.
+`auditor_uat_stamp` compares `gate=` — a fact about the moment of the walk —
+against `verify.py`'s count at HEAD. That comparison has two stable outcomes
+over time: the gate goes red whenever gate composition changes, or historical
+stamps get re-cut to match. **The second is laundering a number into a document
+to satisfy a check, which is the incident that auditor's own docstring says it
+was built to catch.**
+
+`gate=` is optional in that auditor, and it duplicates something `commit=`
+already fixes — check out that commit and count the lists. Removing a
+denormalised copy is not losing provenance; keeping one beside its source is how
+the two drift.
+
+**This log's note above already saw the neighbouring gap** — *"the convention
+has no carve-out for an interim results log and should probably grow one"*. This
+is the same seam from the other side: a frozen log's claims keep being measured
+against a moving tree. **The auditor is not fixed by this edit and should be**,
+by resolving `gate=` against the census at the stamped commit. That is a code
+change, outside the round that found it, and wants its own card.
