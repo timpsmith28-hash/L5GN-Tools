@@ -47,6 +47,58 @@ class UnknownHostError(RuntimeError):
     """
 
 
+class OverlayAuthorshipError(RuntimeError):
+    """``config/local.json`` carries an ``authors`` key, which 0054 forbids.
+
+    Clause 6 puts authorship in the tracked file only, and
+    :func:`_tracked_entry` already makes an overlay declaration *unreadable*
+    rather than merely outranked. **Unreadable is silent**, though: a key that
+    does nothing looks exactly like a key that works, so someone declaring
+    authorship there gets no authorship and no error -- and 0053 clause 5's
+    pin-bump refusal then fires with a message about a config gap that is
+    really a stale checkout. That is the two-meanings-one-input failure clause 6
+    exists to remove, arriving from the other side of it.
+
+    **0054 clause 8** requires unrecognised configuration to fail loudly, so it
+    does. Structure keeps the wrong value from being read; this keeps it from
+    being written and believed.
+
+    Raised for a declaration under **any** host section, not only this
+    machine's: one overlay file holds every machine, and a declaration no other
+    checkout can see is the thing clause 6 refuses regardless of whose it is.
+    """
+
+
+def _overlay_authorship(local: dict) -> list[str]:
+    """Host keys in an untracked overlay mapping that carry ``authors``.
+
+    Pure and file-independent so that the gate reads this function rather than
+    keeping a second copy of the rule -- **0060 clause 6**: where an invariant
+    spans two components, a comment keeping them in step is not a mechanism.
+    ``auditors/auditor_authors_declaration.py`` is the reader, and it calls
+    exactly this.
+    """
+    return sorted(str(key) for key, entry in local.items()
+                  if isinstance(entry, dict) and "authors" in entry)
+
+
+def _refuse_overlay_authorship(local: dict) -> None:
+    """Raise :class:`OverlayAuthorshipError` if the overlay declares authorship."""
+    offenders = _overlay_authorship(local)
+    if not offenders:
+        return
+    raise OverlayAuthorshipError(
+        f"config/local.json declares 'authors' for "
+        f"{', '.join(repr(h) for h in offenders)}. Authorship is estate policy "
+        f"and lives in the tracked file only (DECISIONS 0054 clause 6), so "
+        f"nothing reads it there -- it is not an override, it is inert, which "
+        f"is why this refuses instead of ignoring it (clause 8). Remedy: move "
+        f"each 'authors' list into config/machines.json under the same "
+        f"hostname, and delete it from config/local.json. A host section in "
+        f"machines.json may carry a real hostname and an 'authors' list and "
+        f"nothing else; its paths still belong in the overlay.")
+
+
 def _load(path: Path) -> dict:
     """Read a JSON object file; return {} on missing/empty/malformed (never raise)."""
     if path.exists() and path.stat().st_size > 0:
@@ -86,6 +138,14 @@ def machine(host: str | None = None) -> dict:
     host = host or hostname()
     machines = _load(_MACHINES)
     local = _load(_LOCAL)
+
+    # 0054 clause 8, before anything is resolved: an overlay that declares
+    # authorship is unrecognised configuration, and it fails loudly here rather
+    # than being read past. Placed before the unknown-host raise deliberately --
+    # a malformed overlay is malformed whoever is running, and `run.py config`
+    # is the diagnostic command, so it should say what is wrong rather than
+    # report cleanly around it.
+    _refuse_overlay_authorship(local)
 
     if host not in machines and host not in local:
         known = configured_hosts()

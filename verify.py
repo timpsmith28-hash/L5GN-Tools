@@ -14,6 +14,7 @@ import sys
 
 AUDITORS: list[str] = [
     "auditors.auditor_architecture_current",
+    "auditors.auditor_authors_declaration",
     "auditors.auditor_cli_contract",
     "auditors.auditor_conversation_map_pin",
     "auditors.auditor_dependency_direction",

@@ -1,3 +1,5 @@
+<!-- gate-frozen: commit=8a61aec -->
+
 # Cowork report — the estate produces a list of its own unchecked rules
 
 Partner to `docs/COWORK_BRIEF_conformance_reader.md`. Built 2026-09-02 on

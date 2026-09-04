@@ -135,6 +135,17 @@ def run() -> list[str]:
         # meanings, and 0053 clause 5's pin-bump refusal rests on telling them
         # apart. Asserted as behaviour rather than left to tidiness, because
         # the violation this replaces survived by nobody reading either file.
+        # Two levels, and they are asserted separately on purpose. Structure
+        # (`_tracked_entry` drops the overlay from the layer stack) keeps a
+        # smuggled declaration from being READ; the loud refusal added
+        # 2026-09-04 keeps it from being WRITTEN and believed (clause 8).
+        #
+        # **This block was rewritten on 2026-09-04 and the reason is worth
+        # keeping.** It used to assert the resolution behaviour by calling
+        # `authored_artefacts` against a fixture whose overlay carried
+        # `authors` -- the exact state `machine()` now raises on, so those
+        # assertions could no longer reach their subject. The properties they
+        # covered are all still covered below, one level lower.
         mfile4 = Path(td) / "machines4.json"
         lfile4 = Path(td) / "local4.json"
         mfile4.write_text(json.dumps({
@@ -142,35 +153,68 @@ def run() -> list[str]:
             "TRACKED_RIG": {"authors": ["config/a.tsv"]},
             "BOTH_RIG": {"authors": ["config/tracked_wins.tsv"]},
         }), encoding="utf-8")
-        lfile4.write_text(json.dumps({
+        smuggled = {
+            "_comment": "a comment key is not a host section",
             "LOCAL_ONLY_RIG": {"authors": ["config/smuggled.tsv"]},
             "BOTH_RIG": {"authors": ["config/local_loses.tsv"]},
-        }), encoding="utf-8")
+            "CLEAN_RIG": {"vault": "v"},
+        }
+        lfile4.write_text(json.dumps(smuggled), encoding="utf-8")
         config._MACHINES, config._LOCAL = mfile4, lfile4
+        try:
+            # ---- level 1: the overlay is unreadable, not merely outranked ----
+            # Asserted against `_tracked_entry` directly, which is the layer the
+            # property lives in. Going through `machine()` would hit the clause 8
+            # refusal below and prove nothing about resolution.
+            if config._authored_paths(config._tracked_entry("BOTH_RIG")) != \
+                    ["config/tracked_wins.tsv"]:
+                v.append("config: the tracked declaration must survive an overlay "
+                         "carrying the same host (0054 cl.6)")
+            if config._authored_paths(config._tracked_entry("LOCAL_ONLY_RIG")) != []:
+                v.append("config: a host declared only in the overlay must author "
+                         "nothing -- the overlay is not read (0054 cl.6)")
+
+            # ---- level 2: and it refuses loudly rather than ignoring it ------
+            offenders = config._overlay_authorship(smuggled)
+            if offenders != ["BOTH_RIG", "LOCAL_ONLY_RIG"]:
+                v.append("config: _overlay_authorship should name every host "
+                         f"section carrying 'authors', sorted; got {offenders!r}")
+            try:
+                config.machine("TRACKED_RIG")
+                v.append("config: an overlay declaring 'authors' must raise "
+                         "OverlayAuthorshipError -- 0054 cl.8 says unrecognised "
+                         "configuration fails loudly, and an inert key is exactly "
+                         "the silent case cl.6 exists to remove")
+            except config.OverlayAuthorshipError as exc:
+                # The message must carry the remedy, or the refusal is a wall.
+                text = str(exc)
+                if "config/machines.json" not in text or "LOCAL_ONLY_RIG" not in text:
+                    v.append("config: OverlayAuthorshipError must name the "
+                             "offending host and the file to move it to, so the "
+                             f"fix is legible from the failure alone; got {text!r}")
+        finally:
+            config._MACHINES, config._LOCAL = orig_machines, orig_local
+
+        # ---- a clean overlay: everything else still behaves as it did -------
+        mfile5 = Path(td) / "machines5.json"
+        lfile5 = Path(td) / "local5.json"
+        mfile5.write_text(json.dumps({
+            "default": {"role": "producer"},
+            "TRACKED_RIG": {"authors": ["config/a.tsv"]},
+        }), encoding="utf-8")
+        lfile5.write_text(json.dumps({"TRACKED_RIG": {"vault": "v"}}),
+                          encoding="utf-8")
+        config._MACHINES, config._LOCAL = mfile5, lfile5
         try:
             if config.authored_artefacts("TRACKED_RIG") != ["config/a.tsv"]:
                 v.append("config: authorship declared in machines.json should "
                          f"resolve, got {config.authored_artefacts('TRACKED_RIG')!r}")
-
-            # A host that exists ONLY in the untracked overlay authors nothing.
-            # It still resolves as a machine -- this is a refusal to author,
-            # not a refusal to run.
-            if config.authored_artefacts("LOCAL_ONLY_RIG") != []:
-                v.append("config: local.json must not SUPPLY authorship (0054 "
-                         f"cl.6), got {config.authored_artefacts('LOCAL_ONLY_RIG')!r}")
-
-            if config.authored_artefacts("BOTH_RIG") != ["config/tracked_wins.tsv"]:
-                v.append("config: local.json must not OVERRIDE tracked authorship "
-                         f"(0054 cl.6), got {config.authored_artefacts('BOTH_RIG')!r}")
-
-            # The refusal message names only hosts every checkout can see.
-            if config.authoring_hosts("config/smuggled.tsv") != []:
-                v.append("config: authoring_hosts must not name a host whose only "
-                         "declaration is untracked -- the refusal would cite a "
-                         "host no other machine can confirm")
             if config.authoring_hosts("config/a.tsv") != ["TRACKED_RIG"]:
                 v.append("config: authoring_hosts should name the tracked author, "
                          f"got {config.authoring_hosts('config/a.tsv')!r}")
+            if config.authoring_hosts("config/never_declared.tsv") != []:
+                v.append("config: authoring_hosts must name nobody for an "
+                         "artefact no tracked host declares")
 
             # An entirely unconfigured host still raises loudly rather than
             # degrading to "authors nothing", which would read as a config gap.
