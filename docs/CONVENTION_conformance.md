@@ -187,8 +187,9 @@ table instead of the whole file. **Nothing in this document should be absent fro
 this map.** If something is, it is a rule invented here, and §0 says what happens
 then.
 
-| § | imperative | 0060 clause |
+| § | imperative | clause |
 |---|---|---|
+| 0 | a rule this file carries that 0060 does not is remedied by a superseding entry in the log, never by a paragraph here | **0052** cl.3, inverted |
 | 1 | a rule declares an enumerable subject, in one of three forms | 1 |
 | 1 | prose-only subjects do not count as declared | 1 |
 | 1 | prefer the pattern form; a checker is driven by the pattern | 1, and 0056 cl.1 |
@@ -204,12 +205,33 @@ then.
 | 6 | a cross-component invariant is read in the gate | 6 |
 | 7 | the reader reports and never repairs | 7, and 0045 cl.2 |
 | 7 | verdicts only in the gate; the map does not gate | 7, and 0031, 0053 cl.1 |
+| 7 | a reader that cannot go red is worse than no reader | **0048** cl.4 |
 | 8 | binds forward; no retroactive invalidation | 8 |
 | 8 | the subject is declared in the sweep, never in the entry | 8 |
 
-**Seventeen imperatives, all eight clauses.** The denominator is 0060's clauses
-1-8, and the count is over this file's own section headings — stated because §5
-applies to this document as much as to anything it governs.
+**Nineteen imperatives. M is every imperative in this document**, which is the
+subject the paragraph above this table claims — not *every imperative mapping to
+a 0060 clause*, which is the narrower set the table held until 2026-09-04.
+
+**Two of the nineteen do not map to 0060 at all**, and they are marked in bold
+above: §0's remedy rule comes from **0052** clause 3 inverted, and §7's
+*"cannot go red"* standard from **0048** clause 4. Neither is a rule invented
+here — both cite accepted entries — so neither triggers §0's own remedy. They
+were absent until 2026-09-04 because this column read `0060 clause` and an
+imperative sourced elsewhere had nowhere to go in it.
+
+**That omission was 0060 clause 3 arriving inside the section written to
+demonstrate it**: the preamble claimed every imperative in the document, the
+count covered only those with a 0060 clause, and §5 rules that a figure whose M
+is not the rule's own subject is withdrawn rather than adjusted. **Found by
+A2's re-walk on 2026-09-04** (`docs/UAT_conformance_reader_results.md`,
+defects 6 and 7) — by a reader who had no part in writing this table, which is
+the only reason it was found at all. The fix widened the table rather than
+narrowing the claim, on the operator's call.
+
+**Seventeen of the nineteen map to 0060's clauses 1-8, and all eight clauses are
+covered.** That figure carries its own denominator for the same reason
+everything else here does: M is this table's rows, counted in it.
 
 ## 10. What is not enforced
 
@@ -219,7 +241,10 @@ applies to this document as much as to anything it governs.
   **§2's reader declaration, §4's round trip, §5's denominators, §6's placement
   and §7's report-never-repair are unchecked** as of this file's writing.
 - **§9's own completeness is unchecked.** Nothing verifies that the table lists
-  every imperative in the document. A2 is walked by a person, once.
+  every imperative in the document. A2 is walked by a person, once. **It was
+  walked on 2026-09-04 and found two omissions**, which is evidence the check is
+  worth something and equally that nothing would have caught a third. A one-shot
+  human check does not become a mechanism by having passed.
 - **§5 is unchecked except for one claim shape.** `auditor_doc_claims` matches
   *"N auditors + M testers"* and nothing else. Every other count in every
   convention here is unguarded, including the one in §9.
