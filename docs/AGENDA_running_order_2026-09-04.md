@@ -20,6 +20,54 @@ planned against is not session budget, it is **context-switch cost** — so the
 order is cheapest-first, every session ends on a commit, and §4 tells a cold
 reader where to start.
 
+> **Amended 2026-09-04, same day, before S1 opened. §0's fourth row and §1's S1
+> are wrong and are corrected here rather than rewritten in place.**
+>
+> **The claim:** that 0054 clause 6 is *"still live"* — `authors` present in both
+> `config/machines.json` and `config/local.json` — and therefore that *"a built
+> card is now standing on a live contradiction."* The same claim is in commit
+> `d694e59`'s body, which stays as written (**0029**: kept intact, never
+> doctored).
+>
+> **What is true.** 0054 clause 6 was **closed on 2026-08-31**, by ruling, by
+> config and by code. `config/local.json`'s `LucasGoonPC` section carries no
+> `authors` key — it carries `_authors_moved`, a comment recording the move and
+> stating that re-adding it there *"would be inert, not an override."*
+> `config/machines.json` carries a real `LucasGoonPC` section holding `authors`
+> and nothing else, with an `_authorship_exception_comment` narrating the whole
+> collision and its resolution. `l5gntools/config.py`'s `_tracked_entry` is
+> `machine()`'s layer stack **with `local.json` removed**, so an untracked
+> declaration is not outranked — it is unreadable. Card B's prerequisite cleared
+> before Card B shipped.
+>
+> **How the error was made, because the mechanism matters more than the fact.**
+> `grep -l "authors" config/machines.json config/local.json` returned both files
+> and the two hits were reported as two declarations. One of them was a
+> substring inside a comment key. **That is a claim over a substituted subject —
+> 0060 clause 3's own shape — made by the thread that had spent the session on
+> the conformance round, in the commit body reporting it.** The evidence
+> contradicting it was inside the file that was grepped.
+>
+> **Two things the correction turned up that are worth more than it:**
+>
+> - **`AGENDA_running_order_2026-08-31.md`'s own S1 instruction pointed at the
+>   wrong file.** It said to check `tests/tester_authors.py` first. That tester
+>   is about **git commit author aliasing** — `config.author_aliases`,
+>   `config/authors.json`, folding two git identities in the census — and has
+>   nothing to do with 0054 clause 6's per-artefact `authors`. **Two unrelated
+>   things in this repo are called `authors`**, and an order written four days
+>   earlier had already tripped on it.
+> - **There is a real residual, and it is not the one claimed.** Clause 6 is
+>   satisfied and **declares no reader**: nothing in the gate reads the actual
+>   `config/machines.json` (`tester_config` and `tester_pin` both swap
+>   `config._MACHINES` for a temp fixture, and `machines.json`'s own comment says
+>   so). And the code makes `authors` in `local.json` **inert rather than
+>   refused**, so adding it there produces silence — which is unrecognised
+>   configuration failing quietly, against **0054 clause 8**'s fail-loudly rule.
+>
+> **S1 is replaced.** See §1a below. §0's row and §1's S1 stand as written and as
+> evidence of the error.
+
 ---
 
 ## 0. What the 08-31 order actually landed
@@ -124,6 +172,57 @@ makes this a conformance instance rather than a config fix — and a fresh worke
 instance is worth more to `CONVENTION_conformance.md` than a tidy config.
 
 **Ends on:** the contradiction resolved one way, a commit, a green gate.
+
+### S1a — what replaces S1 *(added by the 2026-09-04 amendment)*
+
+Two items, in this order. Both are small, both end on a commit, and the second
+is the real residual the correction found.
+
+1. **Fix `CONVENTION_conformance.md` §9's table.** The follow-up recorded by S0's
+   A2 re-walk, on the operator's call: rename the third column from
+   `0060 clause` to `clause` and add the two rows from that walk's defect 6 —
+   §0's superseding-entry rule (0052 cl.3, inverted) and §7's
+   *"a reader that cannot go red is worse than no reader"* (0048 cl.4). **Widen
+   the table rather than narrow the preamble**, so the table matches the subject
+   §9 already claims. Minutes, and it finishes S0 properly.
+
+2. **Give 0054 clause 6 a reader, and make clause 8 true of it.** Two halves,
+   and the second is the one with teeth:
+   - **Nothing in the gate reads the real `config/machines.json`.** Clause 6 is
+     enforced by `config._tracked_entry`'s structure and by nothing that can go
+     red. Under **0060** clause 4 it declares no reader.
+   - **`authors` in `local.json` is inert, not refused.** Someone adding it there
+     gets silence — unrecognised configuration failing quietly, which **0054
+     clause 8** forbids. The remedy is a loud refusal at load, not a comment.
+
+   **Blast radius, named before it is hit:** anything registered in `verify.py`
+   moves the gate census, which `auditor_doc_claims` reads and
+   `auditor_architecture_current` guards. `docs/_architecture_shape.md`
+   regenerates **in the same commit** (`python run.py render-architecture`,
+   0030, `CONVENTION_commits.md` §6), and any live doc asserting the old count
+   is corrected in that commit or carries `gate-frozen`. **The one live claim is
+   `docs/COWORK_REPORT_conformance_reader.md`'s gate-count line** — the
+   thirteen-and-eighty-two figure, in the compound form the auditor matches. It
+   is frozen testimony about 2026-09-02, so it takes the marker rather than an
+   edit. This file's own §0 count survives untouched, because §0 joins the two
+   numbers with *and* and the auditor's pattern wants a `+`.
+
+   **And a finding, from writing this paragraph:** the first draft of it quoted
+   the report's line verbatim and **turned the gate red on the quotation**.
+   `auditor_doc_claims` cannot tell an assertion from a citation of one — its
+   docstring says it exempts *past-tense narrative mentions*, and a present-tense
+   quotation is neither past tense nor a claim. Not a defect worth code: the
+   mechanical narrowness is the reason the auditor is trustworthy, and
+   `gate-frozen` exists for the case where a doc really is testimony. **But
+   nothing anywhere records it**, so it is recorded here: **to write about a
+   gate-count claim, describe it rather than quote it.**
+
+   **Scope guard:** this is one narrow reader in `auditor_doc_claims`' pattern —
+   one claim class, one authoritative source. It is not a config conformance
+   engine, and if it starts reading a second rule it has become one → stop.
+
+**Ends on:** two commits, a green gate, and a second worked instance for
+`CONVENTION_conformance.md`, which currently has one.
 
 ### S2 — `card_completeness`, in its own thread
 
