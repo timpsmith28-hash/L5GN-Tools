@@ -18,6 +18,29 @@
 > it is not a smaller budget: it is an **observation** mechanism (0049
 > clauses 3–5), and its home is Phase 3, beside the Curator's linking work,
 > not here. The round shrinks to ladder + escalation + promotion.
+>
+> **Amended 2026-09-04 (design thread, Cards C and D).** **Task 3 —
+> promotion detection — is struck and carved out to `Card D`,
+> `COWORK_BRIEF_promotion_step.md`**, which builds it against the Desk's real
+> ruling corpus rather than waiting on Phases 2 and 3. The strike is recorded
+> rather than silently absorbed, on the same reasoning as the 0049 strike
+> above: a reader of either brief should find the other, and two live briefs
+> specifying one mechanism means the second one built wins by accident.
+>
+> **One substitution inside the carve-out, named.** Task 3 wanted *"the policy
+> as a ledger event with parent citations"*; there is no ledger — it is Phase 2
+> — so Card D writes a tracked, machine-appended standing-rulings file instead,
+> keeping the ledger row's shape (parent citations by fingerprint and
+> timestamp, appended, never edited, staged never committed) so that Phase 2's
+> migration is a reader change and not a redesign. **That widening is argued in
+> Card D's brief, not here.**
+>
+> **What this leaves for Phase 4:** the ladder, escalation, and **policy
+> execution** — the planner consulting ratified policies, and a policy-taken
+> step logged as such. Card D produces standing rulings and deliberately makes
+> nothing act on them; Task 4 below is where they acquire consequence. The
+> renewal card that 0048 clause 5 requires is sequenced immediately after Card
+> D and is not Phase 4's either.
 
 **Origin:** `docs/investigation/2026-08-17_quartermaster_fable_2-response.md` Phase 4; the vision's economic-router
 core (§3.4, §5).
@@ -41,7 +64,8 @@ escalation card is a raised item, not a new branch), D-C/D-E as ratified, and
 posture as a named widening of 0037/0042).
 **Deliverable:** the Conductor's planning generalised across the tier ladder
 (T0 script / T1 small local / T2 large local / T3 frontier); escalation
-proposals as cards; policy promotion and execution with one-act revocation.
+proposals as cards; ~~policy promotion and~~ — **struck, Card D** — policy
+execution with one-act revocation.
 ~~the frontier envelope as a budget object~~ — **struck, 0049.** The
 Conductor's disciplines — ratified plans, declared parameter schemas,
 measurement before estimation, refuse-don't-clamp, stop-on-failure — apply
@@ -60,11 +84,15 @@ unchanged at every tier.
   rules. This is 0049's judgment-that-unblocks route made mechanical — and,
   when the tier above is T3, what the card authorises is a **prepared
   handoff**, never a call (0049 clause 1).
-- **A policy is a ruling that executes with citation.** Promotion detection
+- **A policy is a ruling that executes with citation.** ~~Promotion detection
   reads ruling events only — three matching rulings on a card shape raise
-  the "promote?" card; a ratified policy cites its parent rulings by event
-  id; revocation is one act and takes effect at the next plan, not the next
-  edit. A policy the ledger cannot trace to its parents is a defect.
+  the "promote?" card;~~ **struck 2026-09-04, Card D** — and note that the
+  struck clause fixed the threshold at three without a count behind it, which
+  is the fabricated distinction 0037 clause 4 refuses; Card D ratifies N
+  against the corpus instead. What stands: a ratified policy cites its parent
+  rulings by event id; revocation is one act and takes effect at the next
+  plan, not the next edit. A policy whose parents cannot be traced from the
+  record that holds it is a defect.
 - ~~**The envelope is honest about being self-reported.**~~ **Struck, 0049.**
   No plan is refused on a spend number, and no surface here sums one. If
   spend events exist at all, they are records, not a budget, and nothing in
@@ -92,8 +120,12 @@ unchanged at every tier.
    that no measurement exists and therefore no threshold was set.
 2. **Escalation cards.** Failure → card with evidence and costed next-tier
    option; ruled through the Desk; run/cost events on every outcome.
-3. **Promotion detection.** The repetition detector over ruling events; the
-   "promote?" card; the policy as a ledger event with parent citations.
+3. ~~**Promotion detection.** The repetition detector over ruling events; the
+   "promote?" card; the policy as a ledger event with parent citations.~~
+   **Struck 2026-09-04, carved out to Card D** —
+   `COWORK_BRIEF_promotion_step.md`. This round inherits standing rulings; it
+   does not detect or write them. Task 4 below still owns what a ratified
+   policy *does*.
 4. **Policy execution.** The planner consults ratified policies when
    drafting plans (a policy-authorised card shape plans without raising);
    every policy-taken step is logged as such; revocation walked, one act.
@@ -132,9 +164,12 @@ unchanged at every tier.
 ## UAT — sketch (rewrite at round-open)
 
 - `[G]` 0037's full existing walk, re-run unchanged, green at every tier.
-- `[G]` Promotion fires only at the declared repetition threshold; the
+- ~~`[G]` Promotion fires only at the declared repetition threshold; the
   policy cites its parents; revocation walked mid-week and honoured at the
-  next plan.
+  next plan.~~ **Struck, Card D** — the first two clauses are Card D's walk.
+  What survives here is its second half, restated as this round's own:
+  `[G]` a standing ruling written by Card D is **honoured at the next plan**,
+  and a revocation walked mid-week is honoured at the plan after it.
 - `[G]` ~~An over-envelope plan refuses with the stated remedy.~~ **Struck,
   0049.** Replaced by its inverse: `[G]` **no plan anywhere in the round is
   refused or altered on a spend number**, and a search of the round's diff
@@ -150,7 +185,8 @@ unchanged at every tier.
 
 `docs/COWORK_REPORT_dispatcher.md` + walk-sheet + stamped results. Record:
 D-F as ratified; the ladder as declared, with the bench floor each acceptance
-check was set against; every policy promoted during the round with its
-parents; ~~the envelope's first month of self-reported spend~~ (struck,
+check was set against; ~~every policy promoted during the round with its
+parents~~ (**struck, Card D** — replaced by: every standing ruling this round
+*acted on*, with the plan it changed); ~~the envelope's first month of self-reported spend~~ (struck,
 0049); and estimate-versus-actual per tier — still the most useful number on
 any page.
