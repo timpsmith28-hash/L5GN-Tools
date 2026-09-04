@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-09-04 · superseded · no report — an agenda is a planning act and has no pair
+> Superseded by `AGENDA_running_order_2026-08-31.md` §0, which reversed §4's deferral of the conformance reader on the operator's call, and then by `AGENDA_running_order_2026-09-04.md` · Original purpose: the running order after the 2026-08-28 restart — a judgment on twenty cards in flight, the thin slice sized rather than guessed, and Cards A–F defined.
+> Accurate history: **§2a's naming argument** — card, ruling, standing ruling, and why building the promotion step dissolves the naming problem instead of re-labelling the Desk. It is the operator's own observation, it is the origin of Card D, and `COWORK_BRIEF_promotion_step.md` cites it. Also §3's sizing of the thin slice and §4's definitions of Cards A–F. **Stop trusting:** §4 as an order. It was superseded twice — Cards C and D were deferred by `AGENDA_running_order_2026-08-31.md` §0b and re-scheduled by the 09-04 order — and Card B has since shipped. Its `hermetic_gate` entries in §4 and §6a still read against **0053** as `proposed`; 0053 was accepted 2026-08-28, the third amendment claims the parentheticals were corrected, and `hermetic_gate`'s slot has been an open call in three consecutive orders since. **Do not run this as a task list.**
+
 # Agenda — the running order, 2026-08-28
 
 The planning act that follows `AGENDA_restart_2026-08-28.md`. Frozen at its date.

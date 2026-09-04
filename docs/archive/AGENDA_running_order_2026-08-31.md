@@ -1,3 +1,7 @@
+> **ARCHIVED** 2026-09-04 · superseded · no report — an agenda is a planning act and has no pair
+> Superseded by `AGENDA_running_order_2026-09-04.md`, which supersedes §1 by name and records in its own §0 what of this order actually landed · Original purpose: the running order that promoted the conformance reader ahead of Cards C and D, on the operator's call of 2026-08-31.
+> Accurate history: §0's evidence for the promotion, §0a's sizing — `auditor_doc_claims` named as the pattern to build to, which is what `auditor_rule_subjects` and later `auditor_authors_declaration` were built against — and §0b's stated cost, that Cards C and D would slip, named rather than absorbed. All of it held. **Stop trusting:** §1's five sessions as a plan. S2 through S5 landed in full; **S1 landed one item of four**. And **§1 S1's instruction to "check `tests/tester_authors.py` first" is a wrong pointer** — that tester covers git commit author aliasing (`config.author_aliases`, `config/authors.json`), not **0054** clause 6's per-artefact `authors`. Two unrelated things in this repo carry that name; following the pointer on 2026-09-04 produced a false claim that clause 6 was still live, corrected in the 09-04 order's own amendment. §2's "Cards C and D — deferred" no longer holds.
+
 # Agenda — the running order, 2026-08-31
 
 The planning act that follows `AGENDA_restart_2026-08-31.md`. Frozen at its date.
